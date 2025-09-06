@@ -1294,8 +1294,8 @@ class EduBot_Shortcode {
         $info = array();
         $message_lower = strtolower($message);
         
-        // Extract grade
-        if (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade\s*\d+|class\s*\d+|\d+th|\d+st|\d+nd|\d+rd)\b/i', $message_lower)) {
+        // Extract grade (handle typos like "grde")
+        if (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|gr[ae]de?\s*\d+|class\s*\d+|\d+th|\d+st|\d+nd|\d+rd)\b/i', $message_lower)) {
             $info['grade'] = $this->extract_grade_from_message($message);
         }
         
@@ -2296,7 +2296,7 @@ class EduBot_Shortcode {
         
         // Check if this looks like academic info and we have personal info already
         if (!empty($academic_info) && !empty($collected_data['student_name']) && 
-            (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade|class|\d+th|\d+st|\d+nd|\d+rd|cbse|caie|cambridge|state|icse|igcse)\b/i', $message_lower))) {
+            (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade|grde|class|\d+th|\d+st|\d+nd|\d+rd|cbse|caie|cambridge|state|icse|igcse)\b/i', $message_lower))) {
             
             // Store any collected academic info
             if (!empty($academic_info['grade'])) {
@@ -2643,7 +2643,7 @@ class EduBot_Shortcode {
         }
         
         // Handle grade selection responses (only if not combined academic input)
-        if (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade\s*\d+|class\s*\d+|\d+th|\d+st|\d+nd|\d+rd)\b/i', $message_lower) && 
+        if (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|gr[ae]de?\s*\d+|class\s*\d+|\d+th|\d+st|\d+nd|\d+rd)\b/i', $message_lower) && 
             !preg_match('/\b(cbse|icse|igcse|caie|cambridge|ib|state)\b/i', $message_lower) &&
             !preg_match('/\b(20\d{2}-?\d{2})\b/', $message_lower)) {
             $grade = $this->extract_grade_from_message($message);
@@ -3158,11 +3158,11 @@ class EduBot_Shortcode {
             $extracted_data['student_name'] = $student_name;
         }
         
-        // Extract grade/class information (handle typos like "nursary")
+        // Extract grade/class information (handle typos like "nursary", "grde")
         $grade_patterns = array(
             '/\b(nursery|nursary|pre-?kg|lkg|ukg)\b/i',
-            '/\b(?:grade|class)\s*(\d+)\b/i',
-            '/\b(\d+)(?:st|nd|rd|th)\s*(?:grade|class)?\b/i'
+            '/\b(?:gr[ae]de?|class)\s*(\d+)\b/i',
+            '/\b(\d+)(?:st|nd|rd|th)\s*(?:gr[ae]de?|class)?\b/i'
         );
         
         foreach ($grade_patterns as $pattern) {
@@ -3375,15 +3375,28 @@ class EduBot_Shortcode {
             return 'UKG';
         }
         
-        // Extract grade numbers (but check Grade 11 without streams separately)
-        if (preg_match('/grade\s*(\d+)/i', $message, $matches)) {
+        // Extract grade numbers (handle typos and variations)
+        // Handle "Grde10", "Grade10", "grade 10", etc.
+        if (preg_match('/(?:gr[ae]de?|class)\s*(\d+)/i', $message, $matches)) {
             return 'Grade ' . $matches[1];
         }
-        if (preg_match('/class\s*(\d+)/i', $message, $matches)) {
-            return 'Class ' . $matches[1];
+        
+        // Handle standalone numbers after "grade/class" keywords
+        if (preg_match('/(?:grade|class|grde|grd)\s*(\d+)/i', $message, $matches)) {
+            return 'Grade ' . $matches[1];
         }
+        
+        // Handle ordinal numbers like "10th", "5th", etc.
         if (preg_match('/(\d+)(th|st|nd|rd)/i', $message, $matches)) {
             return 'Grade ' . $matches[1];
+        }
+        
+        // Handle just numbers when in grade context (last resort)
+        if (preg_match('/\b(\d{1,2})\b/', $message, $matches)) {
+            $grade_num = intval($matches[1]);
+            if ($grade_num >= 1 && $grade_num <= 12) {
+                return 'Grade ' . $grade_num;
+            }
         }
         
         return 'Selected Grade';
