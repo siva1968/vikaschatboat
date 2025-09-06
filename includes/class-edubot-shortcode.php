@@ -1461,14 +1461,30 @@ class EduBot_Shortcode {
                 'source' => 'chatbot_enquiry'
             );
             
-            // Save to database
+            // Save to database with enhanced error handling
+            if (!class_exists('EduBot_Database_Manager')) {
+                error_log('EduBot Enquiry Error: Database Manager class not found');
+                return "Sorry, there was a technical error. Please contact us directly at prasad.m@lsnsoft.com";
+            }
+            
             $database_manager = new EduBot_Database_Manager();
+            error_log('EduBot: Attempting to save application data: ' . json_encode($application_data['student_data']));
+            
             $application_id = $database_manager->save_application($application_data);
             
             if (is_wp_error($application_id)) {
-                error_log('EduBot Enquiry Error: ' . $application_id->get_error_message());
-                return "Sorry, there was an error submitting your enquiry. Please try again or contact us directly.";
+                error_log('EduBot Enquiry Database Error: ' . $application_id->get_error_message());
+                error_log('EduBot: Application data that failed to save: ' . json_encode($application_data));
+                return "Sorry, there was an error submitting your enquiry. Please contact us directly at prasad.m@lsnsoft.com with enquiry number: {$enquiry_number}";
             }
+            
+            if (!$application_id) {
+                error_log('EduBot Enquiry Error: Database returned false/null for application save');
+                error_log('EduBot: Application data that failed: ' . json_encode($application_data));
+                return "Sorry, there was an error submitting your enquiry. Please contact us directly at prasad.m@lsnsoft.com with enquiry number: {$enquiry_number}";
+            }
+            
+            error_log('EduBot: Successfully saved application with ID: ' . $application_id);
             
             // Send confirmation email
             $this->send_enquiry_confirmation_email($collected_data, $enquiry_number, $school_name);
@@ -1510,11 +1526,32 @@ class EduBot_Shortcode {
         $headers = array('Content-Type: text/html; charset=UTF-8');
         wp_mail($to, $subject, $message, $headers);
         
-        // Also send to admin if configured
-        $settings = get_option('edubot_pro_settings', array());
-        if (!empty($settings['admin_email'])) {
-            $admin_subject = "New Admission Enquiry - {$school_name}";
-            wp_mail($settings['admin_email'], $admin_subject, $message, $headers);
+        // Send to admin email from school configuration
+        try {
+            $school_config = EduBot_School_Config::getInstance();
+            $config = $school_config->get_config();
+            $admin_email = '';
+            
+            // Try to get admin email from school configuration
+            if (!empty($config['school_info']['contact_info']['email'])) {
+                $admin_email = $config['school_info']['contact_info']['email'];
+            }
+            
+            // Fallback to hardcoded admin email if not in config
+            if (empty($admin_email)) {
+                $admin_email = 'prasad.m@lsnsoft.com';
+            }
+            
+            if (!empty($admin_email) && is_email($admin_email)) {
+                $admin_subject = "New Admission Enquiry - {$school_name}";
+                $admin_message = $message . "\n\n<p><strong>This enquiry was submitted via the chatbot on " . get_site_url() . "</strong></p>";
+                wp_mail($admin_email, $admin_subject, $admin_message, $headers);
+                error_log('EduBot: Admin notification sent to ' . $admin_email);
+            } else {
+                error_log('EduBot: No valid admin email found for notifications');
+            }
+        } catch (Exception $e) {
+            error_log('EduBot: Error sending admin notification - ' . $e->getMessage());
         }
     }
     
@@ -2089,19 +2126,40 @@ class EduBot_Shortcode {
             wp_mail($application_data['email'], $subject, $message);
         }
         
-        // Send notification to admin
-        if (!empty($settings['admin_email'])) {
-            $subject = 'New Application Received - ' . $application_data['application_number'];
-            $message = "A new application has been received:\n\n";
-            $message .= "Student: " . $application_data['student_name'] . "\n";
-            $message .= "Parent: " . $application_data['parent_name'] . "\n";
-            $message .= "Grade: " . $application_data['grade'] . "\n";
-            $message .= "Email: " . $application_data['email'] . "\n";
-            $message .= "Phone: " . $application_data['phone'] . "\n";
-            $message .= "Application Number: " . $application_data['application_number'] . "\n\n";
-            $message .= "Please review the application in the admin panel.";
+        // Send notification to admin using school config email
+        try {
+            $school_config = EduBot_School_Config::getInstance();
+            $config = $school_config->get_config();
+            $admin_email = '';
             
-            wp_mail($settings['admin_email'], $subject, $message);
+            // Try to get admin email from school configuration
+            if (!empty($config['school_info']['contact_info']['email'])) {
+                $admin_email = $config['school_info']['contact_info']['email'];
+            }
+            
+            // Fallback to hardcoded admin email if not in config
+            if (empty($admin_email)) {
+                $admin_email = 'prasad.m@lsnsoft.com';
+            }
+            
+            if (!empty($admin_email) && is_email($admin_email)) {
+                $subject = 'New Application Received - ' . $application_data['application_number'];
+                $message = "A new application has been received:\n\n";
+                $message .= "Student: " . $application_data['student_name'] . "\n";
+                $message .= "Parent: " . $application_data['parent_name'] . "\n";
+                $message .= "Grade: " . $application_data['grade'] . "\n";
+                $message .= "Email: " . $application_data['email'] . "\n";
+                $message .= "Phone: " . $application_data['phone'] . "\n";
+                $message .= "Application Number: " . $application_data['application_number'] . "\n\n";
+                $message .= "Please review the application in the admin panel at: " . admin_url('admin.php?page=edubot-applications');
+                
+                wp_mail($admin_email, $subject, $message);
+                error_log('EduBot: Application notification sent to admin: ' . $admin_email);
+            } else {
+                error_log('EduBot: No valid admin email found for application notifications');
+            }
+        } catch (Exception $e) {
+            error_log('EduBot: Error sending application notification - ' . $e->getMessage());
         }
     }
     
