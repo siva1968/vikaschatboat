@@ -1438,7 +1438,7 @@ class EduBot_Shortcode {
                     'student_name' => isset($collected_data['student_name']) ? $collected_data['student_name'] : '',
                     'grade' => isset($collected_data['grade']) ? $collected_data['grade'] : '',
                     'board' => isset($collected_data['board']) ? $collected_data['board'] : '',
-                    'academic_year' => isset($collected_data['academic_year']) ? $collected_data['academic_year'] : '',
+                    'academic_year' => isset($collected_data['academic_year']) ? $collected_data['academic_year'] : $this->get_default_academic_year(),
                     'date_of_birth' => isset($collected_data['date_of_birth']) ? $collected_data['date_of_birth'] : '',
                     'gender' => isset($collected_data['gender']) ? $collected_data['gender'] : '',
                     'parent_name' => isset($collected_data['parent_name']) ? $collected_data['parent_name'] : (isset($collected_data['father_name']) ? $collected_data['father_name'] : 'Parent'),
@@ -1620,7 +1620,11 @@ class EduBot_Shortcode {
         $response .= "🏫 **School:** {$school_name}\n";
         $response .= "👶 **Student:** {$collected_data['student_name']}\n";
         $response .= "🎓 **Grade:** {$collected_data['grade']}\n";
-        $response .= "📚 **Board:** {$collected_data['board']}\n\n";
+        $response .= "📚 **Board:** {$collected_data['board']}\n";
+        if (!empty($collected_data['academic_year'])) {
+            $response .= "📅 **Academic Year:** {$collected_data['academic_year']}\n";
+        }
+        $response .= "\n";
         
         $response .= "📧 **Confirmation email sent to:** {$collected_data['email']}\n\n";
         
@@ -2408,6 +2412,40 @@ class EduBot_Shortcode {
                 return $response;
             }
             
+            // Check if academic year is missing and handle selection
+            if (empty($collected_data['academic_year'])) {
+                try {
+                    $school_config = EduBot_School_Config::getInstance();
+                    $available_years = $school_config->get_available_academic_years();
+                    
+                    if (count($available_years) > 1) {
+                        // Multiple years available, ask parent to choose
+                        $response = "✅ **Academic Information Recorded:**\n";
+                        $response .= "• Grade: {$collected_data['grade']}\n";
+                        $response .= "• Board: {$collected_data['board']}\n\n";
+                        
+                        $response .= "📅 **Please select the Academic Year:**\n\n";
+                        foreach ($available_years as $year) {
+                            $response .= "🔘 **{$year}**\n";
+                        }
+                        $response .= "\nPlease type your preferred academic year (e.g., {$available_years[0]})";
+                        
+                        return $response;
+                    } else {
+                        // Single year available, use it automatically
+                        $academic_year = !empty($available_years) ? $available_years[0] : $school_config->get_default_academic_year();
+                        $this->update_conversation_data($session_id, 'academic_year', $academic_year);
+                        $collected_data['academic_year'] = $academic_year;
+                    }
+                } catch (Exception $e) {
+                    // Fallback to default academic year
+                    $default_year = date('Y') . '-' . substr((date('Y') + 1), 2);
+                    $this->update_conversation_data($session_id, 'academic_year', $default_year);
+                    $collected_data['academic_year'] = $default_year;
+                    error_log('EduBot: Error getting academic years, using default: ' . $e->getMessage());
+                }
+            }
+            
             // All academic info collected, move to final details
             $this->update_conversation_data($session_id, 'step', 'final');
             
@@ -2472,6 +2510,59 @@ class EduBot_Shortcode {
                    "Excellent choice! {$selected_board['name']} offers great educational opportunities.\n\n" .
                    "**What is your child's date of birth?** �\n\n" .
                    "Please enter in dd/mm/yyyy format (e.g., 16/10/2010).";
+        }
+        
+        // Handle academic year selection responses
+        if (preg_match('/\b(20\d{2}[-\/]?\d{2})\b/', $message, $year_matches)) {
+            $session_data = $this->get_conversation_session($session_id);
+            $collected_data = $session_data ? $session_data['data'] : array();
+            
+            // Check if we have grade and board but are missing academic year
+            if (!empty($collected_data['grade']) && !empty($collected_data['board']) && empty($collected_data['academic_year'])) {
+                $input_year = $year_matches[1];
+                // Normalize the academic year format
+                $academic_year = preg_replace('/(\d{4})[-\/]?(\d{2})/', '$1-$2', $input_year);
+                
+                try {
+                    $school_config = EduBot_School_Config::getInstance();
+                    $available_years = $school_config->get_available_academic_years();
+                    
+                    if (in_array($academic_year, $available_years)) {
+                        // Valid academic year selected
+                        $this->update_conversation_data($session_id, 'academic_year', $academic_year);
+                        $this->update_conversation_data($session_id, 'step', 'final');
+                        
+                        $academic_summary = "• Grade: {$collected_data['grade']}\n• Board: {$collected_data['board']}\n• Academic Year: {$academic_year}\n";
+                        
+                        return "✅ **Academic Year Selected: {$academic_year}**\n\n" .
+                               "Perfect! Here's your complete academic information:\n\n" .
+                               $academic_summary . "\n" .
+                               "**Step 3: Final Details** 📋\n\n" .
+                               "Please provide:\n\n" .
+                               "**Student's Date of Birth** (dd/mm/yyyy format)\n\n" .
+                               "**Example:**\n" .
+                               "• 16/10/2010\n\n" .
+                               "Please enter the date of birth in dd/mm/yyyy format only.";
+                    } else {
+                        // Invalid academic year
+                        $response = "❌ **Invalid Academic Year**\n\n";
+                        $response .= "Please select from the available academic years:\n\n";
+                        foreach ($available_years as $year) {
+                            $response .= "🔘 **{$year}**\n";
+                        }
+                        return $response;
+                    }
+                } catch (Exception $e) {
+                    error_log('EduBot Academic Year Selection Error: ' . $e->getMessage());
+                    // Accept the year and continue
+                    $this->update_conversation_data($session_id, 'academic_year', $academic_year);
+                    $this->update_conversation_data($session_id, 'step', 'final');
+                    
+                    return "✅ **Academic Year Selected: {$academic_year}**\n\n" .
+                           "**Step 3: Final Details** 📋\n\n" .
+                           "Please provide your child's date of birth in dd/mm/yyyy format.";
+                }
+            }
         }
         
         // Handle when user provides personal information (multi-field or single field)
@@ -3487,6 +3578,32 @@ class EduBot_Shortcode {
         }
         
         return 'Selected Board';
+    }
+    
+    /**
+     * Get default academic year from school config or calculate based on current date
+     */
+    private function get_default_academic_year() {
+        try {
+            if (class_exists('EduBot_School_Config')) {
+                $school_config = EduBot_School_Config::getInstance();
+                return $school_config->get_default_academic_year();
+            }
+        } catch (Exception $e) {
+            error_log('EduBot: Error getting default academic year from config: ' . $e->getMessage());
+        }
+        
+        // Fallback: calculate based on current date
+        $current_year = date('Y');
+        $current_month = date('n'); // 1-12
+        
+        // If it's January-March, admissions are typically for the current academic year
+        // If it's April-December, admissions are typically for the next academic year
+        if ($current_month <= 3) {
+            return $current_year . '-' . substr($current_year + 1, 2);
+        } else {
+            return ($current_year + 1) . '-' . substr($current_year + 2, 2);
+        }
     }
 }
 
