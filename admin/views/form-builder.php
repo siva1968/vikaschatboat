@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
             <p>Configure the application form fields and layout.</p>
             
             <form method="post" action="">
-                <?php wp_nonce_field('edubot_form_settings', '_wpnonce'); ?>
+                <?php wp_nonce_field('edubot_save_form_settings', 'edubot_form_nonce'); ?>
                 
                 <table class="edubot-form-table">
                     <tr>

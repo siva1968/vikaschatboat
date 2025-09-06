@@ -89,6 +89,67 @@ class Edubot_Academic_Config {
     }
 
     /**
+     * Get configured multiple grade systems for the school
+     */
+    public static function get_configured_grade_systems() {
+        $configured_systems = get_option('edubot_grade_systems', null);
+        
+        // If option has never been set (null), default to US K-12 for new installations
+        if ($configured_systems === null) {
+            $configured_systems = array('us_k12');
+        }
+        // If option is set but empty (user explicitly unchecked all), respect that choice
+        else if (is_array($configured_systems)) {
+            // Return whatever was saved, even if empty
+            return $configured_systems;
+        }
+        // Fallback for any other case
+        else {
+            $configured_systems = array();
+        }
+        
+        return $configured_systems;
+    }
+
+    /**
+     * Get all grades from configured grade systems
+     */
+    public static function get_all_configured_grades() {
+        $configured_systems = self::get_configured_grade_systems();
+        $all_systems = self::get_grade_systems();
+        $all_grades = array();
+        
+        foreach ($configured_systems as $system_key) {
+            if (isset($all_systems[$system_key])) {
+                $system_grades = $all_systems[$system_key]['grades'];
+                foreach ($system_grades as $grade_key => $grade_name) {
+                    // Prefix with system name to avoid conflicts
+                    $prefixed_key = $system_key . '_' . $grade_key;
+                    $prefixed_name = $all_systems[$system_key]['name'] . ' - ' . $grade_name;
+                    $all_grades[$prefixed_key] = $prefixed_name;
+                }
+            }
+        }
+        
+        // Add custom grades if any
+        $custom_grades = get_option('edubot_custom_grades', array());
+        if (!empty($custom_grades)) {
+            foreach ($custom_grades as $key => $label) {
+                $all_grades['custom_' . $key] = 'Custom - ' . $label;
+            }
+        }
+        
+        return $all_grades;
+    }
+
+    /**
+     * Save configured grade systems
+     */
+    public static function save_grade_systems($systems) {
+        update_option('edubot_grade_systems', $systems);
+    }
+
+    /**
      * Get available educational boards
      */
     public static function get_educational_boards() {
@@ -285,6 +346,11 @@ class Edubot_Academic_Config {
     public static function get_school_academic_config($school_id) {
         global $wpdb;
         
+        // Safety check for WordPress environment
+        if (!$wpdb) {
+            return self::get_default_academic_config();
+        }
+        
         $table = $wpdb->prefix . 'edubot_school_configs';
         
         $result = $wpdb->get_row($wpdb->prepare(
@@ -292,11 +358,33 @@ class Edubot_Academic_Config {
             $school_id
         ));
         
+        $config = null;
         if ($result && !empty($result->academic_structure)) {
-            return json_decode($result->academic_structure, true);
+            $config = json_decode($result->academic_structure, true);
         }
         
-        // Return default configuration
+        // If no database config found, start with default
+        if (!$config) {
+            $config = self::get_default_academic_config();
+        }
+        
+        // Merge with WordPress options data (fallback and override)
+        $config['admission_cycles'] = get_option('edubot_admission_cycles', $config['admission_cycles'] ?? array());
+        $config['grade_systems'] = get_option('edubot_grade_systems', $config['grade_systems'] ?? array());
+        
+        // Also check for custom grades
+        $custom_grades = get_option('edubot_custom_grades', array());
+        if (!empty($custom_grades)) {
+            $config['custom_grades'] = $custom_grades;
+        }
+        
+        return $config;
+    }
+
+    /**
+     * Get default academic configuration
+     */
+    private static function get_default_academic_config() {
         return array(
             'grade_system' => 'custom',
             'custom_grades' => array(),
@@ -318,6 +406,11 @@ class Edubot_Academic_Config {
      */
     public static function get_school_board_config($school_id) {
         global $wpdb;
+        
+        // Safety check for WordPress environment
+        if (!$wpdb) {
+            return array();
+        }
         
         $table = $wpdb->prefix . 'edubot_school_configs';
         
@@ -361,6 +454,17 @@ class Edubot_Academic_Config {
      */
     public static function get_school_academic_year_config($school_id) {
         global $wpdb;
+        
+        // Safety check for WordPress environment
+        if (!$wpdb) {
+            return array(
+                'academic_year_type' => 'april_march',
+                'custom_start_month' => 4,
+                'custom_end_month' => 3,
+                'auto_update_year' => true,
+                'admission_windows' => array()
+            );
+        }
         
         $table = $wpdb->prefix . 'edubot_school_configs';
         
@@ -448,15 +552,28 @@ class Edubot_Academic_Config {
     public static function validate_academic_config($config) {
         $errors = array();
         
-        // Validate grade system
-        if (empty($config['grade_system'])) {
-            $errors[] = 'Grade system is required';
+        // Check if any grade systems are configured
+        $configured_systems = self::get_configured_grade_systems();
+        if (empty($configured_systems)) {
+            $errors[] = 'At least one grade system must be selected';
         }
         
-        // If custom grade system, validate custom grades
-        if ($config['grade_system'] === 'custom') {
-            if (empty($config['custom_grades']) || !is_array($config['custom_grades'])) {
-                $errors[] = 'Custom grades must be defined for custom grade system';
+        // Validate that configured systems exist
+        $available_systems = self::get_grade_systems();
+        foreach ($configured_systems as $system) {
+            if (!isset($available_systems[$system])) {
+                $errors[] = 'Invalid grade system: ' . $system;
+            }
+        }
+        
+        // Validate custom grades if any exist
+        $custom_grades = get_option('edubot_custom_grades', array());
+        if (!empty($custom_grades)) {
+            foreach ($custom_grades as $key => $label) {
+                if (empty($key) || empty($label)) {
+                    $errors[] = 'Custom grade keys and labels cannot be empty';
+                    break;
+                }
             }
         }
         

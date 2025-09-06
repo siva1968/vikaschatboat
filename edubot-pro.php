@@ -3,7 +3,7 @@
  * Plugin Name: EduBot Pro
  * Plugin URI: https://edubotpro.com
  * Description: AI-powered chatbot for educational institutions with multi-school support, white-label branding, and comprehensive application management.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: EduBot Pro Team
  * Author URI: https://edubotpro.com
  * License: GPL v2 or later
@@ -24,29 +24,45 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('EDUBOT_PRO_VERSION', '1.0.0');
+define('EDUBOT_PRO_VERSION', '1.1.0');
 define('EDUBOT_PRO_PLUGIN_FILE', __FILE__);
 define('EDUBOT_PRO_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('EDUBOT_PRO_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('EDUBOT_PRO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('EDUBOT_PRO_PLUGIN_DIR', dirname(__FILE__));
 
-// Include required files - using proper file existence checks
-if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-activator.php')) {
-    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-activator.php';
+// Include additional constants
+if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-constants.php')) {
+    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-constants.php';
 }
 
-if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-deactivator.php')) {
-    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-deactivator.php';
+// Include the autoloader first
+if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-autoloader.php')) {
+    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-autoloader.php';
+    EduBot_Autoloader::register();
+    
+    // Initialize error handler
+    if (class_exists('EduBot_Error_Handler')) {
+        EduBot_Error_Handler::init();
+    }
 }
 
-if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-core.php')) {
-    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-core.php';
-}
-
-// Include academic configuration class
-if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-academic-config.php')) {
-    require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-academic-config.php';
+// Validate that all required classes can be loaded
+$missing_classes = EduBot_Autoloader::validate_classes();
+if (!empty($missing_classes)) {
+    add_action('admin_notices', function() use ($missing_classes) {
+        if (current_user_can('activate_plugins')) {
+            echo '<div class="notice notice-error"><p>';
+            echo '<strong>' . esc_html__('EduBot Pro Error:', 'edubot-pro') . '</strong> ';
+            echo esc_html__('Critical files are missing:', 'edubot-pro') . '<br>';
+            foreach ($missing_classes as $class) {
+                echo '• ' . esc_html($class) . '<br>';
+            }
+            echo esc_html__('Please reinstall the plugin.', 'edubot-pro');
+            echo '</p></div>';
+        }
+    });
+    return; // Stop execution if critical classes are missing
 }
 
 /**
@@ -54,8 +70,10 @@ if (file_exists(EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-academic-config.
  * Handles database table creation and initial setup
  */
 function activate_edubot_pro() {
-    if (class_exists('Edubot_Activator')) {
-        Edubot_Activator::activate();
+    if (class_exists('EduBot_Activator')) {
+        EduBot_Activator::activate();
+    } else {
+        error_log('EduBot Pro Activation Error: EduBot_Activator class not found');
     }
 }
 register_activation_hook(__FILE__, 'activate_edubot_pro');
@@ -65,20 +83,77 @@ register_activation_hook(__FILE__, 'activate_edubot_pro');
  * Cleans up scheduled events and temporary data
  */
 function deactivate_edubot_pro() {
-    if (class_exists('Edubot_Deactivator')) {
-        Edubot_Deactivator::deactivate();
+    if (class_exists('EduBot_Deactivator')) {
+        EduBot_Deactivator::deactivate();
+    } else {
+        error_log('EduBot Pro Deactivation Error: EduBot_Deactivator class not found');
     }
 }
 register_deactivation_hook(__FILE__, 'deactivate_edubot_pro');
 
 /**
  * Initialize the plugin
- * Creates and runs the main plugin instance
+ * Creates and runs the main plugin instance with proper error handling
  */
 function run_edubot_pro() {
-    if (class_exists('Edubot_Core')) {
-        $plugin = new Edubot_Core();
-        $plugin->run();
+    // Check for required classes before initialization
+    $required_classes = array(
+        'EduBot_Core' => 'Core plugin functionality',
+        'EduBot_Database_Manager' => 'Database operations',
+        'EduBot_Security_Manager' => 'Security features',
+        'EduBot_Loader' => 'Hook management'
+    );
+    
+    $missing_classes = array();
+    foreach ($required_classes as $class => $description) {
+        if (!class_exists($class)) {
+            $missing_classes[] = $class . ' (' . $description . ')';
+        }
+    }
+    
+    // Display error notice if critical classes are missing
+    if (!empty($missing_classes)) {
+        add_action('admin_notices', function() use ($missing_classes) {
+            if (current_user_can('activate_plugins')) {
+                echo '<div class="notice notice-error"><p>';
+                echo '<strong>' . esc_html__('EduBot Pro Error:', 'edubot-pro') . '</strong> ';
+                echo esc_html__('Missing critical classes. Plugin cannot function properly:', 'edubot-pro') . '<br>';
+                foreach ($missing_classes as $class) {
+                    echo '• ' . esc_html($class) . '<br>';
+                }
+                echo esc_html__('Please reinstall the plugin or contact support.', 'edubot-pro');
+                echo '</p></div>';
+            }
+        });
+        return;
+    }
+    
+    // Initialize the plugin if all classes are available
+    if (class_exists('EduBot_Core')) {
+        try {
+            $plugin = new EduBot_Core();
+            $plugin->run();
+            
+            // Initialize analytics if available
+            if (class_exists('EduBot_Visitor_Analytics')) {
+                new EduBot_Visitor_Analytics();
+            }
+            
+            if (class_exists('EduBot_Analytics_AJAX')) {
+                new EduBot_Analytics_AJAX();
+            }
+            
+        } catch (Exception $e) {
+            error_log('EduBot Pro Initialization Error: ' . $e->getMessage());
+            add_action('admin_notices', function() use ($e) {
+                if (current_user_can('activate_plugins')) {
+                    echo '<div class="notice notice-error"><p>';
+                    echo '<strong>' . esc_html__('EduBot Pro Error:', 'edubot-pro') . '</strong> ';
+                    echo esc_html__('Plugin initialization failed. Please check error logs.', 'edubot-pro');
+                    echo '</p></div>';
+                }
+            });
+        }
     } else {
         add_action('admin_notices', function() {
             echo '<div class="notice notice-error"><p>';
@@ -153,7 +228,7 @@ add_action('init', 'edubot_pro_load_textdomain');
 add_action('plugins_loaded', 'edubot_pro_load_textdomain');
 
 /**
- * Plugin compatibility check
+ * Plugin compatibility and health check
  * Ensures WordPress and PHP version requirements are met
  */
 function edubot_pro_compatibility_check() {
@@ -178,6 +253,19 @@ function edubot_pro_compatibility_check() {
             $php_required,
             PHP_VERSION
         ));
+    }
+    
+    // Run health check for admin users
+    if (is_admin() && current_user_can('manage_options') && class_exists('EduBot_Health_Check')) {
+        $health = EduBot_Health_Check::get_health_status();
+        if ($health['status'] === 'critical') {
+            add_action('admin_notices', function() use ($health) {
+                echo '<div class="notice notice-error"><p>';
+                echo '<strong>' . esc_html__('EduBot Pro Health Check Failed:', 'edubot-pro') . '</strong> ';
+                echo esc_html($health['message']);
+                echo '</p></div>';
+            });
+        }
     }
 }
 add_action('admin_init', 'edubot_pro_compatibility_check');
@@ -443,3 +531,85 @@ function edubot_pro_uninstall_cleanup() {
 if (defined('WP_UNINSTALL_PLUGIN')) {
     edubot_pro_uninstall_cleanup();
 }
+
+/**
+ * Manual database repair function
+ * Can be called to create missing tables
+ */
+function edubot_pro_repair_database() {
+    if (!class_exists('EduBot_Database_Manager')) {
+        return array('success' => false, 'message' => 'Database manager not found');
+    }
+    
+    $db_manager = new EduBot_Database_Manager();
+    return $db_manager->ensure_tables_exist();
+}
+
+/**
+ * Admin notice for database issues
+ */
+function edubot_pro_database_admin_notice() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    
+    // Check if we have database issues
+    global $wpdb;
+    
+    $tables_to_check = array(
+        'edubot_security_log',
+        'edubot_visitor_analytics',
+        'edubot_visitors'
+    );
+    
+    $missing_tables = array();
+    
+    foreach ($tables_to_check as $table_name) {
+        $full_table = $wpdb->prefix . $table_name;
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$full_table'");
+        
+        if ($table_exists != $full_table) {
+            $missing_tables[] = $table_name;
+        }
+    }
+    
+    if (!empty($missing_tables)) {
+        echo '<div class="notice notice-warning is-dismissible">';
+        echo '<p><strong>EduBot Pro:</strong> Missing database tables: <code>' . esc_html(implode(', ', $missing_tables)) . '</code></p>';
+        echo '<p><a href="' . wp_nonce_url(admin_url('admin.php?page=edubot-pro&action=repair_database'), 'edubot_repair_db', 'nonce') . '" class="button button-primary">Repair Database</a></p>';
+        echo '</div>';
+    }
+}
+
+// Add admin notice hook
+add_action('admin_notices', 'edubot_pro_database_admin_notice');
+
+// Handle database repair action
+add_action('admin_init', function() {
+    if (isset($_GET['page']) && $_GET['page'] === 'edubot-pro' && 
+        isset($_GET['action']) && 
+        ($_GET['action'] === 'repair_db' || $_GET['action'] === 'repair_database') && 
+        current_user_can('manage_options')) {
+        
+        // Verify nonce if present
+        if (isset($_GET['nonce']) && !wp_verify_nonce($_GET['nonce'], 'edubot_repair_db')) {
+            wp_die('Security check failed');
+        }
+        
+        $result = edubot_pro_repair_database();
+        
+        if ($result['success']) {
+            add_action('admin_notices', function() use ($result) {
+                echo '<div class="notice notice-success is-dismissible">';
+                echo '<p><strong>EduBot Pro:</strong> ' . esc_html($result['message']) . '</p>';
+                echo '</div>';
+            });
+        } else {
+            add_action('admin_notices', function() use ($result) {
+                echo '<div class="notice notice-error is-dismissible">';
+                echo '<p><strong>EduBot Pro:</strong> Database repair failed. ' . esc_html($result['message']) . '</p>';
+                echo '</div>';
+            });
+        }
+    }
+});

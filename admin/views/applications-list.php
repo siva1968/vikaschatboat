@@ -61,7 +61,7 @@ if (!defined('ABSPATH')) {
                                 $board = $app['educational_board'] ?? 'N/A';
                                 if ($board && $board !== 'N/A') {
                                     // Get board full name if available
-                                    $school_config = new EduBot_School_Config();
+                                    $school_config = EduBot_School_Config::getInstance();
                                     $board_info = $school_config->get_board_info($board);
                                     echo esc_html($board_info ? $board_info['name'] : $board);
                                 } else {
@@ -74,7 +74,7 @@ if (!defined('ABSPATH')) {
                                 $academic_year = $app['academic_year'] ?? 'N/A';
                                 if ($academic_year && $academic_year !== 'N/A') {
                                     // Get academic year info if available
-                                    $school_config = new EduBot_School_Config();
+                                    $school_config = EduBot_School_Config::getInstance();
                                     $year_info = $school_config->get_academic_year_info($academic_year);
                                     echo '<span class="academic-year-display">' . esc_html($year_info['label']) . '</span>';
                                 } else {

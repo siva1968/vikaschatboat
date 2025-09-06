@@ -208,9 +208,14 @@ jQuery(document).ready(function($) {
             var template = $container.data('template');
             var index = $container.children().length;
             
-            // Replace placeholder with actual index
-            var newField = template.replace(/\{\{INDEX\}\}/g, index);
-            $container.append(newField);
+            // Check if template exists before trying to use it
+            if (template && typeof template === 'string') {
+                // Replace placeholder with actual index
+                var newField = template.replace(/\{\{INDEX\}\}/g, index);
+                $container.append(newField);
+            } else {
+                console.warn('EduBot: Template not found for dynamic field container');
+            }
         });
         
         // Remove field
@@ -331,9 +336,12 @@ jQuery(document).ready(function($) {
 
     // Analytics dashboard
     initAnalytics: function() {
-        this.loadDashboardStats();
-        this.initCharts();
-        this.initDateRangePicker();
+        // Only initialize analytics on dashboard pages
+        if ($('.edubot-dashboard').length > 0 || $('.edubot-card-value').length > 0) {
+            this.loadDashboardStats();
+            this.initCharts();
+            this.initDateRangePicker();
+        }
     },
 
     // Load dashboard statistics
@@ -349,37 +357,62 @@ jQuery(document).ready(function($) {
                 if (response.success) {
                     var stats = response.data;
                     
-                    // Update dashboard cards
-                    $('.edubot-card-value[data-stat="total_applications"]').text(stats.total_applications);
-                    $('.edubot-card-value[data-stat="pending_applications"]').text(stats.pending_applications);
-                    $('.edubot-card-value[data-stat="total_conversations"]').text(stats.total_conversations);
-                    $('.edubot-card-value[data-stat="active_schools"]').text(stats.active_schools);
-                    
-                    // Update change indicators
-                    EdubotAdmin.updateChangeIndicators(stats.changes);
+                    // Update dashboard cards safely
+                    if (stats) {
+                        EdubotAdmin.updateDashboardCard('total_applications', stats.total_applications);
+                        EdubotAdmin.updateDashboardCard('pending_applications', stats.pending_applications);
+                        EdubotAdmin.updateDashboardCard('total_conversations', stats.total_conversations);
+                        EdubotAdmin.updateDashboardCard('active_schools', stats.active_schools);
+                        
+                        // Update change indicators if they exist
+                        if (stats.changes) {
+                            EdubotAdmin.updateChangeIndicators(stats.changes);
+                        }
+                    }
                 }
+            },
+            error: function(xhr, status, error) {
+                console.log('Dashboard stats loading failed:', error);
             }
         });
     },
 
+    // Safely update dashboard card values
+    updateDashboardCard: function(statName, value) {
+        var $element = $('.edubot-card-value[data-stat="' + statName + '"]');
+        if ($element.length > 0) {
+            $element.text(value || 0);
+        }
+    },
+
     // Update change indicators
     updateChangeIndicators: function(changes) {
+        if (!changes || typeof changes !== 'object') {
+            return;
+        }
+        
         $.each(changes, function(key, change) {
             var $indicator = $('.edubot-metric-change[data-metric="' + key + '"]');
-            var icon = change > 0 ? '↗' : change < 0 ? '↘' : '→';
-            var className = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
-            
-            $indicator.removeClass('positive negative')
-                      .addClass(className)
-                      .html(icon + ' ' + Math.abs(change) + '%');
+            if ($indicator.length > 0) {
+                var icon = change > 0 ? '↗' : change < 0 ? '↘' : '→';
+                var className = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
+                
+                $indicator.removeClass('positive negative')
+                          .addClass(className)
+                          .html(icon + ' ' + Math.abs(change) + '%');
+            }
         });
     },
 
     // Initialize charts
     initCharts: function() {
-        if (typeof Chart !== 'undefined') {
-            this.createApplicationChart();
-            this.createConversationChart();
+        if (typeof Chart !== 'undefined' && $('.edubot-chart').length > 0) {
+            try {
+                this.createApplicationChart();
+                this.createConversationChart();
+            } catch (error) {
+                console.log('Chart initialization failed:', error);
+            }
         }
     },
 
@@ -454,21 +487,25 @@ jQuery(document).ready(function($) {
 
     // Date range picker
     initDateRangePicker: function() {
-        if (typeof $.fn.daterangepicker !== 'undefined') {
-            $('#analytics-date-range').daterangepicker({
-                ranges: {
-                    'Today': [moment(), moment()],
-                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                    'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                    'This Month': [moment().startOf('month'), moment().endOf('month')],
-                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-                },
-                startDate: moment().subtract(29, 'days'),
-                endDate: moment()
-            }, function(start, end) {
-                EdubotAdmin.updateAnalytics(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'));
-            });
+        if (typeof $.fn.daterangepicker !== 'undefined' && typeof moment !== 'undefined' && $('#analytics-date-range').length > 0) {
+            try {
+                $('#analytics-date-range').daterangepicker({
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    startDate: moment().subtract(29, 'days'),
+                    endDate: moment()
+                }, function(start, end) {
+                    EdubotAdmin.updateAnalytics(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'));
+                });
+            } catch (error) {
+                console.log('Date range picker initialization failed:', error);
+            }
         }
     },
 
@@ -591,6 +628,11 @@ jQuery(document).ready(function($) {
 
     // Perform auto-save
     performAutoSave: function($form) {
+        // Only auto-save for specific forms
+        if (!$form.hasClass('edubot-admin-form') || $form.attr('id') === 'academic-config-form') {
+            return; // Skip auto-save for academic config and other special forms
+        }
+        
         var formData = $form.serialize();
         formData += '&action=edubot_autosave&nonce=' + edubot_admin.nonce;
         

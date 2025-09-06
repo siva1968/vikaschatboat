@@ -693,3 +693,47 @@
     background: #c82333;
     border-color: #c82333;
 }
+
+/* Multiple Grade Systems Styles */
+.edubot-grade-systems-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin: 10px 0;
+}
+
+.edubot-checkbox-label {
+    display: block;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: #f9f9f9;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.edubot-checkbox-label:hover {
+    border-color: #4facfe;
+    background: #f0f8ff;
+}
+
+.edubot-checkbox-label input[type="checkbox"] {
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.edubot-checkbox-label input[type="checkbox"]:checked + strong {
+    color: #4facfe;
+}
+
+.edubot-checkbox-label:has(input:checked) {
+    border-color: #4facfe;
+    background: #f0f8ff;
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.2);
+}
+
+.edubot-checkbox-label .description {
+    color: #666;
+    font-style: italic;
+    margin-top: 5px;
+}

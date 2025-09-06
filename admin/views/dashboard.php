@@ -10,6 +10,21 @@ if (!defined('ABSPATH')) {
 <div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
     
+    <?php if (!empty($missing_tables)): ?>
+    <div class="notice notice-warning">
+        <p>
+            <strong>Database Issue:</strong> Some required database tables are missing: 
+            <code><?php echo esc_html(implode(', ', $missing_tables)); ?></code>
+        </p>
+        <p>
+            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=edubot-pro&action=repair_database'), 'edubot_repair_db', 'nonce'); ?>" 
+               class="button button-primary">
+                Repair Database Tables
+            </a>
+        </p>
+    </div>
+    <?php endif; ?>
+    
     <div class="edubot-dashboard">
         <div class="edubot-row">
             <div class="edubot-col-8">

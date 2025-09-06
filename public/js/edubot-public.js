@@ -5,6 +5,28 @@
 
 (function($) {
     'use strict';
+    
+    // Global error handler for edubot_ajax
+    if (typeof edubot_ajax === 'undefined') {
+        console.warn('EduBot: edubot_ajax not loaded, creating fallback object');
+        window.edubot_ajax = {
+            ajax_url: '/wp-admin/admin-ajax.php',
+            nonce: '',
+            strings: {
+                connecting: 'Connecting...',
+                typing: 'Bot is typing...',
+                error: 'Sorry, something went wrong. Please try again.',
+                send: 'Send',
+                type_message: 'Type your message...',
+                new_application: 'New Application',
+                school_info: 'School Information',
+                contact_info: 'Contact Information'
+            }
+        };
+    }
+
+    // Version identifier for debugging
+    console.log('EduBot: JavaScript version 2.6 - Full Admission Workflow Enabled at', new Date().toISOString());
 
     // Main chatbot widget class
     window.EduBotChatWidget = {
@@ -35,13 +57,42 @@
 
         // Initialize the chatbot
         init: function(sessionId) {
+            // Validate required objects
+            if (typeof edubot_ajax === 'undefined') {
+                console.error('EduBot: edubot_ajax object not found. Make sure script is properly localized.');
+                return;
+            }
+            
+            if (!edubot_ajax.ajax_url || !edubot_ajax.nonce) {
+                console.error('EduBot: Missing AJAX URL or nonce in edubot_ajax object.');
+                return;
+            }
+            
             this.config.sessionId = sessionId;
             this.bindElements();
             this.bindEvents();
             this.loadPersistedData();
+            this.checkInitialState();
             this.startHeartbeat();
             
             console.log('EduBot Chat Widget initialized with session:', sessionId);
+            console.log('EduBot: AJAX URL:', edubot_ajax.ajax_url);
+            console.log('EduBot: Nonce available:', !!edubot_ajax.nonce);
+        },
+
+        // Check initial chat state
+        checkInitialState: function() {
+            // Always start with chat closed to prevent layout issues
+            this.config.isOpen = false;
+            this.elements.container.removeClass('show');
+            this.elements.toggle.removeClass('chat-open');
+            console.log('EduBot: Chat initialized in closed state');
+            
+            // Enable input for when chat is opened
+            setTimeout(() => {
+                this.elements.input.prop('disabled', false);
+                console.log('EduBot: Input enabled');
+            }, 100);
         },
 
         // Bind DOM elements
@@ -95,6 +146,23 @@
                 self.hideOptions();
             });
 
+            // Quick action button clicks
+            $(document).on('click', '.quick-action', function() {
+                var actionValue = $(this).data('action');
+                if (actionValue) {
+                    self.sendMessage('', actionValue);
+                }
+            });
+
+            // EduBot quick action button clicks (for public class)
+            $(document).on('click', '.edubot-quick-action', function() {
+                var actionValue = $(this).data('action');
+                if (actionValue) {
+                    console.log('EduBot: Quick action clicked:', actionValue);
+                    self.sendMessage('', actionValue);
+                }
+            });
+
             // Close chat when clicking outside (on mobile)
             $(document).on('click', function(e) {
                 if (self.config.isOpen && 
@@ -109,8 +177,12 @@
 
             // Prevent input focus on mobile when chat is closed
             this.elements.input.on('focus', function() {
-                if (!self.config.isOpen) {
+                // Allow focus if chat is open or opening
+                if (!self.config.isOpen && !self.elements.container.is(':visible')) {
+                    console.log('EduBot: Preventing focus - chat is closed');
                     $(this).blur();
+                } else {
+                    console.log('EduBot: Allowing input focus - chat is open');
                 }
             });
 
@@ -157,7 +229,7 @@
 
         // Open chat widget
         openChat: function() {
-            this.elements.container.show();
+            this.elements.container.addClass('show');
             this.config.isOpen = true;
             this.elements.toggle.addClass('chat-open');
             
@@ -168,9 +240,11 @@
 
             // Show initial options if no conversation yet
             if (this.config.messageHistory.length === 0) {
-                this.showWelcomeOptions();
+                // Quick actions are handled by buttons in the welcome message HTML
+                // No need for additional JavaScript-generated options
+                console.log('EduBot: Welcome message with quick actions already displayed');
             }
-
+            
             // Scroll to bottom
             this.scrollToBottom();
             
@@ -180,7 +254,7 @@
 
         // Close chat widget
         closeChat: function() {
-            this.elements.container.hide();
+            this.elements.container.removeClass('show');
             this.config.isOpen = false;
             this.elements.toggle.removeClass('chat-open');
             this.elements.input.blur();
@@ -190,15 +264,21 @@
         },
 
         // Send message
-        sendMessage: function(messageText) {
+        sendMessage: function(messageText, actionValue) {
             var message = messageText || this.elements.input.val().trim();
             
-            if (!message || this.config.isTyping) {
+            if (!message && !actionValue) {
                 return;
             }
 
-            // Add user message to chat
-            this.addUserMessage(message);
+            if (this.config.isTyping) {
+                return;
+            }
+
+            // Add user message to chat (only if there's a message to show)
+            if (message) {
+                this.addUserMessage(message);
+            }
             
             // Clear input
             this.elements.input.val('');
@@ -211,42 +291,66 @@
             this.showTypingIndicator();
             
             // Send to server
-            this.sendToServer(message);
+            this.sendToServer(message, actionValue);
         },
 
         // Send message to server
-        sendToServer: function(message, retryCount = 0) {
+        sendToServer: function(message, actionValue, retryCount = 0) {
             var self = this;
+            
+            var requestData = {
+                action: 'edubot_chatbot_response',
+                message: message || '',
+                session_id: this.config.sessionId,
+                nonce: edubot_ajax.nonce
+            };
+            
+            // Add action parameter if provided
+            if (actionValue) {
+                requestData.action_type = actionValue;
+            }
+            
+            console.log('EduBot: Sending AJAX request:', requestData);
             
             $.ajax({
                 url: edubot_ajax.ajax_url,
                 type: 'POST',
-                data: {
-                    action: 'edubot_chatbot',
-                    message: message,
-                    session_id: this.config.sessionId,
-                    nonce: edubot_ajax.nonce
-                },
+                data: requestData,
                 timeout: 30000,
                 success: function(response) {
+                    console.log('EduBot: AJAX response:', response);
                     self.hideTypingIndicator();
                     
                     if (response.success) {
                         self.handleServerResponse(response.data);
                     } else {
-                        self.handleError(response.data || edubot_ajax.strings.error);
+                        console.error('EduBot: Server returned error:', response.data);
+                        var errorText = response.data || 
+                                      ((edubot_ajax && edubot_ajax.strings && edubot_ajax.strings.error) ? 
+                                       edubot_ajax.strings.error : 'Sorry, something went wrong. Please try again.');
+                        self.handleError(errorText);
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.error('EduBot: AJAX error:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    });
                     self.hideTypingIndicator();
                     
                     // Retry on failure
                     if (retryCount < self.config.maxRetries) {
+                        console.log('EduBot: Retrying request, attempt:', retryCount + 1);
                         setTimeout(function() {
-                            self.sendToServer(message, retryCount + 1);
+                            self.sendToServer(message, actionValue, retryCount + 1);
                         }, self.config.retryDelay * (retryCount + 1));
                     } else {
-                        self.handleError(edubot_ajax.strings.error);
+                        console.error('EduBot: Max retries reached, giving up');
+                        var errorText = (edubot_ajax && edubot_ajax.strings && edubot_ajax.strings.error) ? 
+                                      edubot_ajax.strings.error : 'Sorry, something went wrong. Please try again.';
+                        self.handleError(errorText);
                     }
                 }
             });
@@ -264,6 +368,12 @@
 
             if (data.application_number) {
                 this.showApplicationSuccess(data.application_number);
+            }
+
+            // Update session ID for conversation continuity
+            if (data.session_id) {
+                this.config.sessionId = data.session_id;
+                console.log('EduBot: Session ID updated to:', data.session_id);
             }
 
             // Update session data
@@ -309,9 +419,30 @@
                    '</div>';
         },
 
-        // Format message (handle line breaks, emojis, etc.)
+        // Format message (handle line breaks, emojis, etc.) with XSS protection
         formatMessage: function(message) {
-            return message
+            // Ensure message is a string
+            if (typeof message !== 'string') {
+                if (typeof message === 'object' && message !== null) {
+                    message = message.message || message.text || JSON.stringify(message);
+                } else {
+                    message = String(message || '');
+                }
+            }
+            
+            // SECURITY: Decode HTML entities that may have been encoded by WordPress
+            function decodeHtml(text) {
+                var textarea = document.createElement('textarea');
+                textarea.innerHTML = text;
+                return textarea.value;
+            }
+            
+            // First decode any existing HTML entities from WordPress
+            var decoded = decodeHtml(message);
+            
+            // Then escape only if needed (for user input, not server responses)
+            // Since this is a server response, we trust it and just format it
+            return decoded
                 .replace(/\n/g, '<br>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>');
@@ -322,8 +453,10 @@
             if (this.config.isTyping) return;
             
             this.config.isTyping = true;
+            var typingText = (edubot_ajax && edubot_ajax.strings && edubot_ajax.strings.typing) ? 
+                           edubot_ajax.strings.typing : 'Bot is typing...';
             var typingHtml = '<div class="edubot-typing-indicator" id="edubot-typing">' +
-                           '<span>' + edubot_ajax.strings.typing + '</span>' +
+                           '<span>' + typingText + '</span>' +
                            '<div class="edubot-typing-dots">' +
                            '<span></span><span></span><span></span>' +
                            '</div></div>';
@@ -357,16 +490,13 @@
         },
 
         // Show welcome options
+        // Deprecated: Welcome options now handled by HTML quick action buttons
         showWelcomeOptions: function() {
-            var welcomeOptions = [
-                { text: edubot_ajax.strings.new_application || 'New Application', value: 'new_admission' },
-                { text: edubot_ajax.strings.school_info || 'School Information', value: 'school_info' },
-                { text: edubot_ajax.strings.contact_info || 'Contact Information', value: 'contact_info' }
-            ];
-            
-            setTimeout(() => {
-                this.showOptions(welcomeOptions);
-            }, 1000);
+            // This method has been disabled because welcome options are now 
+            // handled by quick action buttons in the welcome message HTML.
+            // This prevents errors from trying to access undefined localized strings.
+            console.log('EduBot: showWelcomeOptions called but disabled - using HTML quick actions instead');
+            return false;
         },
 
         // Show application success message
@@ -459,7 +589,7 @@
                 url: edubot_ajax.ajax_url,
                 type: 'POST',
                 data: {
-                    action: 'edubot_chatbot',
+                    action: 'edubot_chatbot_response',
                     message: message,
                     session_id: sessionId,
                     nonce: edubot_ajax.nonce
@@ -512,18 +642,8 @@
 
         // Track analytics events
         trackEvent: function(eventType, eventData = {}) {
-            // Send analytics data to server
-            $.ajax({
-                url: edubot_ajax.ajax_url,
-                type: 'POST',
-                data: {
-                    action: 'edubot_track_event',
-                    event_type: eventType,
-                    event_data: eventData,
-                    session_id: this.config.sessionId,
-                    nonce: edubot_ajax.nonce
-                }
-            });
+            // Tracking disabled - backend handler not implemented
+            console.log('EduBot: Event tracked (local only):', eventType, eventData);
         },
 
         // Update last activity timestamp

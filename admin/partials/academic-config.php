@@ -33,46 +33,84 @@ $academic_year_configs = Edubot_Academic_Config::get_academic_year_configs();
 
         <!-- Grade System Configuration -->
         <div class="edubot-form-section">
-            <h3><?php esc_html_e('Grade/Class System', 'edubot-pro'); ?></h3>
-            <p><?php esc_html_e('Choose how your school organizes students by grade or class level.', 'edubot-pro'); ?></p>
+            <h3><?php esc_html_e('Grade/Class Systems', 'edubot-pro'); ?></h3>
+            <p><?php esc_html_e('Select multiple grade systems that your school supports. Students can apply under any of the selected systems.', 'edubot-pro'); ?></p>
 
             <table class="edubot-form-table">
                 <tr>
-                    <th><?php esc_html_e('Grade System', 'edubot-pro'); ?></th>
+                    <th><?php esc_html_e('Available Grade Systems', 'edubot-pro'); ?></th>
                     <td>
-                        <select name="academic_config[grade_system]" id="grade-system-select">
-                            <?php foreach ($grade_systems as $key => $system): ?>
-                                <option value="<?php echo esc_attr($key); ?>" 
-                                        <?php selected($academic_config['grade_system'], $key); ?>>
-                                    <?php echo esc_html($system['name']); ?>
-                                </option>
+                        <div class="edubot-grade-systems-container">
+                            <?php 
+                            $configured_systems = Edubot_Academic_Config::get_configured_grade_systems();
+                            foreach ($grade_systems as $key => $system): 
+                                $is_checked = in_array($key, $configured_systems);
+                            ?>
+                                <label class="edubot-checkbox-label">
+                                    <input type="checkbox" 
+                                           name="academic_config[grade_systems][]" 
+                                           value="<?php echo esc_attr($key); ?>"
+                                           <?php checked($is_checked); ?>
+                                           class="grade-system-checkbox" />
+                                    <strong><?php echo esc_html($system['name']); ?></strong>
+                                    <br>
+                                    <small class="description">
+                                        <?php 
+                                        // For custom system, load actual custom grades
+                                        if ($key === 'custom') {
+                                            $custom_grades = get_option('edubot_custom_grades', array());
+                                            $grade_count = count($custom_grades);
+                                            $grade_labels = array_values($custom_grades);
+                                        } else {
+                                            $grade_count = count($system['grades']);
+                                            $grade_labels = array_values($system['grades']);
+                                        }
+                                        
+                                        if ($grade_count > 0) {
+                                            printf(
+                                                esc_html__('%d grades: %s', 'edubot-pro'),
+                                                $grade_count,
+                                                esc_html(implode(', ', array_slice($grade_labels, 0, 3))) . 
+                                                ($grade_count > 3 ? '...' : '')
+                                            );
+                                        } else {
+                                            if ($key === 'custom') {
+                                                esc_html_e('No custom grades defined yet', 'edubot-pro');
+                                            } else {
+                                                esc_html_e('No grades defined', 'edubot-pro');
+                                            }
+                                        }
+                                        ?>
+                                    </small>
+                                </label>
                             <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php esc_html_e('Select the grade/class naming system used by your school.', 'edubot-pro'); ?></p>
+                        </div>
+                        <p class="description"><?php esc_html_e('Select all grade systems that your school offers. Students will be able to choose from grades across all selected systems.', 'edubot-pro'); ?></p>
                     </td>
                 </tr>
             </table>
 
             <!-- Custom Grades Section -->
-            <div id="custom-grades-section" style="<?php echo $academic_config['grade_system'] === 'custom' ? '' : 'display: none;'; ?>">
-                <h4><?php esc_html_e('Custom Grade Configuration', 'edubot-pro'); ?></h4>
+            <div id="custom-grades-section" class="edubot-form-section">
+                <h4><?php esc_html_e('Additional Custom Grades', 'edubot-pro'); ?></h4>
+                <p><?php esc_html_e('Add any additional custom grades that are not covered by the standard systems above.', 'edubot-pro'); ?></p>
                 <div class="edubot-custom-fields" id="custom-grades-container">
                     <?php 
-                    $custom_grades = $academic_config['custom_grades'] ?? array();
+                    $custom_grades = get_option('edubot_custom_grades', array());
                     if (!empty($custom_grades)): 
                         foreach ($custom_grades as $key => $label): ?>
                             <div class="edubot-field-item">
                                 <input type="text" name="academic_config[custom_grades_keys][]" 
-                                       value="<?php echo esc_attr($key); ?>" placeholder="Grade Key (e.g., grade_1)" required />
+                                       value="<?php echo esc_attr($key); ?>" placeholder="Grade Key (e.g., foundation)" required />
                                 <input type="text" name="academic_config[custom_grades_labels][]" 
-                                       value="<?php echo esc_attr($label); ?>" placeholder="Grade Display Name (e.g., Grade 1)" required />
+                                       value="<?php echo esc_attr($label); ?>" placeholder="Grade Display Name (e.g., Foundation Year)" required />
                                 <button type="button" class="edubot-remove-btn"><?php esc_html_e('Remove', 'edubot-pro'); ?></button>
                             </div>
                         <?php endforeach;
                     else: ?>
                         <div class="edubot-field-item">
-                            <input type="text" name="academic_config[custom_grades_keys][]" placeholder="Grade Key (e.g., grade_1)" required />
-                            <input type="text" name="academic_config[custom_grades_labels][]" placeholder="Grade Display Name (e.g., Grade 1)" required />
+                            <input type="text" name="academic_config[custom_grades_keys][]" placeholder="Grade Key (e.g., foundation)" />
+                            <input type="text" name="academic_config[custom_grades_labels][]" placeholder="Grade Display Name (e.g., Foundation Year)" />
                             <button type="button" class="edubot-remove-btn"><?php esc_html_e('Remove', 'edubot-pro'); ?></button>
                         </div>
                     <?php endif; ?>
@@ -86,7 +124,7 @@ $academic_year_configs = Edubot_Academic_Config::get_academic_year_configs();
             <div id="predefined-grades-preview">
                 <?php foreach ($grade_systems as $key => $system): 
                     if ($key === 'custom') continue; ?>
-                    <div class="grade-preview" id="preview-<?php echo esc_attr($key); ?>" 
+                    <div class="grade-preview" id="grade-preview-<?php echo esc_attr($key); ?>" 
                          style="<?php echo $academic_config['grade_system'] === $key ? '' : 'display: none;'; ?>">
                         <h4><?php echo esc_html($system['name']); ?> - <?php esc_html_e('Available Grades', 'edubot-pro'); ?></h4>
                         <div class="grades-list">
@@ -96,6 +134,22 @@ $academic_year_configs = Edubot_Academic_Config::get_academic_year_configs();
                         </div>
                     </div>
                 <?php endforeach; ?>
+                
+                <!-- Custom Grades Preview -->
+                <?php 
+                $custom_grades = get_option('edubot_custom_grades', array());
+                if (!empty($custom_grades)): ?>
+                    <div class="grade-preview" id="grade-preview-custom" 
+                         style="<?php echo $academic_config['grade_system'] === 'custom' ? '' : 'display: none;'; ?>">
+                        <h4><?php esc_html_e('Custom Grade System - Available Grades', 'edubot-pro'); ?></h4>
+                        <div class="grades-list">
+                            <?php foreach ($custom_grades as $grade_key => $grade_label): ?>
+                                <span class="grade-item"><?php echo esc_html($grade_label); ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="description"><?php printf(esc_html__('Total: %d custom grades defined', 'edubot-pro'), count($custom_grades)); ?></p>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -259,7 +313,7 @@ $academic_year_configs = Edubot_Academic_Config::get_academic_year_configs();
 
         <!-- Save Button -->
         <div class="edubot-form-section">
-            <button type="submit" class="button button-primary button-large">
+            <button type="submit" name="submit" value="save" class="button button-primary button-large">
                 <?php esc_html_e('Save Academic Configuration', 'edubot-pro'); ?>
             </button>
             <span class="edubot-autosave-indicator" style="display: none;"></span>
@@ -269,20 +323,35 @@ $academic_year_configs = Edubot_Academic_Config::get_academic_year_configs();
 
 <script>
 jQuery(document).ready(function($) {
-    // Grade system change handler
-    $('#grade-system-select').on('change', function() {
-        var selectedSystem = $(this).val();
+    // Grade system checkbox change handler
+    $('.grade-system-checkbox').on('change', function() {
+        updateGradePreview();
+    });
+    
+    // Function to update grade preview based on selected systems
+    function updateGradePreview() {
+        var selectedSystems = [];
+        $('.grade-system-checkbox:checked').each(function() {
+            selectedSystems.push($(this).val());
+        });
         
-        // Hide all previews
+        // Update grade preview sections
         $('.grade-preview').hide();
         
-        if (selectedSystem === 'custom') {
+        selectedSystems.forEach(function(system) {
+            $('#grade-preview-' + system).show();
+        });
+        
+        // Show/hide custom grades section based on whether any system is selected
+        if (selectedSystems.length > 0) {
             $('#custom-grades-section').show();
         } else {
             $('#custom-grades-section').hide();
-            $('#preview-' + selectedSystem).show();
         }
-    });
+    }
+    
+    // Initialize preview on page load
+    updateGradePreview();
 
     // Board type change handler
     $('#board-type-select').on('change', function() {
@@ -304,28 +373,29 @@ jQuery(document).ready(function($) {
 
     // Add custom grade
     $('#add-custom-grade').on('click', function() {
-        var template = `
-            <div class="edubot-field-item">
-                <input type="text" name="academic_config[custom_grades_keys][]" placeholder="Grade Key (e.g., grade_1)" required />
-                <input type="text" name="academic_config[custom_grades_labels][]" placeholder="Grade Display Name (e.g., Grade 1)" required />
-                <button type="button" class="edubot-remove-btn"><?php esc_html_e('Remove', 'edubot-pro'); ?></button>
-            </div>
-        `;
+        var template = '<div class="edubot-field-item">' +
+            '<input type="text" name="academic_config[custom_grades_keys][]" placeholder="Grade Key (e.g. grade_1)" required />' +
+            '<input type="text" name="academic_config[custom_grades_labels][]" placeholder="Grade Display Name (e.g. Grade 1)" required />' +
+            '<button type="button" class="edubot-remove-btn">Remove</button>' +
+            '</div>';
         $('#custom-grades-container').append(template);
     });
 
     // Add admission cycle
     $('#add-admission-cycle').on('click', function() {
         var index = $('#admission-cycles-container .admission-cycle-item').length;
-        var template = `
-            <div class="edubot-field-item admission-cycle-item">
-                <input type="text" name="academic_config[admission_cycles][${index}][name]" placeholder="Admission Cycle Name" required />
-                <input type="date" name="academic_config[admission_cycles][${index}][start_date]" />
-                <input type="date" name="academic_config[admission_cycles][${index}][end_date]" />
-                <button type="button" class="edubot-remove-btn"><?php esc_html_e('Remove', 'edubot-pro'); ?></button>
-            </div>
-        `;
+        var template = '<div class="edubot-field-item admission-cycle-item">' +
+            '<input type="text" name="academic_config[admission_cycles][' + index + '][name]" placeholder="Admission Cycle Name" required />' +
+            '<input type="date" name="academic_config[admission_cycles][' + index + '][start_date]" />' +
+            '<input type="date" name="academic_config[admission_cycles][' + index + '][end_date]" />' +
+            '<button type="button" class="edubot-remove-btn">Remove</button>' +
+            '</div>';
         $('#admission-cycles-container').append(template);
+    });
+
+    // Remove item handler
+    $(document).on('click', '.edubot-remove-btn', function() {
+        $(this).closest('.edubot-field-item').remove();
     });
 
     // Update academic year display when type changes

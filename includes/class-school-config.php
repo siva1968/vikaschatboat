@@ -6,6 +6,21 @@
 class EduBot_School_Config {
 
     /**
+     * Singleton instance
+     */
+    private static $instance = null;
+    
+    /**
+     * Configuration cache
+     */
+    private static $config_cache = null;
+    
+    /**
+     * Loading flag to prevent recursion
+     */
+    private static $is_loading = false;
+
+    /**
      * Default configuration structure
      */
     private $default_config = array(
@@ -80,24 +95,126 @@ class EduBot_School_Config {
     );
 
     /**
+     * Get singleton instance
+     */
+    public static function getInstance() {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
+     * Prevent direct instantiation
+     */
+    private function __construct() {
+        // Constructor is private to enforce singleton pattern
+    }
+
+    /**
+     * Fix message escaping issues that can occur during save/load cycles
+     */
+    private function fix_message_escaping($message) {
+        if (empty($message)) {
+            return $message;
+        }
+        
+        // Fix common escaping patterns that occur during save/load cycles
+        $fixed = $message;
+        
+        // Remove excessive backslashes before apostrophes
+        $fixed = str_replace("\\\\\\\\'", "'", $fixed);  // \\\\' -> '
+        $fixed = str_replace("\\\\\'", "'", $fixed);     // \\' -> '
+        $fixed = str_replace("\\'", "'", $fixed);        // \' -> '
+        
+        // Apply stripslashes if there are still escaped characters
+        if (strpos($fixed, '\\') !== false) {
+            $fixed = stripslashes($fixed);
+        }
+        
+        return $fixed;
+    }
+
+    /**
      * Get school configuration for current site
      */
     public function get_config() {
+        // Return cached config if available
+        if (self::$config_cache !== null) {
+            return self::$config_cache;
+        }
+        
+        // Prevent recursive loading
+        if (self::$is_loading) {
+            error_log('EduBot School_Config: get_config() - Recursive call detected, returning default config');
+            return $this->default_config;
+        }
+        
+        self::$is_loading = true;
+        
         global $wpdb;
         $site_id = get_current_blog_id();
         $table = $wpdb->prefix . 'edubot_school_configs';
+        
+        error_log('EduBot School_Config: get_config() - Site ID: ' . $site_id . ', Table: ' . $table);
+        
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
+        error_log('EduBot School_Config: get_config() - Table exists: ' . ($table_exists ? 'YES' : 'NO'));
+        
+        if (!$table_exists) {
+            error_log('EduBot School_Config: get_config() - Table does not exist, returning default config');
+            self::$config_cache = $this->default_config;
+            self::$is_loading = false;
+            return self::$config_cache;
+        }
         
         $config = $wpdb->get_var($wpdb->prepare(
             "SELECT config_data FROM $table WHERE site_id = %d AND status = 'active'",
             $site_id
         ));
         
+        error_log('EduBot School_Config: get_config() - Raw config from DB: ' . ($config ? 'FOUND (' . strlen($config) . ' chars)' : 'NOT FOUND'));
+        error_log('EduBot School_Config: get_config() - WPDB last error: ' . $wpdb->last_error);
+        
         if ($config) {
             $decoded_config = json_decode($config, true);
-            return wp_parse_args($decoded_config, $this->default_config);
+            if ($decoded_config === null) {
+                error_log('EduBot School_Config: get_config() - JSON decode failed, returning default config');
+                self::$config_cache = $this->default_config;
+                self::$is_loading = false;
+                return self::$config_cache;
+            }
+            error_log('EduBot School_Config: get_config() - Successfully decoded config from DB');
+            self::$config_cache = wp_parse_args($decoded_config, $this->default_config);
+            
+            // Override welcome message with WordPress option if set
+            $wp_welcome_message = get_option('edubot_welcome_message', '');
+            if (!empty($wp_welcome_message)) {
+                // Apply the same escaping fix that admin uses
+                $wp_welcome_message = $this->fix_message_escaping($wp_welcome_message);
+                self::$config_cache['chatbot_settings']['welcome_message'] = $wp_welcome_message;
+                error_log('EduBot School_Config: Using WordPress option welcome message: ' . $wp_welcome_message);
+            }
+            
+            self::$is_loading = false;
+            return self::$config_cache;
         }
         
-        return $this->default_config;
+        error_log('EduBot School_Config: get_config() - No config found in DB, returning default config');
+        self::$config_cache = $this->default_config;
+        
+        // Override welcome message with WordPress option if set
+        $wp_welcome_message = get_option('edubot_welcome_message', '');
+        if (!empty($wp_welcome_message)) {
+            // Apply the same escaping fix that admin uses
+            $wp_welcome_message = $this->fix_message_escaping($wp_welcome_message);
+            self::$config_cache['chatbot_settings']['welcome_message'] = $wp_welcome_message;
+            error_log('EduBot School_Config: Using WordPress option welcome message: ' . $wp_welcome_message);
+        }
+        
+        self::$is_loading = false;
+        return self::$config_cache;
     }
 
     /**
@@ -105,31 +222,82 @@ class EduBot_School_Config {
      */
     public function update_config($config_data) {
         global $wpdb;
+        error_log('EduBot School_Config: Starting update_config()');
+        error_log('EduBot School_Config: Config data received: ' . print_r($config_data, true));
+        
         $site_id = get_current_blog_id();
+        error_log('EduBot School_Config: Site ID: ' . $site_id);
+        
         $table = $wpdb->prefix . 'edubot_school_configs';
+        error_log('EduBot School_Config: Table name: ' . $table);
+        
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
+        error_log('EduBot School_Config: Table exists: ' . ($table_exists ? 'YES' : 'NO'));
+        
+        if (!$table_exists) {
+            error_log('EduBot School_Config: ERROR - Table does not exist, cannot save config');
+            return false;
+        }
         
         // Merge with existing config
         $existing_config = $this->get_config();
+        error_log('EduBot School_Config: Existing config: ' . print_r($existing_config, true));
+        
         $updated_config = wp_parse_args($config_data, $existing_config);
+        error_log('EduBot School_Config: Merged config: ' . print_r($updated_config, true));
         
         // Encrypt API keys before saving
-        $security_manager = new EduBot_Security_Manager();
-        if (isset($updated_config['api_keys'])) {
-            $updated_config['api_keys'] = $security_manager->save_api_keys($updated_config['api_keys']);
+        if (class_exists('EduBot_Security_Manager')) {
+            $security_manager = new EduBot_Security_Manager();
+            if (isset($updated_config['api_keys'])) {
+                error_log('EduBot School_Config: Encrypting API keys');
+                $updated_config['api_keys'] = $security_manager->save_api_keys($updated_config['api_keys']);
+            }
+        } else {
+            error_log('EduBot School_Config: WARNING - EduBot_Security_Manager class not found, API keys not encrypted');
         }
+        
+        $json_config = json_encode($updated_config);
+        error_log('EduBot School_Config: JSON config length: ' . strlen($json_config));
+        
+        $school_name = isset($updated_config['school_info']['name']) ? $updated_config['school_info']['name'] : '';
+        error_log('EduBot School_Config: School name for DB: ' . $school_name);
         
         $result = $wpdb->replace(
             $table,
             array(
                 'site_id' => $site_id,
-                'school_name' => $updated_config['school_info']['name'],
-                'config_data' => json_encode($updated_config),
+                'school_name' => $school_name,
+                'config_data' => $json_config,
                 'status' => 'active'
             ),
             array('%d', '%s', '%s', '%s')
         );
         
-        return $result !== false;
+        error_log('EduBot School_Config: WPDB replace result: ' . print_r($result, true));
+        error_log('EduBot School_Config: WPDB last error: ' . $wpdb->last_error);
+        error_log('EduBot School_Config: WPDB last query: ' . $wpdb->last_query);
+        
+        $success = $result !== false;
+        error_log('EduBot School_Config: Update success: ' . ($success ? 'YES' : 'NO'));
+        
+        // Clear cache if update was successful
+        if ($success) {
+            self::$config_cache = null;
+            error_log('EduBot School_Config: Cache cleared after successful update');
+        }
+        
+        return $success;
+    }
+    
+    /**
+     * Clear configuration cache (useful for debugging)
+     */
+    public static function clear_cache() {
+        self::$config_cache = null;
+        self::$is_loading = false;
+        error_log('EduBot School_Config: Cache manually cleared');
     }
 
     /**
@@ -183,7 +351,7 @@ class EduBot_School_Config {
         
         // Validate API keys format
         if (isset($config_data['api_keys']['openai_key']) && !empty($config_data['api_keys']['openai_key'])) {
-            if (!preg_match('/^sk-[a-zA-Z0-9]{48}$/', $config_data['api_keys']['openai_key'])) {
+            if (!preg_match('/^sk-(proj-)?[a-zA-Z0-9_-]{20,}$/', $config_data['api_keys']['openai_key'])) {
                 $errors[] = __('Invalid OpenAI API key format', 'edubot-pro');
             }
         }

@@ -6,22 +6,28 @@
 class EduBot_Database_Manager {
 
     /**
-     * Save application to database
+     * Save application to database with enhanced security
      */
     public function save_application($application_data) {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_applications';
         $site_id = get_current_blog_id();
 
+        // Validate and sanitize input data
+        $validated_data = $this->validate_application_data($application_data);
+        if (is_wp_error($validated_data)) {
+            return $validated_data;
+        }
+
         $data = array(
             'site_id' => $site_id,
-            'application_number' => $application_data['application_number'],
-            'student_data' => $application_data['student_data'],
-            'conversation_log' => $application_data['conversation_log'],
-            'status' => 'pending',
-            'source' => 'chatbot',
-            'ip_address' => isset($application_data['ip_address']) ? $application_data['ip_address'] : '',
-            'user_agent' => isset($application_data['user_agent']) ? $application_data['user_agent'] : ''
+            'application_number' => sanitize_text_field($validated_data['application_number']),
+            'student_data' => wp_json_encode($validated_data['student_data']),
+            'conversation_log' => wp_json_encode($validated_data['conversation_log']),
+            'status' => sanitize_text_field($validated_data['status']),
+            'source' => sanitize_text_field($validated_data['source']),
+            'ip_address' => sanitize_text_field($this->get_client_ip()),
+            'user_agent' => sanitize_text_field($this->get_user_agent())
         );
 
         $formats = array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s');
@@ -29,10 +35,114 @@ class EduBot_Database_Manager {
         $result = $wpdb->insert($table, $data, $formats);
 
         if ($result !== false) {
+            // Log successful application save
+            do_action('edubot_application_saved', $wpdb->insert_id, $data);
             return $wpdb->insert_id;
         }
 
-        return false;
+        // Log failed application save
+        error_log('EduBot: Failed to save application data');
+        return new WP_Error('save_failed', 'Failed to save application data');
+    }
+
+    /**
+     * Validate application data before saving
+     */
+    private function validate_application_data($data) {
+        $errors = array();
+
+        // Validate required fields
+        if (empty($data['application_number'])) {
+            $errors[] = 'Application number is required';
+        }
+
+        if (empty($data['student_data']) || !is_array($data['student_data'])) {
+            $errors[] = 'Valid student data is required';
+        }
+
+        // Validate student data structure
+        if (isset($data['student_data'])) {
+            $student_data = $data['student_data'];
+            
+            // Sanitize and validate student data fields
+            $required_fields = array('student_name', 'grade', 'parent_name', 'email');
+            foreach ($required_fields as $field) {
+                if (empty($student_data[$field])) {
+                    $errors[] = "Student {$field} is required";
+                }
+            }
+
+            // Validate email format
+            if (isset($student_data['email']) && !is_email($student_data['email'])) {
+                $errors[] = 'Invalid email format';
+            }
+
+            // Validate phone number format
+            if (isset($student_data['phone']) && !empty($student_data['phone'])) {
+                $phone = preg_replace('/[^0-9+\-\s\(\)]/', '', $student_data['phone']);
+                if (strlen($phone) < 10) {
+                    $errors[] = 'Invalid phone number format';
+                }
+                $student_data['phone'] = $phone;
+            }
+
+            // Sanitize text fields
+            foreach ($student_data as $key => $value) {
+                if (is_string($value)) {
+                    $student_data[$key] = sanitize_text_field($value);
+                }
+            }
+
+            $data['student_data'] = $student_data;
+        }
+
+        // Validate conversation log
+        if (!empty($data['conversation_log']) && !is_array($data['conversation_log'])) {
+            $errors[] = 'Invalid conversation log format';
+        }
+
+        // Set defaults
+        $data['status'] = isset($data['status']) ? $data['status'] : 'pending';
+        $data['source'] = isset($data['source']) ? $data['source'] : 'chatbot';
+
+        if (!empty($errors)) {
+            return new WP_Error('validation_failed', implode(', ', $errors));
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get client IP address safely
+     */
+    private function get_client_ip() {
+        $ip_keys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
+        
+        foreach ($ip_keys as $key) {
+            if (array_key_exists($key, $_SERVER) && !empty($_SERVER[$key])) {
+                $ip = $_SERVER[$key];
+                
+                // Handle comma-separated IPs
+                if (strpos($ip, ',') !== false) {
+                    $ip = trim(explode(',', $ip)[0]);
+                }
+                
+                // Validate IP
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+        
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '';
+    }
+
+    /**
+     * Get user agent safely
+     */
+    private function get_user_agent() {
+        return isset($_SERVER['HTTP_USER_AGENT']) ? 
+            substr(sanitize_text_field($_SERVER['HTTP_USER_AGENT']), 0, 255) : '';
     }
 
     /**
@@ -217,57 +327,91 @@ class EduBot_Database_Manager {
     }
 
     /**
-     * Clean up old sessions
+     * Clean up old sessions with enhanced security
      */
     public function cleanup_old_sessions($days = 30) {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_sessions';
         $site_id = get_current_blog_id();
 
+        // Validate input
+        $days = absint($days);
+        if ($days < 1 || $days > 365) {
+            $days = 30; // Default fallback
+        }
+
         $date_threshold = date('Y-m-d H:i:s', strtotime("-{$days} days"));
 
-        return $wpdb->delete(
-            $table,
-            array(
-                'site_id' => $site_id,
-                'last_activity' => array('<', $date_threshold)
-            ),
-            array('%d', '%s')
-        );
+        $result = $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table WHERE site_id = %d AND last_activity < %s",
+            $site_id, $date_threshold
+        ));
+
+        if ($result !== false) {
+            error_log("EduBot: Cleaned up {$result} old sessions (older than {$days} days)");
+        }
+
+        return $result;
     }
 
     /**
-     * Clean up old analytics data
+     * Clean up old analytics data with enhanced security
      */
     public function cleanup_old_analytics($days = 90) {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_analytics';
         $site_id = get_current_blog_id();
 
+        // Validate input
+        $days = absint($days);
+        if ($days < 7 || $days > 365) {
+            $days = 90; // Default fallback
+        }
+
         $date_threshold = date('Y-m-d H:i:s', strtotime("-{$days} days"));
 
-        return $wpdb->delete(
-            $table,
-            array(
-                'site_id' => $site_id,
-                'timestamp' => array('<', $date_threshold)
-            ),
-            array('%d', '%s')
-        );
+        $result = $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table WHERE site_id = %d AND timestamp < %s",
+            $site_id, $date_threshold
+        ));
+
+        if ($result !== false) {
+            error_log("EduBot: Cleaned up {$result} old analytics records (older than {$days} days)");
+        }
+
+        return $result;
     }
 
     /**
-     * Export applications to CSV
+     * Export applications to CSV with security validation
      */
     public function export_applications_csv($filters = array()) {
+        // Security check - verify user capability
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized access.');
+        }
+        
+        // Verify nonce for CSRF protection
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'edubot_export_applications')) {
+            wp_die('Security check failed.');
+        }
+        
         $applications = $this->get_applications(1, 10000, $filters);
         
         $filename = 'edubot_applications_' . date('Y-m-d') . '.csv';
         
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        // Sanitize filename
+        $filename = sanitize_file_name($filename);
+        
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . esc_attr($filename) . '"');
+        header('Cache-Control: no-cache, must-revalidate');
+        header('Pragma: no-cache');
         
         $output = fopen('php://output', 'w');
+        
+        // Add BOM for UTF-8
+        fputs($output, "\xEF\xBB\xBF");
         
         // CSV headers
         fputcsv($output, array(
@@ -284,15 +428,16 @@ class EduBot_Database_Manager {
         foreach ($applications['applications'] as $app) {
             $student_data = json_decode($app['student_data'], true);
             
+            // Sanitize and validate data before export
             fputcsv($output, array(
-                $app['application_number'],
-                isset($student_data['student_name']) ? $student_data['student_name'] : '',
-                isset($student_data['grade']) ? $student_data['grade'] : '',
-                isset($student_data['parent_name']) ? $student_data['parent_name'] : '',
-                isset($student_data['phone']) ? $student_data['phone'] : '',
-                isset($student_data['email']) ? $student_data['email'] : '',
-                $app['status'],
-                $app['created_at']
+                esc_html($app['application_number']),
+                isset($student_data['student_name']) ? esc_html($student_data['student_name']) : '',
+                isset($student_data['grade']) ? esc_html($student_data['grade']) : '',
+                isset($student_data['parent_name']) ? esc_html($student_data['parent_name']) : '',
+                isset($student_data['phone']) ? esc_html($student_data['phone']) : '',
+                isset($student_data['email']) ? sanitize_email($student_data['email']) : '',
+                esc_html($app['status']),
+                esc_html($app['created_at'])
             ));
         }
         
@@ -417,6 +562,257 @@ class EduBot_Database_Manager {
         } catch (Exception $e) {
             error_log("EduBot Pro: Backup failed: " . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Ensure all required database tables exist
+     * This method can be called to create missing tables
+     */
+    public function ensure_tables_exist() {
+        global $wpdb;
+        
+        $charset_collate = $wpdb->get_charset_collate();
+        $missing_tables = array();
+        
+        // Check which tables are missing
+        $required_tables = array(
+            'edubot_school_configs',
+            'edubot_applications', 
+            'edubot_analytics',
+            'edubot_sessions',
+            'edubot_security_log',
+            'edubot_visitor_analytics',
+            'edubot_visitors'
+        );
+        
+        foreach ($required_tables as $table_name) {
+            $full_table_name = $wpdb->prefix . $table_name;
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$full_table_name'");
+            
+            if ($table_exists != $full_table_name) {
+                $missing_tables[] = $table_name;
+            }
+        }
+        
+        if (empty($missing_tables)) {
+            return array('success' => true, 'message' => 'All tables exist');
+        }
+        
+        // Create missing tables
+        $created_tables = $this->create_missing_tables($missing_tables, $charset_collate);
+        
+        return array(
+            'success' => !empty($created_tables),
+            'missing_tables' => $missing_tables,
+            'created_tables' => $created_tables,
+            'message' => count($created_tables) . ' tables created successfully'
+        );
+    }
+    
+    /**
+     * Create missing database tables
+     */
+    private function create_missing_tables($missing_tables, $charset_collate) {
+        global $wpdb;
+        
+        $created_tables = array();
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        
+        foreach ($missing_tables as $table_name) {
+            $sql = $this->get_table_sql($table_name, $charset_collate);
+            if ($sql) {
+                $result = dbDelta($sql);
+                if (!empty($result)) {
+                    $created_tables[] = $table_name;
+                    error_log("EduBot Pro: Created missing table: " . $wpdb->prefix . $table_name);
+                }
+            }
+        }
+        
+        return $created_tables;
+    }
+    
+    /**
+     * Get SQL for creating specific table
+     */
+    private function get_table_sql($table_name, $charset_collate) {
+        global $wpdb;
+        
+        switch ($table_name) {
+            case 'edubot_visitor_analytics':
+                $table = $wpdb->prefix . 'edubot_visitor_analytics';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    visitor_id varchar(255) NOT NULL,
+                    session_id varchar(255) NOT NULL,
+                    page_url text NOT NULL,
+                    referrer_url text,
+                    user_agent text,
+                    ip_address varchar(45),
+                    country varchar(100),
+                    city varchar(100),
+                    device_type varchar(50),
+                    browser varchar(50),
+                    os varchar(50),
+                    screen_resolution varchar(20),
+                    time_on_page int(11) DEFAULT 0,
+                    interactions_count int(11) DEFAULT 0,
+                    conversion_event varchar(100),
+                    utm_source varchar(100),
+                    utm_medium varchar(100),
+                    utm_campaign varchar(100),
+                    timestamp datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY site_id (site_id),
+                    KEY visitor_id (visitor_id),
+                    KEY session_id (session_id),
+                    KEY timestamp (timestamp),
+                    KEY conversion_event (conversion_event)
+                ) $charset_collate;";
+                
+            case 'edubot_visitors':
+                $table = $wpdb->prefix . 'edubot_visitors';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    visitor_id varchar(255) NOT NULL,
+                    email varchar(255),
+                    phone varchar(20),
+                    name varchar(255),
+                    first_visit datetime DEFAULT CURRENT_TIMESTAMP,
+                    last_activity datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    total_visits int(11) DEFAULT 1,
+                    total_time_spent int(11) DEFAULT 0,
+                    pages_visited int(11) DEFAULT 0,
+                    interactions_count int(11) DEFAULT 0,
+                    lead_score int(11) DEFAULT 0,
+                    status varchar(50) DEFAULT 'anonymous',
+                    is_returning tinyint(1) DEFAULT 0,
+                    marketing_source varchar(100),
+                    conversion_status varchar(50) DEFAULT 'none',
+                    notes longtext,
+                    custom_data longtext,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY visitor_id (visitor_id, site_id),
+                    KEY site_id (site_id),
+                    KEY email (email),
+                    KEY status (status),
+                    KEY is_returning (is_returning),
+                    KEY last_activity (last_activity),
+                    KEY marketing_source (marketing_source)
+                ) $charset_collate;";
+                
+            case 'edubot_school_configs':
+                $table = $wpdb->prefix . 'edubot_school_configs';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    school_name varchar(255) NOT NULL,
+                    config_data longtext NOT NULL,
+                    api_keys_encrypted longtext,
+                    branding_settings longtext,
+                    academic_structure longtext,
+                    board_settings longtext,
+                    academic_year_settings longtext,
+                    status varchar(20) DEFAULT 'active',
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY site_id (site_id)
+                ) $charset_collate;";
+                
+            case 'edubot_applications':
+                $table = $wpdb->prefix . 'edubot_applications';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    application_number varchar(50) NOT NULL,
+                    student_data longtext NOT NULL,
+                    custom_fields_data longtext,
+                    conversation_log longtext,
+                    status varchar(50) DEFAULT 'pending',
+                    source varchar(50) DEFAULT 'chatbot',
+                    ip_address varchar(45),
+                    user_agent text,
+                    utm_data longtext,
+                    whatsapp_sent tinyint(1) DEFAULT 0,
+                    email_sent tinyint(1) DEFAULT 0,
+                    sms_sent tinyint(1) DEFAULT 0,
+                    follow_up_scheduled datetime,
+                    assigned_to bigint(20),
+                    priority varchar(20) DEFAULT 'normal',
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY application_number (application_number),
+                    KEY site_id (site_id),
+                    KEY status (status),
+                    KEY created_at (created_at)
+                ) $charset_collate;";
+                
+            case 'edubot_analytics':
+                $table = $wpdb->prefix . 'edubot_analytics';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    session_id varchar(255) NOT NULL,
+                    event_type varchar(50) NOT NULL,
+                    event_data longtext,
+                    ip_address varchar(45),
+                    user_agent text,
+                    timestamp datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY site_id (site_id),
+                    KEY session_id (session_id),
+                    KEY event_type (event_type),
+                    KEY timestamp (timestamp)
+                ) $charset_collate;";
+                
+            case 'edubot_sessions':
+                $table = $wpdb->prefix . 'edubot_sessions';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    session_id varchar(255) NOT NULL,
+                    user_data longtext,
+                    conversation_state longtext,
+                    current_step varchar(100),
+                    started_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    last_activity datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    completed_at datetime,
+                    status varchar(50) DEFAULT 'active',
+                    ip_address varchar(45),
+                    user_agent text,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY session_id (session_id),
+                    KEY site_id (site_id),
+                    KEY status (status),
+                    KEY last_activity (last_activity)
+                ) $charset_collate;";
+                
+            case 'edubot_security_log':
+                $table = $wpdb->prefix . 'edubot_security_log';
+                return "CREATE TABLE $table (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    site_id bigint(20) NOT NULL,
+                    event_type varchar(100) NOT NULL,
+                    ip_address varchar(45) NOT NULL,
+                    user_agent text,
+                    details longtext,
+                    severity varchar(20) DEFAULT 'medium',
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY site_id (site_id),
+                    KEY event_type (event_type),
+                    KEY ip_address (ip_address),
+                    KEY created_at (created_at),
+                    KEY severity (severity)
+                ) $charset_collate;";
+                
+            default:
+                return false;
         }
     }
 }

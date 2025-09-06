@@ -42,9 +42,15 @@ if (defined('EDUBOT_PRO_REMOVE_ALL_DATA') && EDUBOT_PRO_REMOVE_ALL_DATA) {
     
     // Define table names
     $tables_to_remove = array(
-        $wpdb->prefix . 'edubot_conversations',
+        $wpdb->prefix . 'edubot_school_configs',
         $wpdb->prefix . 'edubot_applications',
         $wpdb->prefix . 'edubot_analytics',
+        $wpdb->prefix . 'edubot_sessions',
+        $wpdb->prefix . 'edubot_security_log',
+        $wpdb->prefix . 'edubot_visitor_analytics',
+        $wpdb->prefix . 'edubot_visitors',
+        // Legacy tables (in case they exist)
+        $wpdb->prefix . 'edubot_conversations',
         $wpdb->prefix . 'edubot_schools',
         $wpdb->prefix . 'edubot_notifications'
     );

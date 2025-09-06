@@ -100,14 +100,28 @@ if (!defined('ABSPATH')) {
                     <tr>
                         <th scope="row">Welcome Message</th>
                         <td>
-                            <textarea name="edubot_welcome_message" rows="3" class="large-text"><?php echo esc_textarea(get_option('edubot_welcome_message', 'Hi! I\'m here to help you with school admissions. Let\'s get started!')); ?></textarea>
+                            <textarea name="edubot_welcome_message" rows="3" class="large-text"><?php 
+                                $welcome_msg = get_option('edubot_welcome_message', 'Hi! I\'m here to help you with school admissions. Let\'s get started!');
+                                // Fix any escaping issues before displaying
+                                $welcome_msg = str_replace("\\\\\\\\'", "'", $welcome_msg);
+                                $welcome_msg = str_replace("\\\\\'", "'", $welcome_msg);
+                                $welcome_msg = str_replace("\\'", "'", $welcome_msg);
+                                echo esc_textarea($welcome_msg); 
+                            ?></textarea>
                             <p class="description">First message visitors see when they start chatting</p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row">Completion Message</th>
                         <td>
-                            <textarea name="edubot_completion_message" rows="3" class="large-text"><?php echo esc_textarea(get_option('edubot_completion_message', 'Thank you! Your application has been submitted successfully. We\'ll contact you soon.')); ?></textarea>
+                            <textarea name="edubot_completion_message" rows="3" class="large-text"><?php 
+                                $completion_msg = get_option('edubot_completion_message', 'Thank you! Your application has been submitted successfully. We\'ll contact you soon.');
+                                // Fix any escaping issues before displaying
+                                $completion_msg = str_replace("\\\\\\\\'", "'", $completion_msg);
+                                $completion_msg = str_replace("\\\\\'", "'", $completion_msg);
+                                $completion_msg = str_replace("\\'", "'", $completion_msg);
+                                echo esc_textarea($completion_msg); 
+                            ?></textarea>
                             <p class="description">Message shown after successful application submission</p>
                         </td>
                     </tr>
@@ -125,10 +139,46 @@ if (!defined('ABSPATH')) {
                             <div id="edubot-boards-container">
                                 <?php
                                 $configured_boards = get_option('edubot_configured_boards', array(
-                                    array('code' => 'CBSE', 'name' => 'Central Board of Secondary Education', 'enabled' => true),
-                                    array('code' => 'ICSE', 'name' => 'Indian Certificate of Secondary Education', 'enabled' => false),
-                                    array('code' => 'IGCSE', 'name' => 'International General Certificate of Secondary Education', 'enabled' => false),
-                                    array('code' => 'STATE', 'name' => 'State Board', 'enabled' => false)
+                                    array(
+                                        'code' => 'CBSE', 
+                                        'name' => 'Central Board of Secondary Education', 
+                                        'description' => 'A national level board of education in India, providing systematic and comprehensive education focusing on science and mathematics.',
+                                        'grades' => 'I to XII',
+                                        'features' => 'NCERT curriculum, National level competitive exam preparation, Structured assessment pattern, Focus on conceptual learning',
+                                        'enabled' => true
+                                    ),
+                                    array(
+                                        'code' => 'ICSE', 
+                                        'name' => 'Indian Certificate of Secondary Education', 
+                                        'description' => 'A comprehensive English-medium education curriculum designed to provide balanced and holistic education.',
+                                        'grades' => 'I to XII (ISC for XI-XII)',
+                                        'features' => 'Detailed syllabus, English proficiency focus, Arts and literature emphasis, Comprehensive skill development',
+                                        'enabled' => false
+                                    ),
+                                    array(
+                                        'code' => 'IGCSE', 
+                                        'name' => 'International General Certificate of Secondary Education', 
+                                        'description' => 'An internationally recognized English-language curriculum offering a flexible study programme for students aged 14-16.',
+                                        'grades' => 'IX to X (A-Levels for XI-XII)',
+                                        'features' => 'International curriculum, Cambridge assessment, Critical thinking development, Global university recognition',
+                                        'enabled' => false
+                                    ),
+                                    array(
+                                        'code' => 'CAIE', 
+                                        'name' => 'Cambridge Assessment International Education', 
+                                        'description' => 'A comprehensive international curriculum offering Cambridge Primary, Secondary, IGCSE, and A Level programmes with global recognition.',
+                                        'grades' => 'Primary to A-Level (Ages 5-19)',
+                                        'features' => 'International curriculum, Cambridge qualifications, Critical thinking and problem-solving focus, Global university recognition, Flexible subject combinations',
+                                        'enabled' => false
+                                    ),
+                                    array(
+                                        'code' => 'BSE TELANGANA', 
+                                        'name' => 'Board of Secondary Education, Telangana', 
+                                        'description' => 'State education board of Telangana providing education in multiple languages with focus on regional needs.',
+                                        'grades' => 'I to XII',
+                                        'features' => 'Telugu/English medium options, State-specific curriculum, Local cultural integration, Government college admission preference',
+                                        'enabled' => false
+                                    )
                                 ));
                                 
                                 foreach ($configured_boards as $index => $board): ?>
@@ -149,8 +199,9 @@ if (!defined('ABSPATH')) {
                                                 <input type="text" 
                                                        name="edubot_boards[<?php echo $index; ?>][code]" 
                                                        value="<?php echo esc_attr($board['code']); ?>" 
-                                                       placeholder="e.g., CBSE, ICSE, IB" 
-                                                       class="regular-text" />
+                                                       placeholder="e.g., CBSE, ICSE, IGCSE, CAIE, BSE TELANGANA" 
+                                                       class="regular-text board-code-input" />
+                                                <p class="description">Type: CBSE, ICSE, IGCSE, CAIE, CAMBRIDGE, or BSE TELANGANA for auto-population</p>
                                             </div>
                                             <div class="board-field">
                                                 <label>Full Name:</label>
@@ -494,6 +545,106 @@ jQuery(document).ready(function($) {
         `);
     }
     
+    // Predefined board data for auto-population
+    const predefinedBoards = {
+        'CBSE': {
+            name: 'Central Board of Secondary Education',
+            description: 'A national level board of education in India, providing systematic and comprehensive education focusing on science and mathematics.',
+            grades: 'I to XII',
+            features: 'NCERT curriculum, National level competitive exam preparation, Structured assessment pattern, Focus on conceptual learning'
+        },
+        'ICSE': {
+            name: 'Indian Certificate of Secondary Education',
+            description: 'A comprehensive English-medium education curriculum designed to provide balanced and holistic education.',
+            grades: 'I to XII (ISC for XI-XII)',
+            features: 'Detailed syllabus, English proficiency focus, Arts and literature emphasis, Comprehensive skill development'
+        },
+        'IGCSE': {
+            name: 'International General Certificate of Secondary Education',
+            description: 'An internationally recognized English-language curriculum offering a flexible study programme for students aged 14-16.',
+            grades: 'IX to X (A-Levels for XI-XII)',
+            features: 'International curriculum, Cambridge assessment, Critical thinking development, Global university recognition'
+        },
+        'CAIE': {
+            name: 'Cambridge Assessment International Education',
+            description: 'A comprehensive international curriculum offering Cambridge Primary, Secondary, IGCSE, and A Level programmes with global recognition.',
+            grades: 'Primary to A-Level (Ages 5-19)',
+            features: 'International curriculum, Cambridge qualifications, Critical thinking and problem-solving focus, Global university recognition, Flexible subject combinations'
+        },
+        'CAMBRIDGE': {
+            name: 'Cambridge Assessment International Education',
+            description: 'A comprehensive international curriculum offering Cambridge Primary, Secondary, IGCSE, and A Level programmes with global recognition.',
+            grades: 'Primary to A-Level (Ages 5-19)',
+            features: 'International curriculum, Cambridge qualifications, Critical thinking and problem-solving focus, Global university recognition, Flexible subject combinations'
+        },
+        'BSE TELANGANA': {
+            name: 'Board of Secondary Education, Telangana',
+            description: 'State education board of Telangana providing education in multiple languages with focus on regional needs.',
+            grades: 'I to XII',
+            features: 'Telugu/English medium options, State-specific curriculum, Local cultural integration, Government college admission preference'
+        },
+        'STATE': {
+            name: 'State Board',
+            description: 'State government education board providing curriculum as per state educational policies.',
+            grades: 'I to XII',
+            features: 'State curriculum, Regional language options, Local educational standards, State university preparation'
+        }
+    };
+
+    // Function to auto-populate board fields
+    function autoPopulateBoard(codeInput, boardData) {
+        const boardItem = $(codeInput).closest('.edubot-board-item');
+        const index = boardItem.data('index');
+        
+        // Populate fields if they are empty
+        const nameInput = boardItem.find(`input[name="edubot_boards[${index}][name]"]`);
+        const descInput = boardItem.find(`textarea[name="edubot_boards[${index}][description]"]`);
+        const gradesInput = boardItem.find(`input[name="edubot_boards[${index}][grades]"]`);
+        const featuresInput = boardItem.find(`textarea[name="edubot_boards[${index}][features]"]`);
+        
+        if (nameInput.val().trim() === '' || confirm('Auto-populate fields for ' + boardData.name + '? This will overwrite existing data.')) {
+            nameInput.val(boardData.name);
+            descInput.val(boardData.description);
+            gradesInput.val(boardData.grades);
+            featuresInput.val(boardData.features);
+            
+            // Show success message
+            const successMsg = $('<div class="notice notice-success is-dismissible" style="margin: 10px 0;"><p><strong>Auto-populated:</strong> ' + boardData.name + '</p></div>');
+            boardItem.prepend(successMsg);
+            setTimeout(function() {
+                successMsg.fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 3000);
+        }
+    }
+
+    // Handle board code changes for auto-population
+    $(document).on('input blur', 'input[name*="[code]"]', function() {
+        const codeValue = $(this).val().toUpperCase().trim();
+        
+        if (predefinedBoards[codeValue]) {
+            // Add visual indicator that auto-population is available
+            if (!$(this).hasClass('auto-populate-available')) {
+                $(this).addClass('auto-populate-available');
+                
+                // Add auto-populate button
+                const autoBtn = $('<button type="button" class="button button-small auto-populate-btn" style="margin-left: 5px;" title="Auto-populate fields for ' + codeValue + '">Auto-fill</button>');
+                $(this).after(autoBtn);
+                
+                autoBtn.on('click', function() {
+                    autoPopulateBoard($(this).prev('input'), predefinedBoards[codeValue]);
+                    $(this).remove();
+                    $(this).prev('input').removeClass('auto-populate-available');
+                });
+            }
+        } else {
+            // Remove auto-populate option if code doesn't match
+            $(this).removeClass('auto-populate-available');
+            $(this).next('.auto-populate-btn').remove();
+        }
+    });
+
     // Add new board
     $('#add-new-board').on('click', function() {
         const boardHtml = `
@@ -508,7 +659,8 @@ jQuery(document).ready(function($) {
                 <div class="board-details">
                     <div class="board-field">
                         <label>Board Code:</label>
-                        <input type="text" name="edubot_boards[${boardIndex}][code]" placeholder="e.g., CBSE, ICSE, IB" class="regular-text" />
+                        <input type="text" name="edubot_boards[${boardIndex}][code]" placeholder="e.g., CBSE, ICSE, IGCSE, CAIE, BSE TELANGANA" class="regular-text board-code-input" />
+                        <p class="description">Type: CBSE, ICSE, IGCSE, CAIE, CAMBRIDGE, or BSE TELANGANA for auto-population</p>
                     </div>
                     <div class="board-field">
                         <label>Full Name:</label>
@@ -562,6 +714,14 @@ jQuery(document).ready(function($) {
             details.hide();
         }
     });
+
+    // Initialize auto-population for existing board codes
+    $('input[name*="[code]"]').each(function() {
+        const codeValue = $(this).val().toUpperCase().trim();
+        if (codeValue && predefinedBoards[codeValue]) {
+            $(this).trigger('input');
+        }
+    });
 });
 </script>
 
@@ -607,6 +767,41 @@ jQuery(document).ready(function($) {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
+}
+
+/* Auto-population styles */
+.board-code-input.auto-populate-available {
+    border-left: 3px solid #00a32a;
+    background-color: #f0f9ff;
+}
+
+.auto-populate-btn {
+    background: linear-gradient(135deg, #00a32a, #008a20);
+    color: white;
+    border: none;
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    animation: pulse 2s infinite;
+}
+
+.auto-populate-btn:hover {
+    background: linear-gradient(135deg, #008a20, #006d1a);
+    transform: translateY(-1px);
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 163, 42, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 163, 42, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 163, 42, 0); }
+}
+
+.board-field .description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 3px;
+    font-style: italic;
 }
 
 .board-field {

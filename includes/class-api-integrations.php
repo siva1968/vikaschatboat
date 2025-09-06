@@ -11,24 +11,54 @@ class EduBot_API_Integrations {
     private $school_config;
 
     /**
+     * Security manager instance
+     */
+    private $security_manager;
+
+    /**
      * Constructor
      */
     public function __construct() {
-        $this->school_config = new EduBot_School_Config();
+        $this->school_config = EduBot_School_Config::getInstance();
+        $this->security_manager = new EduBot_Security_Manager();
     }
 
     /**
-     * Get AI response from OpenAI
+     * Get AI response from OpenAI with security enhancements
      */
     public function get_ai_response($message, $context = '') {
+        // Input validation
+        if (empty($message) || strlen($message) > 4000) {
+            return new WP_Error('invalid_input', 'Message is required and must be under 4000 characters');
+        }
+
+        // Security checks
+        if ($this->security_manager->is_malicious_content($message)) {
+            error_log('EduBot: Malicious content detected in AI request');
+            return new WP_Error('security_violation', 'Content violates security policies');
+        }
+
+        // Rate limiting
+        $user_identifier = $this->get_user_identifier();
+        if (!$this->security_manager->check_rate_limit($user_identifier . '_ai_requests', 20, 3600)) {
+            return new WP_Error('rate_limit_exceeded', 'Too many AI requests. Please try again later.');
+        }
+
         $api_keys = $this->school_config->get_api_keys();
         
         if (empty($api_keys['openai_key'])) {
-            return false;
+            return new WP_Error('missing_api_key', 'OpenAI API key not configured');
         }
 
         $config = $this->school_config->get_config();
-        $model = isset($config['chatbot_settings']['ai_model']) ? $config['chatbot_settings']['ai_model'] : 'gpt-3.5-turbo';
+        $model = isset($config['chatbot_settings']['ai_model']) ? 
+            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+        
+        // Validate model name
+        $allowed_models = array('gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview');
+        if (!in_array($model, $allowed_models)) {
+            $model = 'gpt-3.5-turbo';
+        }
         
         $system_prompt = $this->build_system_prompt($context);
         
@@ -41,7 +71,7 @@ class EduBot_API_Integrations {
                 ),
                 array(
                     'role' => 'user',
-                    'content' => $message
+                    'content' => sanitize_text_field($message)
                 )
             ),
             'max_tokens' => 500,
@@ -50,11 +80,32 @@ class EduBot_API_Integrations {
 
         $response = $this->make_openai_request($data, $api_keys['openai_key']);
         
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
         if ($response && isset($response['choices'][0]['message']['content'])) {
-            return trim($response['choices'][0]['message']['content']);
+            $ai_response = trim($response['choices'][0]['message']['content']);
+            
+            // Additional security check on AI response
+            if ($this->security_manager->is_malicious_content($ai_response)) {
+                error_log('EduBot: AI generated potentially malicious content');
+                return new WP_Error('ai_security_violation', 'AI response flagged by security filters');
+            }
+            
+            return $ai_response;
         }
 
-        return false;
+        return new WP_Error('ai_error', 'Failed to get AI response');
+    }
+
+    /**
+     * Get user identifier for rate limiting
+     */
+    private function get_user_identifier() {
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown';
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'unknown';
+        return md5($ip . $user_agent);
     }
 
     /**
@@ -83,24 +134,35 @@ class EduBot_API_Integrations {
     }
 
     /**
-     * Make OpenAI API request
+     * Make OpenAI API request with enhanced security
      */
     private function make_openai_request($data, $api_key) {
         $url = 'https://api.openai.com/v1/chat/completions';
         
+        // Validate API key format (more flexible for modern OpenAI keys)
+        if (!preg_match('/^sk-[a-zA-Z0-9_\-\.]{32,}$/', $api_key)) {
+            error_log('EduBot: Invalid OpenAI API key format: ' . substr($api_key, 0, 10) . '...' . substr($api_key, -5));
+            return new WP_Error('invalid_api_key', 'Invalid API key format. Key should start with "sk-" and be at least 35 characters long.');
+        }
+        
         $headers = array(
             'Authorization: Bearer ' . $api_key,
-            'Content-Type: application/json'
+            'Content-Type: application/json',
+            'User-Agent: EduBot-Pro-WordPress-Plugin/1.0'
         );
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, wp_json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 0);
 
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -109,43 +171,583 @@ class EduBot_API_Integrations {
 
         if ($error) {
             error_log('EduBot OpenAI cURL Error: ' . $error);
-            return false;
+            return new WP_Error('curl_error', 'Network error occurred');
         }
 
         if ($http_code !== 200) {
-            error_log('EduBot OpenAI HTTP Error: ' . $http_code . ' - ' . $response);
-            return false;
+            error_log('EduBot OpenAI HTTP Error: ' . $http_code . ' - ' . substr($response, 0, 200));
+            return new WP_Error('api_error', 'API request failed with status: ' . $http_code);
         }
 
         $decoded_response = json_decode($response, true);
-        
         if (json_last_error() !== JSON_ERROR_NONE) {
             error_log('EduBot OpenAI JSON Error: ' . json_last_error_msg());
-            return false;
+            return new WP_Error('json_error', 'Invalid JSON response');
         }
 
         return $decoded_response;
     }
 
     /**
+     * Test OpenAI connection with comprehensive validation
+     */
+    public function test_openai_connection($api_key) {
+        if (empty($api_key)) {
+            return array(
+                'success' => false,
+                'message' => 'OpenAI API key is required'
+            );
+        }
+        
+        // Validate API key format
+        if (!preg_match('/^sk-[a-zA-Z0-9_\-\.]{32,}$/', $api_key)) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid OpenAI API key format. Key should start with "sk-" and be at least 35 characters long.'
+            );
+        }
+        
+        $data = array(
+            'model' => 'gpt-3.5-turbo',
+            'messages' => array(
+                array(
+                    'role' => 'user',
+                    'content' => 'Test connection - please respond with "Connection successful"'
+                )
+            ),
+            'max_tokens' => 50,
+            'temperature' => 0.1
+        );
+
+        $response = $this->make_openai_request($data, $api_key);
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'OpenAI API Error: ' . $response->get_error_message()
+            );
+        }
+        
+        if ($response && isset($response['choices'][0]['message']['content'])) {
+            return array(
+                'success' => true,
+                'message' => 'OpenAI connection successful! Response: ' . trim($response['choices'][0]['message']['content'])
+            );
+        }
+        
+        return array(
+            'success' => false,
+            'message' => 'Invalid response from OpenAI API'
+        );
+    }
+
+    /**
+     * Test WhatsApp connection with comprehensive validation
+     */
+    public function test_whatsapp_connection($token, $provider, $phone_id = '') {
+        if (empty($token)) {
+            return array(
+                'success' => false,
+                'message' => 'WhatsApp token is required'
+            );
+        }
+        
+        if (empty($provider)) {
+            return array(
+                'success' => false,
+                'message' => 'WhatsApp provider is required'
+            );
+        }
+        
+        switch ($provider) {
+            case 'meta':
+                return $this->test_meta_whatsapp($token, $phone_id);
+            case 'twilio':
+                return $this->test_twilio_whatsapp($token);
+            default:
+                return array(
+                    'success' => false,
+                    'message' => 'Unsupported WhatsApp provider: ' . $provider
+                );
+        }
+    }
+    
+    /**
+     * Test Meta WhatsApp Business API
+     */
+    private function test_meta_whatsapp($token, $phone_id) {
+        if (empty($phone_id)) {
+            return array(
+                'success' => false,
+                'message' => 'Phone ID is required for Meta WhatsApp API'
+            );
+        }
+        
+        $url = "https://graph.facebook.com/v17.0/{$phone_id}";
+        
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Network error: ' . $response->get_error_message()
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($status_code === 200 && isset($data['id'])) {
+            return array(
+                'success' => true,
+                'message' => 'Meta WhatsApp API connection successful! Phone number: ' . ($data['display_phone_number'] ?? 'N/A')
+            );
+        }
+        
+        $error_message = isset($data['error']['message']) ? $data['error']['message'] : 'Unknown error';
+        return array(
+            'success' => false,
+            'message' => 'Meta WhatsApp API error: ' . $error_message
+        );
+    }
+    
+    /**
+     * Test Twilio WhatsApp API
+     */
+    private function test_twilio_whatsapp($token) {
+        // Extract Account SID and Auth Token from the token (format: SID:TOKEN)
+        $credentials = explode(':', $token);
+        if (count($credentials) !== 2) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid Twilio token format. Expected: AccountSID:AuthToken'
+            );
+        }
+        
+        list($account_sid, $auth_token) = $credentials;
+        
+        $url = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}.json";
+        
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($account_sid . ':' . $auth_token),
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Network error: ' . $response->get_error_message()
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($status_code === 200 && isset($data['sid'])) {
+            return array(
+                'success' => true,
+                'message' => 'Twilio WhatsApp API connection successful! Account: ' . ($data['friendly_name'] ?? $data['sid'])
+            );
+        }
+        
+        $error_message = isset($data['message']) ? $data['message'] : 'Authentication failed';
+        return array(
+            'success' => false,
+            'message' => 'Twilio WhatsApp API error: ' . $error_message
+        );
+    }
+
+    /**
+     * Test email connection with comprehensive validation
+     */
+    public function test_email_connection($settings) {
+        if (empty($settings['provider'])) {
+            return array(
+                'success' => false,
+                'message' => 'Email provider is required'
+            );
+        }
+        
+        switch ($settings['provider']) {
+            case 'smtp':
+                return $this->test_smtp_connection($settings);
+            case 'sendgrid':
+                return $this->test_sendgrid_connection($settings);
+            case 'mailgun':
+                return $this->test_mailgun_connection($settings);
+            case 'zeptomail':
+                return $this->test_zeptomail_connection($settings);
+            default:
+                return array(
+                    'success' => false,
+                    'message' => 'Unsupported email provider: ' . $settings['provider']
+                );
+        }
+    }
+    
+    /**
+     * Test SMTP connection
+     */
+    private function test_smtp_connection($settings) {
+        if (empty($settings['host']) || empty($settings['username'])) {
+            return array(
+                'success' => false,
+                'message' => 'SMTP host and username are required'
+            );
+        }
+        
+        $host = $settings['host'];
+        $port = isset($settings['port']) ? intval($settings['port']) : 587;
+        
+        // Test basic connectivity with multiple ports for ZeptoMail
+        $ports_to_try = array($port);
+        if ($host === 'smtp.zeptomail.in') {
+            $ports_to_try = array_unique(array($port, 587, 25, 2525, 465));
+        }
+        
+        $last_error = '';
+        foreach ($ports_to_try as $test_port) {
+            $connection = @fsockopen($host, $test_port, $errno, $errstr, 15);
+            if ($connection) {
+                fclose($connection);
+                
+                // Update settings with working port if different
+                if ($test_port !== $port) {
+                    $settings['port'] = $test_port;
+                }
+                
+                // If we have PHPMailer, try a more comprehensive test
+                if (class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+                    return $this->test_phpmailer_smtp($settings);
+                }
+                
+                return array(
+                    'success' => true,
+                    'message' => "SMTP server {$host}:{$test_port} is reachable. Note: Authentication not tested without PHPMailer."
+                );
+            }
+            $last_error = $errstr;
+        }
+        
+        // All ports failed
+        $ports_tested = implode(', ', $ports_to_try);
+        return array(
+            'success' => false,
+            'message' => "Cannot connect to SMTP server {$host} on any of these ports: {$ports_tested}. Last error: {$last_error}. This may be due to server firewall restrictions."
+        );
+    }
+    
+    /**
+     * Test SMTP with PHPMailer
+     */
+    private function test_phpmailer_smtp($settings) {
+        require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
+        require_once ABSPATH . WPINC . '/PHPMailer/SMTP.php';
+        require_once ABSPATH . WPINC . '/PHPMailer/Exception.php';
+        
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        
+        // For ZeptoMail, try multiple ports
+        $ports_to_try = array();
+        if ($settings['host'] === 'smtp.zeptomail.in') {
+            $ports_to_try = array(587, 465); // Known working ports from test
+        } else {
+            $ports_to_try = array(isset($settings['port']) ? intval($settings['port']) : 587);
+        }
+        
+        $last_error = '';
+        
+        foreach ($ports_to_try as $port) {
+            try {
+                $mail->isSMTP();
+                $mail->Host = $settings['host'];
+                $mail->SMTPAuth = true;
+                $mail->Username = $settings['username'];
+                $mail->Password = $settings['password'] ?? '';
+                $mail->Port = $port;
+                $mail->Timeout = 20; // Reasonable timeout
+                $mail->SMTPOptions = array(
+                    'ssl' => array(
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                        'allow_self_signed' => true
+                    )
+                );
+                
+                // ZeptoMail specific configuration
+                if ($settings['host'] === 'smtp.zeptomail.in') {
+                    $mail->Encoding = 'base64';
+                    if ($port == 465) {
+                        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                    } else {
+                        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                    }
+                    $mail->CharSet = 'UTF-8';
+                    $mail->isHTML(true);
+                } else {
+                    $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                }
+                
+                // Test connection without sending
+                if ($mail->smtpConnect()) {
+                    $mail->smtpClose();
+                    return array(
+                        'success' => true,
+                        'message' => "SMTP connection successful on port {$port}! Authentication verified."
+                    );
+                } else {
+                    $last_error = "Port {$port}: Connection failed";
+                    error_log("EduBot: SMTP test failed on port {$port} for {$settings['host']}");
+                }
+                
+            } catch (Exception $e) {
+                $last_error = "Port {$port}: " . $e->getMessage();
+                error_log("EduBot: SMTP exception on port {$port}: " . $e->getMessage());
+                continue; // Try next port
+            }
+        }
+        
+        // If we get here, all ports failed
+        return array(
+            'success' => false,
+            'message' => "SMTP connection failed on all tested ports. Last error: {$last_error}. " . 
+                        "Please verify your credentials and that your server can connect to {$settings['host']}."
+        );
+    }
+    
+    /**
+     * Test network connectivity and diagnose issues
+     */
+    private function diagnose_network_connectivity($host, $port) {
+        $diagnostics = array();
+        
+        // Test DNS resolution
+        $ip = gethostbyname($host);
+        if ($ip === $host) {
+            $diagnostics[] = "❌ DNS resolution failed for {$host}";
+        } else {
+            $diagnostics[] = "✅ DNS resolved {$host} to {$ip}";
+        }
+        
+        // Test basic connectivity with different timeouts
+        $timeouts = array(5, 10, 15, 30);
+        foreach ($timeouts as $timeout) {
+            $start_time = microtime(true);
+            $connection = @fsockopen($host, $port, $errno, $errstr, $timeout);
+            $end_time = microtime(true);
+            $duration = round(($end_time - $start_time) * 1000, 2);
+            
+            if ($connection) {
+                fclose($connection);
+                $diagnostics[] = "✅ Connected to {$host}:{$port} in {$duration}ms (timeout: {$timeout}s)";
+                break;
+            } else {
+                $diagnostics[] = "❌ Failed to connect in {$timeout}s timeout - {$errstr} ({$errno})";
+            }
+        }
+        
+        return $diagnostics;
+    }
+
+    /**
+     * Test SendGrid API
+     */
+    private function test_sendgrid_connection($settings) {
+        if (empty($settings['api_key'])) {
+            return array(
+                'success' => false,
+                'message' => 'SendGrid API key is required'
+            );
+        }
+        
+        $response = wp_remote_get('https://api.sendgrid.com/v3/user/account', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $settings['api_key'],
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Network error: ' . $response->get_error_message()
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($status_code === 200) {
+            return array(
+                'success' => true,
+                'message' => 'SendGrid API connection successful! Account: ' . ($data['username'] ?? 'N/A')
+            );
+        }
+        
+        $error_message = isset($data['errors'][0]['message']) ? $data['errors'][0]['message'] : 'Authentication failed';
+        return array(
+            'success' => false,
+            'message' => 'SendGrid API error: ' . $error_message
+        );
+    }
+    
+    /**
+     * Test Mailgun API
+     */
+    private function test_mailgun_connection($settings) {
+        if (empty($settings['api_key']) || empty($settings['domain'])) {
+            return array(
+                'success' => false,
+                'message' => 'Mailgun API key and domain are required'
+            );
+        }
+        
+        $domain = $settings['domain'];
+        $response = wp_remote_get("https://api.mailgun.net/v3/{$domain}", array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode('api:' . $settings['api_key']),
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Network error: ' . $response->get_error_message()
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($status_code === 200) {
+            return array(
+                'success' => true,
+                'message' => 'Mailgun API connection successful! Domain: ' . $domain
+            );
+        }
+        
+        $error_message = isset($data['message']) ? $data['message'] : 'Authentication failed';
+        return array(
+            'success' => false,
+            'message' => 'Mailgun API error: ' . $error_message
+        );
+    }
+
+    /**
+     * Test ZeptoMail API
+     */
+    private function test_zeptomail_connection($settings) {
+        if (empty($settings['api_key'])) {
+            return array(
+                'success' => false,
+                'message' => 'ZeptoMail API key is required'
+            );
+        }
+        
+        // Test ZeptoMail API with actual email send (most reliable test)
+        $test_data = array(
+            'from' => array(
+                'address' => !empty($settings['from_address']) ? $settings['from_address'] : 'test@example.com'
+            ),
+            'to' => array(
+                array(
+                    'email_address' => array(
+                        'address' => !empty($settings['from_address']) ? $settings['from_address'] : 'test@example.com',
+                        'name' => 'ZeptoMail Test'
+                    )
+                )
+            ),
+            'subject' => 'ZeptoMail API Test - ' . date('Y-m-d H:i:s'),
+            'htmlbody' => '<div><b>ZeptoMail API Test Email</b><br>This is a test email to verify API connectivity.<br>Timestamp: ' . date('Y-m-d H:i:s') . '</div>'
+        );
+
+        $response = wp_remote_post('https://api.zeptomail.in/v1.1/email', array(
+            'headers' => array(
+                'accept' => 'application/json',
+                'authorization' => 'Zoho-enczapikey ' . $settings['api_key'],
+                'content-type' => 'application/json',
+                'cache-control' => 'no-cache'
+            ),
+            'body' => wp_json_encode($test_data),
+            'timeout' => 30
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Network error: ' . $response->get_error_message()
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        // ZeptoMail returns 201 for successful email send
+        if ($status_code === 200 || $status_code === 201) {
+            $message = 'ZeptoMail API connection successful!';
+            if (isset($data['data'][0]['message'])) {
+                $message .= ' Response: ' . $data['data'][0]['message'];
+            }
+            if (isset($data['request_id'])) {
+                $message .= ' (Request ID: ' . substr($data['request_id'], -8) . ')';
+            }
+            return array(
+                'success' => true,
+                'message' => $message
+            );
+        } elseif ($status_code === 401) {
+            return array(
+                'success' => false,
+                'message' => 'ZeptoMail API authentication failed. Please check your API key.'
+            );
+        } else {
+            $error_message = 'HTTP ' . $status_code;
+            if (isset($data['message'])) {
+                $error_message .= ': ' . $data['message'];
+            }
+            if (isset($data['details'])) {
+                $error_message .= ' - Details: ' . print_r($data['details'], true);
+            }
+            return array(
+                'success' => false,
+                'message' => 'ZeptoMail API error: ' . $error_message
+            );
+        }
+    }
+
+    /**
      * Send WhatsApp message
      */
-    public function send_whatsapp_message($phone, $message) {
+    public function send_whatsapp($phone, $message) {
         $api_keys = $this->school_config->get_api_keys();
         
-        if (empty($api_keys['whatsapp_token']) || empty($api_keys['whatsapp_provider'])) {
+        if (empty($api_keys['whatsapp_provider']) || empty($api_keys['whatsapp_token'])) {
             return false;
         }
 
         switch ($api_keys['whatsapp_provider']) {
+            case 'meta':
+                return $this->send_meta_whatsapp($phone, $message, $api_keys);
+                
             case 'twilio':
                 return $this->send_twilio_whatsapp($phone, $message, $api_keys);
-                
-            case '360dialog':
-                return $this->send_360dialog_whatsapp($phone, $message, $api_keys);
-                
-            case 'wati':
-                return $this->send_wati_whatsapp($phone, $message, $api_keys);
                 
             default:
                 return $this->send_generic_whatsapp($phone, $message, $api_keys);
@@ -153,48 +755,14 @@ class EduBot_API_Integrations {
     }
 
     /**
-     * Send WhatsApp via Twilio
+     * Send Meta WhatsApp Business message
      */
-    private function send_twilio_whatsapp($phone, $message, $api_keys) {
-        $account_sid = $api_keys['whatsapp_token'];
-        $auth_token = isset($api_keys['twilio_auth_token']) ? $api_keys['twilio_auth_token'] : '';
-        $from = isset($api_keys['whatsapp_phone_id']) ? $api_keys['whatsapp_phone_id'] : '';
-
-        if (empty($auth_token) || empty($from)) {
-            return false;
-        }
-
-        $url = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}/Messages.json";
+    private function send_meta_whatsapp($phone, $message, $api_keys) {
+        $phone_id = $api_keys['whatsapp_phone_id'];
+        $url = "https://graph.facebook.com/v17.0/{$phone_id}/messages";
         
         $data = array(
-            'From' => 'whatsapp:' . $from,
-            'To' => 'whatsapp:' . $phone,
-            'Body' => $message
-        );
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_USERPWD, $account_sid . ':' . $auth_token);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        return $http_code === 201;
-    }
-
-    /**
-     * Send WhatsApp via 360Dialog
-     */
-    private function send_360dialog_whatsapp($phone, $message, $api_keys) {
-        $api_key = $api_keys['whatsapp_token'];
-        $url = 'https://waba.360dialog.io/v1/messages';
-        
-        $data = array(
+            'messaging_product' => 'whatsapp',
             'to' => $phone,
             'type' => 'text',
             'text' => array(
@@ -202,24 +770,68 @@ class EduBot_API_Integrations {
             )
         );
 
-        $headers = array(
-            'D360-API-KEY: ' . $api_key,
-            'Content-Type: application/json'
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_keys['whatsapp_token'],
+                'Content-Type' => 'application/json'
+            ),
+            'body' => wp_json_encode($data),
+            'timeout' => 30
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('EduBot WhatsApp Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        return $status_code === 200;
+    }
+
+    /**
+     * Send Twilio WhatsApp message
+     */
+    private function send_twilio_whatsapp($phone, $message, $api_keys) {
+        $credentials = explode(':', $api_keys['whatsapp_token']);
+        if (count($credentials) !== 2) {
+            return false;
+        }
+        
+        list($account_sid, $auth_token) = $credentials;
+        
+        $url = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}/Messages.json";
+        
+        $data = array(
+            'From' => 'whatsapp:' . $api_keys['whatsapp_phone_id'],
+            'To' => 'whatsapp:' . $phone,
+            'Body' => $message
         );
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($account_sid . ':' . $auth_token),
+                'Content-Type' => 'application/x-www-form-urlencoded'
+            ),
+            'body' => $data,
+            'timeout' => 30
+        ));
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (is_wp_error($response)) {
+            error_log('EduBot Twilio WhatsApp Error: ' . $response->get_error_message());
+            return false;
+        }
 
-        return $http_code === 200;
+        $status_code = wp_remote_retrieve_response_code($response);
+        return $status_code === 201;
+    }
+
+    /**
+     * Generic WhatsApp sender (for custom APIs)
+     */
+    private function send_generic_whatsapp($phone, $message, $api_keys) {
+        // This method can be customized for other WhatsApp providers
+        // or custom API implementations
+        return false;
     }
 
     /**
@@ -227,59 +839,40 @@ class EduBot_API_Integrations {
      */
     public function send_email($to, $subject, $message, $headers = array()) {
         $api_keys = $this->school_config->get_api_keys();
-        $email_service = isset($api_keys['email_service']) ? $api_keys['email_service'] : 'smtp';
+        
+        if (empty($api_keys['email_service'])) {
+            return wp_mail($to, $subject, $message, $headers);
+        }
 
-        switch ($email_service) {
+        switch ($api_keys['email_service']) {
             case 'sendgrid':
                 return $this->send_sendgrid_email($to, $subject, $message, $api_keys);
                 
             case 'mailgun':
                 return $this->send_mailgun_email($to, $subject, $message, $api_keys);
                 
-            case 'ses':
-                return $this->send_ses_email($to, $subject, $message, $api_keys);
+            case 'zeptomail':
+                return $this->send_zeptomail_email($to, $subject, $message, $api_keys);
                 
             default:
-                return $this->send_smtp_email($to, $subject, $message, $headers, $api_keys);
+                return wp_mail($to, $subject, $message, $headers);
         }
-    }
-
-    /**
-     * Send email via SMTP
-     */
-    private function send_smtp_email($to, $subject, $message, $headers, $api_keys) {
-        // Configure SMTP settings if provided
-        if (!empty($api_keys['smtp_host'])) {
-            add_action('phpmailer_init', function($phpmailer) use ($api_keys) {
-                $phpmailer->isSMTP();
-                $phpmailer->Host = $api_keys['smtp_host'];
-                $phpmailer->SMTPAuth = true;
-                $phpmailer->Port = isset($api_keys['smtp_port']) ? $api_keys['smtp_port'] : 587;
-                $phpmailer->Username = $api_keys['smtp_username'];
-                $phpmailer->Password = $api_keys['smtp_password'];
-                $phpmailer->SMTPSecure = $phpmailer->Port == 465 ? 'ssl' : 'tls';
-            });
-        }
-
-        return wp_mail($to, $subject, $message, $headers);
     }
 
     /**
      * Send email via SendGrid
      */
     private function send_sendgrid_email($to, $subject, $message, $api_keys) {
-        if (empty($api_keys['email_api_key'])) {
-            return false;
-        }
-
         $config = $this->school_config->get_config();
         $from_email = $config['school_info']['contact_info']['email'];
         $from_name = $config['school_info']['name'];
-
+        
         $data = array(
             'personalizations' => array(
                 array(
-                    'to' => array(array('email' => $to))
+                    'to' => array(
+                        array('email' => $to)
+                    )
                 )
             ),
             'from' => array(
@@ -295,175 +888,112 @@ class EduBot_API_Integrations {
             )
         );
 
-        $headers = array(
-            'Authorization: Bearer ' . $api_keys['email_api_key'],
-            'Content-Type: application/json'
-        );
+        $response = wp_remote_post('https://api.sendgrid.com/v3/mail/send', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_keys['email_api_key'],
+                'Content-Type' => 'application/json'
+            ),
+            'body' => wp_json_encode($data),
+            'timeout' => 30
+        ));
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'https://api.sendgrid.com/v3/mail/send');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        if (is_wp_error($response)) {
+            error_log('EduBot SendGrid Error: ' . $response->get_error_message());
+            return false;
+        }
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        return $http_code === 202;
+        $status_code = wp_remote_retrieve_response_code($response);
+        return $status_code === 202;
     }
 
     /**
-     * Test OpenAI connection
+     * Send email via Mailgun
      */
-    public function test_openai_connection($api_key) {
+    private function send_mailgun_email($to, $subject, $message, $api_keys) {
+        $config = $this->school_config->get_config();
+        $from_email = $config['school_info']['contact_info']['email'];
+        $from_name = $config['school_info']['name'];
+        $domain = $api_keys['email_domain'];
+        
         $data = array(
-            'model' => 'gpt-3.5-turbo',
-            'messages' => array(
+            'from' => "{$from_name} <{$from_email}>",
+            'to' => $to,
+            'subject' => $subject,
+            'text' => $message
+        );
+
+        $response = wp_remote_post("https://api.mailgun.net/v3/{$domain}/messages", array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode('api:' . $api_keys['email_api_key'])
+            ),
+            'body' => $data,
+            'timeout' => 30
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('EduBot Mailgun Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        return $status_code === 200;
+    }
+
+    /**
+     * Send email via ZeptoMail
+     */
+    private function send_zeptomail_email($to, $subject, $message, $api_keys) {
+        $config = $this->school_config->get_config();
+        $from_email = $config['school_info']['contact_info']['email'];
+        $from_name = $config['school_info']['name'];
+        
+        $data = array(
+            'from' => array(
+                'address' => $from_email,
+                'name' => $from_name
+            ),
+            'to' => array(
                 array(
-                    'role' => 'user',
-                    'content' => 'Hello, this is a test message.'
+                    'email_address' => array(
+                        'address' => $to
+                    )
                 )
             ),
-            'max_tokens' => 10
+            'subject' => $subject,
+            'textbody' => $message
         );
 
-        $response = $this->make_openai_request($data, $api_key);
-        return $response !== false;
-    }
+        $response = wp_remote_post('https://api.zeptomail.in/v1.1/email', array(
+            'headers' => array(
+                'accept' => 'application/json',
+                'authorization' => 'Zoho-enczapikey ' . $api_keys['email_api_key'],
+                'content-type' => 'application/json',
+                'cache-control' => 'no-cache'
+            ),
+            'body' => wp_json_encode($data),
+            'timeout' => 30
+        ));
 
-    /**
-     * Test WhatsApp connection
-     */
-    public function test_whatsapp_connection($token, $provider) {
-        // This would depend on the specific provider's test endpoint
-        // For now, we'll just validate the token format
-        return !empty($token) && strlen($token) > 10;
-    }
-
-    /**
-     * Test email connection
-     */
-    public function test_email_connection($settings) {
-        if ($settings['provider'] === 'smtp') {
-            if (empty($settings['host']) || empty($settings['username'])) {
-                return false;
-            }
-            
-            // Test SMTP connection
-            $smtp = fsockopen($settings['host'], $settings['port'], $errno, $errstr, 10);
-            if ($smtp) {
-                fclose($smtp);
-                return true;
-            }
-            return false;
-        }
-        
-        // For API-based services, check if API key is provided
-        return !empty($settings['api_key']);
-    }
-
-    /**
-     * Generic WhatsApp sender (for custom APIs)
-     */
-    private function send_generic_whatsapp($phone, $message, $api_keys) {
-        // This method can be customized for other WhatsApp providers
-        // or custom API implementations
-        return false;
-    }
-
-    /**
-     * Send SMS
-     */
-    public function send_sms($phone, $message) {
-        $api_keys = $this->school_config->get_api_keys();
-        
-        if (empty($api_keys['sms_provider']) || empty($api_keys['sms_api_key'])) {
+        if (is_wp_error($response)) {
+            error_log('EduBot ZeptoMail Error: ' . $response->get_error_message());
             return false;
         }
 
-        switch ($api_keys['sms_provider']) {
-            case 'twilio':
-                return $this->send_twilio_sms($phone, $message, $api_keys);
-                
-            case 'textlocal':
-                return $this->send_textlocal_sms($phone, $message, $api_keys);
-                
-            case 'msg91':
-                return $this->send_msg91_sms($phone, $message, $api_keys);
-                
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * Send SMS via Twilio
-     */
-    private function send_twilio_sms($phone, $message, $api_keys) {
-        $account_sid = $api_keys['sms_api_key'];
-        $auth_token = isset($api_keys['twilio_auth_token']) ? $api_keys['twilio_auth_token'] : '';
-        $from = isset($api_keys['sms_sender_id']) ? $api_keys['sms_sender_id'] : '';
-
-        if (empty($auth_token) || empty($from)) {
+        $status_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        
+        // ZeptoMail returns 201 for successful email send, 200 for other operations
+        if ($status_code !== 200 && $status_code !== 201) {
+            error_log('EduBot ZeptoMail API Error: HTTP ' . $status_code . ' - ' . $response_body);
             return false;
         }
 
-        $url = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}/Messages.json";
-        
-        $data = array(
-            'From' => $from,
-            'To' => $phone,
-            'Body' => $message
-        );
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_USERPWD, $account_sid . ':' . $auth_token);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        return $http_code === 201;
-    }
-
-    /**
-     * Send SMS via TextLocal
-     */
-    private function send_textlocal_sms($phone, $message, $api_keys) {
-        $api_key = $api_keys['sms_api_key'];
-        $sender = isset($api_keys['sms_sender_id']) ? $api_keys['sms_sender_id'] : 'SCHOOL';
-
-        $data = array(
-            'apikey' => $api_key,
-            'numbers' => $phone,
-            'message' => $message,
-            'sender' => $sender
-        );
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'https://api.textlocal.in/send/');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($http_code === 200) {
-            $decoded = json_decode($response, true);
-            return isset($decoded['status']) && $decoded['status'] === 'success';
+        // Log successful send
+        $response_data = json_decode($response_body, true);
+        if (isset($response_data['request_id'])) {
+            error_log('EduBot ZeptoMail: Email sent successfully. Request ID: ' . $response_data['request_id']);
         }
 
-        return false;
+        return true;
     }
 }

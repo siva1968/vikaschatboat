@@ -16,7 +16,32 @@ class EduBot_Public {
     private $version;
 
     /**
-     * Initialize the class and set its properties.
+     *         // Initialize chatbot with session ID
+        console.log('EduBot: Initializing chatbot widget...');
+        console.log('EduBot: Session ID:', '<?php echo esc_js($session_id); ?>');
+        
+        if (typeof EduBotChatWidget !== 'undefined') {
+            console.log('EduBot: EduBotChatWidget found, initializing...');
+            EduBotChatWidget.init('<?php echo esc_js($session_id); ?>');
+        } else {
+            console.error('EduBot: EduBotChatWidget not found! Check if JavaScript is loaded.');
+        }
+
+        // Debug input field functionality
+        $(document).ready(function() {
+            var inputField = $('#edubot-chat-input');
+            console.log('EduBot Debug: Input field found:', inputField.length);
+            console.log('EduBot Debug: Input field disabled:', inputField.prop('disabled'));
+            console.log('EduBot Debug: Input field visible:', inputField.is(':visible'));
+            
+            // Test input field after 1 second
+            setTimeout(function() {
+                console.log('EduBot Debug: Testing input field after 1s...');
+                inputField.focus();
+                console.log('EduBot Debug: Focus attempted on input field');
+            }, 1000);
+        });
+        </script>the class and set its properties.
      */
     public function __construct($plugin_name, $version) {
         $this->plugin_name = $plugin_name;
@@ -43,11 +68,13 @@ class EduBot_Public {
      * Register the JavaScript for the public-facing side of the site.
      */
     public function enqueue_scripts() {
+        // Use version only for cache busting - update when JS changes
+        // Note: time() was removed to allow proper browser caching
         wp_enqueue_script(
             $this->plugin_name,
             EDUBOT_PRO_PLUGIN_URL . 'public/js/edubot-public.js',
             array('jquery'),
-            $this->version,
+            $this->version, // Proper versioning without cache busting
             false
         );
 
@@ -57,13 +84,20 @@ class EduBot_Public {
             'edubot_ajax',
             array(
                 'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('edubot_public_nonce'),
+                'nonce' => wp_create_nonce('edubot_nonce'),
+                'version' => $this->version . '.' . time(),
                 'strings' => array(
                     'connecting' => __('Connecting...', 'edubot-pro'),
                     'typing' => __('Bot is typing...', 'edubot-pro'),
                     'error' => __('Sorry, something went wrong. Please try again.', 'edubot-pro'),
                     'send' => __('Send', 'edubot-pro'),
-                    'type_message' => __('Type your message...', 'edubot-pro')
+                    'type_message' => __('Type your message...', 'edubot-pro'),
+                    'new_application' => __('New Application', 'edubot-pro'),
+                    'school_info' => __('School Information', 'edubot-pro'),
+                    'contact_info' => __('Contact Information', 'edubot-pro'),
+                    'admission' => __('Admission', 'edubot-pro'),
+                    'school_visit' => __('School Visit', 'edubot-pro'),
+                    'other_info' => __('Any Other Information', 'edubot-pro')
                 )
             )
         );
@@ -73,8 +107,21 @@ class EduBot_Public {
      * Add custom branding styles
      */
     private function add_custom_branding_styles() {
-        $branding_manager = new EduBot_Branding_Manager();
-        $custom_css = $branding_manager->generate_custom_css();
+        // Generate CSS directly to avoid branding manager loops
+        $school_config = EduBot_School_Config::getInstance();
+        $config = $school_config->get_config();
+        
+        // Force your database colors - Updated for your specific colors
+        $primary_color = '#74a211';   // Your green primary color from database
+        $secondary_color = '#113b02'; // Your dark green secondary color from database
+        
+        $custom_css = "
+        :root {
+            --edubot-primary-color: {$primary_color};
+            --edubot-secondary-color: {$secondary_color};
+            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%);
+        }
+        ";
         
         if ($custom_css) {
             wp_add_inline_style($this->plugin_name, $custom_css);
@@ -85,13 +132,183 @@ class EduBot_Public {
      * Render chatbot widget
      */
     public function render_chatbot() {
-        $school_config = new EduBot_School_Config();
+        $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
+        
+        // Force your database colors - Updated for your specific colors
+        $primary_color = '#74a211';   // Your green primary color from database
+        $secondary_color = '#113b02'; // Your dark green secondary color from database
+        
+        $colors = array(
+            'primary' => $primary_color,
+            'secondary' => $secondary_color
+        );
         
         // Generate unique session ID
         $session_id = $this->generate_session_id();
         
         ?>
+        <style>
+        /* Dynamic Branding for Auto-Widget - Override static CSS */
+        #edubot-chatbot-widget.edubot-chatbot-widget {
+            --edubot-primary-color: <?php echo esc_attr($colors['primary']); ?> !important;
+            --edubot-secondary-color: <?php echo esc_attr($colors['secondary']); ?> !important;
+            --edubot-gradient: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
+        }
+        #edubot-chat-toggle.edubot-chat-toggle {
+            background: var(--edubot-gradient) !important;
+        }
+        .edubot-chat-header {
+            background: var(--edubot-gradient) !important;
+        }
+        .edubot-header-info {
+            display: flex;
+            align-items: center;
+        }
+        .edubot-header-logo img {
+            max-height: 30px;
+            max-width: 40px;
+            object-fit: contain;
+        }
+        .edubot-send-btn {
+            background: var(--edubot-gradient) !important;
+        }
+        .edubot-quick-actions {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        /* Maximum specificity selectors for your database colors */
+        .edubot-chat-container .edubot-quick-actions .edubot-quick-action,
+        #edubot-chat-container .edubot-quick-actions .edubot-quick-action,
+        div.edubot-chat-container .edubot-quick-actions button.edubot-quick-action {
+            background: #74a211 !important;
+            background-color: #74a211 !important;
+            border: 1px solid #74a211 !important;
+            border-color: #74a211 !important;
+            border-radius: 6px !important;
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            text-align: left !important;
+            transition: all 0.3s ease !important;
+            color: white !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
+        .edubot-chat-container .edubot-quick-actions .edubot-quick-action:hover,
+        #edubot-chat-container .edubot-quick-actions .edubot-quick-action:hover,
+        div.edubot-chat-container .edubot-quick-actions button.edubot-quick-action:hover {
+            background: linear-gradient(135deg, #74a211 0%, #113b02 100%) !important;
+            background-color: #74a211 !important;
+            border-color: #74a211 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 8px rgba(116, 162, 17, 0.25) !important;
+        }
+        .edubot-quick-action:active {
+            transform: translateY(0);
+        }
+        /* Input field improvements */
+        .edubot-chat-input {
+            border: 1px solid #ddd !important;
+            border-radius: 4px !important;
+            padding: 8px 12px !important;
+            font-size: 14px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            outline: none !important;
+            pointer-events: auto !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+        .edubot-chat-input:focus {
+            border-color: var(--edubot-primary-color) !important;
+            box-shadow: 0 0 5px rgba(79, 172, 254, 0.3) !important;
+        }
+        .edubot-chat-input:disabled {
+            background-color: #f5f5f5 !important;
+            cursor: not-allowed !important;
+        }
+        /* Ensure container is properly positioned as floating widget */
+        .edubot-chat-container {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 380px !important;
+            height: auto !important;
+            max-height: 500px !important;
+            z-index: 999999 !important;
+            background: white !important;
+            border-radius: 8px !important;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        /* Ensure widget doesn't affect page layout */
+        .edubot-chatbot-widget {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 999999 !important;
+            pointer-events: none !important;
+        }
+        .edubot-chatbot-widget * {
+            pointer-events: auto !important;
+        }
+        /* Mobile responsive positioning */
+        @media (max-width: 768px) {
+            .edubot-chat-container {
+                width: calc(100vw - 40px) !important;
+                max-width: 350px !important;
+                bottom: 10px !important;
+                right: 10px !important;
+                left: 10px !important;
+                margin: 0 auto !important;
+            }
+            .edubot-chatbot-widget {
+                bottom: 10px !important;
+                right: 10px !important;
+                left: 10px !important;
+            }
+        }
+        /* Prevent body scroll issues */
+        body.edubot-chat-open {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        /* Ensure no layout interference */
+        .edubot-chatbot-widget {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: visible !important;
+        }
+        /* Hide by default, show when needed */
+        .edubot-chat-container {
+            display: none !important;
+        }
+        .edubot-chat-container.show,
+        .edubot-chatbot-widget.chat-open .edubot-chat-container {
+            display: flex !important;
+        }
+        /* Ensure toggle button is always visible and properly positioned */
+        .edubot-chat-toggle {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 999999 !important;
+            display: flex !important;
+        }
+        @media (max-width: 768px) {
+            .edubot-chat-toggle {
+                bottom: 10px !important;
+                right: 10px !important;
+            }
+        }
+        </style>
         <div id="edubot-chatbot-widget" class="edubot-chatbot-widget">
             <div id="edubot-chat-toggle" class="edubot-chat-toggle">
                 <div class="edubot-chat-icon">
@@ -102,11 +319,21 @@ class EduBot_Public {
                 <div class="edubot-chat-label"><?php echo esc_html__('Chat with us', 'edubot-pro'); ?></div>
             </div>
             
-            <div id="edubot-chat-container" class="edubot-chat-container" style="display: none;">
+            <div id="edubot-chat-container" class="edubot-chat-container">
                 <div class="edubot-chat-header">
                     <div class="edubot-header-info">
-                        <div class="edubot-header-title"><?php echo esc_html($config['school_info']['name']); ?></div>
-                        <div class="edubot-header-subtitle"><?php echo esc_html__('Admission Assistant', 'edubot-pro'); ?></div>
+                        <?php 
+                        // Get logo directly from config to avoid branding manager loops
+                        $logo_url = isset($config['school_info']['logo']) ? $config['school_info']['logo'] : get_option('edubot_school_logo', '');
+                        if ($logo_url): ?>
+                            <div class="edubot-header-logo" style="margin-right: 10px;">
+                                <img src="<?php echo esc_url($logo_url); ?>" alt="<?php echo esc_attr($config['school_info']['name']); ?>" style="max-height: 30px; max-width: 40px; object-fit: contain;">
+                            </div>
+                        <?php endif; ?>
+                        <div>
+                            <div class="edubot-header-title"><?php echo esc_html($config['school_info']['name']); ?></div>
+                            <div class="edubot-header-subtitle"><?php echo esc_html__('Admission Assistant', 'edubot-pro'); ?></div>
+                        </div>
                     </div>
                     <div class="edubot-header-actions">
                         <button id="edubot-minimize" class="edubot-minimize-btn">
@@ -122,6 +349,13 @@ class EduBot_Public {
                         <div class="edubot-bot-message">
                             <div class="edubot-message-content">
                                 <?php echo esc_html($config['chatbot_settings']['welcome_message']); ?>
+                                <div class="edubot-quick-actions">
+                                    <button class="edubot-quick-action" data-action="admission">1) Admission Enquiry</button>
+                                    <button class="edubot-quick-action" data-action="curriculum">2) Curriculum & Classes</button>
+                                    <button class="edubot-quick-action" data-action="facilities">3) Facilities</button>
+                                    <button class="edubot-quick-action" data-action="contact_visit">4) Contact / Visit School</button>
+                                    <button class="edubot-quick-action" data-action="online_enquiry">5) Online Enquiry Form</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -139,6 +373,7 @@ class EduBot_Public {
                             class="edubot-chat-input" 
                             placeholder="<?php echo esc_attr__('Type your message...', 'edubot-pro'); ?>"
                             autocomplete="off"
+                            autofocus
                         >
                         <button id="edubot-send-btn" class="edubot-send-btn">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -152,9 +387,104 @@ class EduBot_Public {
         
         <script>
         // Initialize chatbot with session ID
+        console.log('EduBot: Initializing chatbot widget...');
+        console.log('EduBot: Session ID:', '<?php echo esc_js($session_id); ?>');
+        
         if (typeof EduBotChatWidget !== 'undefined') {
+            console.log('EduBot: EduBotChatWidget found, initializing...');
             EduBotChatWidget.init('<?php echo esc_js($session_id); ?>');
+        } else {
+            console.error('EduBot: EduBotChatWidget not found! Check if JavaScript is loaded.');
         }
+        
+        // Check if elements exist
+        jQuery(document).ready(function($) {
+            console.log('EduBot: DOM ready, checking elements...');
+            console.log('EduBot: Widget:', $('#edubot-chatbot-widget').length);
+            console.log('EduBot: Toggle:', $('#edubot-chat-toggle').length);
+            console.log('EduBot: Container:', $('#edubot-chat-container').length);
+        });
+        
+        // ULTIMATE COLOR FIX - JavaScript-based approach
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('EduBot: Applying database colors via JavaScript...');
+            
+            // Wait for elements to load and force color application
+            setTimeout(function() {
+                const buttons = document.querySelectorAll('.edubot-quick-action, button.edubot-quick-action, [class*="edubot-quick-action"]');
+                
+                console.log('EduBot: Found ' + buttons.length + ' quick action buttons');
+                
+                buttons.forEach(function(button, index) {
+                    // Remove any existing styles that might conflict
+                    button.style.removeProperty('background');
+                    button.style.removeProperty('background-color');
+                    button.style.removeProperty('color');
+                    button.style.removeProperty('border');
+                    
+                    // Apply database colors with maximum priority
+                    button.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
+                    button.style.setProperty('background-color', '<?php echo esc_js($primary_color); ?>', 'important');
+                    button.style.setProperty('color', 'white', 'important');
+                    button.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
+                    button.style.setProperty('padding', '12px 16px', 'important');
+                    button.style.setProperty('border-radius', '6px', 'important');
+                    button.style.setProperty('font-weight', '500', 'important');
+                    button.style.setProperty('cursor', 'pointer', 'important');
+                    button.style.setProperty('display', 'block', 'important');
+                    button.style.setProperty('width', '100%', 'important');
+                    button.style.setProperty('box-sizing', 'border-box', 'important');
+                    button.style.setProperty('margin-bottom', '8px', 'important');
+                    button.style.setProperty('text-align', 'left', 'important');
+                    button.style.setProperty('transition', 'all 0.3s ease', 'important');
+                    
+                    // Add hover effect via JavaScript
+                    button.addEventListener('mouseenter', function() {
+                        this.style.setProperty('background', 'linear-gradient(135deg, <?php echo esc_js($primary_color); ?> 0%, <?php echo esc_js($secondary_color); ?> 100%)', 'important');
+                        this.style.setProperty('transform', 'translateY(-2px)', 'important');
+                        this.style.setProperty('box-shadow', '0 4px 8px rgba(116, 162, 17, 0.25)', 'important');
+                    });
+                    
+                    button.addEventListener('mouseleave', function() {
+                        this.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
+                        this.style.setProperty('transform', 'translateY(0)', 'important');
+                        this.style.setProperty('box-shadow', '0 2px 4px rgba(0, 0, 0, 0.1)', 'important');
+                    });
+                    
+                    console.log('EduBot: Applied colors to button ' + (index + 1) + ': ' + button.textContent.trim().substring(0, 20) + '...');
+                });
+                
+                console.log('EduBot: JavaScript color application completed');
+                
+                // Also apply to any future buttons added dynamically
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === 1 && (node.classList.contains('edubot-quick-action') || (node.querySelector && node.querySelector('.edubot-quick-action')))) {
+                                console.log('EduBot: Detected new button, applying colors...');
+                                const newButtons = node.classList.contains('edubot-quick-action') ? [node] : node.querySelectorAll('.edubot-quick-action');
+                                newButtons.forEach(function(btn) {
+                                    btn.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
+                                    btn.style.setProperty('color', 'white', 'important');
+                                    btn.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
+                                });
+                            }
+                        });
+                    });
+                });
+                
+                observer.observe(document.body, { childList: true, subtree: true });
+                
+            }, 100); // Small delay to ensure DOM is fully ready
+            
+            // Also try immediate application
+            const immediateButtons = document.querySelectorAll('.edubot-quick-action');
+            immediateButtons.forEach(function(btn) {
+                btn.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
+                btn.style.setProperty('color', 'white', 'important');
+                btn.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
+            });
+        });
         </script>
         <?php
     }
@@ -196,10 +526,11 @@ class EduBot_Public {
     }
 
     /**
-     * Register shortcodes
+     * Register shortcodes - DISABLED to use EduBot_Shortcode class instead
      */
     public function register_shortcodes() {
-        add_shortcode('edubot_chatbot', array($this, 'chatbot_shortcode'));
+        // Disabled - using EduBot_Shortcode class with dynamic branding instead
+        // add_shortcode('edubot_chatbot', array($this, 'chatbot_shortcode'));
         add_shortcode('edubot_application_form', array($this, 'application_form_shortcode'));
     }
 
@@ -228,7 +559,7 @@ class EduBot_Public {
      * Render inline chatbot
      */
     private function render_inline_chatbot($atts) {
-        $school_config = new EduBot_School_Config();
+        $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
         $session_id = $this->generate_session_id();
         
@@ -270,7 +601,7 @@ class EduBot_Public {
             'style' => 'default'
         ), $atts);
 
-        $school_config = new EduBot_School_Config();
+        $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
 
         ob_start();

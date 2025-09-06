@@ -108,8 +108,77 @@ class EduBot_Activator {
             KEY last_activity (last_activity)
         ) $charset_collate;";
 
+        // Security log table
+        $table_security = $wpdb->prefix . 'edubot_security_log';
+        $sql_security = "CREATE TABLE $table_security (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            event_type varchar(100) NOT NULL,
+            ip_address varchar(45) NOT NULL,
+            user_agent text,
+            details longtext,
+            severity varchar(20) DEFAULT 'medium',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY site_id (site_id),
+            KEY event_type (event_type),
+            KEY ip_address (ip_address),
+            KEY created_at (created_at),
+            KEY severity (severity)
+        ) $charset_collate;";
+
+        // Visitor analytics table (enhanced tracking)
+        $table_visitor_analytics = $wpdb->prefix . 'edubot_visitor_analytics';
+        $sql_visitor_analytics = "CREATE TABLE $table_visitor_analytics (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            visitor_id varchar(255) NOT NULL,
+            session_id varchar(255) NOT NULL,
+            event_type varchar(50) NOT NULL,
+            event_data longtext,
+            ip_address varchar(45),
+            user_agent text,
+            timestamp datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY site_id (site_id),
+            KEY visitor_id (visitor_id),
+            KEY session_id (session_id),
+            KEY event_type (event_type),
+            KEY timestamp (timestamp),
+            KEY ip_address (ip_address)
+        ) $charset_collate;";
+
+        // Visitors table (visitor profiles and return tracking)
+        $table_visitors = $wpdb->prefix . 'edubot_visitors';
+        $sql_visitors = "CREATE TABLE $table_visitors (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            visitor_id varchar(255) NOT NULL,
+            ip_address varchar(45) NOT NULL,
+            user_agent text,
+            browser varchar(50),
+            device_type varchar(20),
+            operating_system varchar(50),
+            first_visit datetime DEFAULT CURRENT_TIMESTAMP,
+            last_activity datetime DEFAULT CURRENT_TIMESTAMP,
+            visit_count int(11) DEFAULT 1,
+            is_returning tinyint(1) DEFAULT 0,
+            marketing_source varchar(100),
+            utm_campaign varchar(100),
+            utm_medium varchar(50),
+            utm_source varchar(50),
+            referrer_domain varchar(255),
+            PRIMARY KEY (id),
+            UNIQUE KEY visitor_id (visitor_id),
+            KEY site_id (site_id),
+            KEY ip_address (ip_address),
+            KEY is_returning (is_returning),
+            KEY last_activity (last_activity),
+            KEY marketing_source (marketing_source)
+        ) $charset_collate;";
+
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta(array($sql_schools, $sql_applications, $sql_analytics, $sql_sessions));
+        dbDelta(array($sql_schools, $sql_applications, $sql_analytics, $sql_sessions, $sql_security, $sql_visitor_analytics, $sql_visitors));
     }
 
     /**
@@ -191,5 +260,12 @@ class EduBot_Activator {
         if (!wp_next_scheduled('edubot_follow_up_check')) {
             wp_schedule_event(time(), 'hourly', 'edubot_follow_up_check');
         }
+        
+        if (!wp_next_scheduled('edubot_analytics_cleanup')) {
+            wp_schedule_event(time(), 'daily', 'edubot_analytics_cleanup');
+        }
+        
+        // Hook the cleanup functions
+        add_action('edubot_analytics_cleanup', array('EduBot_Visitor_Analytics', 'cleanup_old_analytics_static'));
     }
 }
