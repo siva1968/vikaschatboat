@@ -1,0 +1,495 @@
+<?php
+
+/**
+ * Handle white-label branding and customization
+ */
+class EduBot_Branding_Manager {
+
+    /**
+     * School configuration
+     */
+    private $school_config;
+
+    /**
+     * Constructor
+     */
+    public function __construct() {
+        $this->school_config = new EduBot_School_Config();
+    }
+
+    /**
+     * Generate custom CSS for branding
+     */
+    public function generate_custom_css() {
+        $config = $this->school_config->get_config();
+        $school_info = $config['school_info'];
+        
+        $primary_color = isset($school_info['colors']['primary']) ? $school_info['colors']['primary'] : '#4facfe';
+        $secondary_color = isset($school_info['colors']['secondary']) ? $school_info['colors']['secondary'] : '#00f2fe';
+        $logo_url = isset($school_info['logo']) ? $school_info['logo'] : '';
+
+        $css = "
+        /* EduBot Pro Custom Branding */
+        .edubot-chatbot-widget {
+            --edubot-primary-color: {$primary_color};
+            --edubot-secondary-color: {$secondary_color};
+            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%);
+        }
+        
+        /* Chat widget styling */
+        .edubot-chat-toggle {
+            background: var(--edubot-gradient);
+            box-shadow: 0 4px 20px rgba(79, 172, 254, 0.3);
+        }
+        
+        .edubot-chat-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(79, 172, 254, 0.4);
+        }
+        
+        .edubot-chat-header {
+            background: var(--edubot-gradient);
+        }
+        
+        /* Message styling */
+        .edubot-user-message {
+            background: var(--edubot-gradient);
+        }
+        
+        .edubot-bot-message {
+            background: #f8f9fa;
+            border-left: 4px solid {$primary_color};
+        }
+        
+        /* Button styling */
+        .edubot-send-btn {
+            background: var(--edubot-gradient);
+        }
+        
+        .edubot-send-btn:hover {
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+        
+        .edubot-option-btn {
+            border: 2px solid {$primary_color};
+            color: {$primary_color};
+            background: transparent;
+        }
+        
+        .edubot-option-btn:hover {
+            background: var(--edubot-gradient);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+        }
+        
+        /* Input styling */
+        .edubot-chat-input:focus {
+            border-color: {$primary_color};
+            box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
+        }
+        
+        /* Form styling */
+        .edubot-application-form .edubot-submit-btn {
+            background: var(--edubot-gradient);
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .edubot-application-form .edubot-submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+        }
+        
+        .edubot-fieldset {
+            border: 2px solid {$primary_color};
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .edubot-fieldset legend {
+            color: {$primary_color};
+            font-weight: 600;
+            padding: 0 10px;
+        }
+        
+        /* Focus states */
+        .edubot-form input:focus,
+        .edubot-form select:focus,
+        .edubot-form textarea:focus {
+            border-color: {$primary_color};
+            box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
+            outline: none;
+        }
+        
+        /* Typing indicator */
+        .edubot-typing-indicator {
+            color: {$primary_color};
+        }
+        
+        .edubot-typing-dots span {
+            background-color: {$primary_color};
+        }";
+
+        // Add logo styling if logo is provided
+        if (!empty($logo_url)) {
+            $css .= "
+            .edubot-chat-header::before {
+                content: '';
+                background-image: url('{$logo_url}');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                width: 32px;
+                height: 32px;
+                display: inline-block;
+                margin-right: 10px;
+                vertical-align: middle;
+            }
+            
+            .edubot-header-info {
+                display: inline-block;
+                vertical-align: middle;
+            }";
+        }
+
+        // Add responsive design
+        $css .= "
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .edubot-chat-container {
+                width: 100vw !important;
+                height: 100vh !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                border-radius: 0 !important;
+                z-index: 999999;
+            }
+            
+            .edubot-chat-toggle {
+                bottom: 20px;
+                right: 20px;
+            }
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            .edubot-chat-toggle,
+            .edubot-send-btn,
+            .edubot-option-btn,
+            .edubot-submit-btn {
+                transition: none;
+            }
+            
+            .edubot-chat-toggle:hover,
+            .edubot-send-btn:hover,
+            .edubot-option-btn:hover,
+            .edubot-submit-btn:hover {
+                transform: none;
+            }
+        }";
+
+        return $css;
+    }
+
+    /**
+     * Get custom logo HTML
+     */
+    public function get_logo_html($size = 'medium') {
+        $config = $this->school_config->get_config();
+        $logo_url = isset($config['school_info']['logo']) ? $config['school_info']['logo'] : '';
+        $school_name = isset($config['school_info']['name']) ? $config['school_info']['name'] : '';
+
+        if (empty($logo_url)) {
+            return '';
+        }
+
+        $sizes = array(
+            'small' => 'width: 24px; height: 24px;',
+            'medium' => 'width: 48px; height: 48px;',
+            'large' => 'width: 96px; height: 96px;'
+        );
+
+        $style = isset($sizes[$size]) ? $sizes[$size] : $sizes['medium'];
+
+        return sprintf(
+            '<img src="%s" alt="%s" style="%s object-fit: contain;" class="edubot-school-logo">',
+            esc_url($logo_url),
+            esc_attr($school_name . ' Logo'),
+            $style
+        );
+    }
+
+    /**
+     * Get branded welcome message
+     */
+    public function get_branded_welcome_message() {
+        $config = $this->school_config->get_config();
+        $welcome_message = $config['chatbot_settings']['welcome_message'];
+        $school_name = $config['school_info']['name'];
+
+        // Replace placeholders
+        $welcome_message = str_replace('{school_name}', $school_name, $welcome_message);
+
+        return $welcome_message;
+    }
+
+    /**
+     * Get color scheme
+     */
+    public function get_color_scheme() {
+        $config = $this->school_config->get_config();
+        
+        return array(
+            'primary' => isset($config['school_info']['colors']['primary']) ? $config['school_info']['colors']['primary'] : '#4facfe',
+            'secondary' => isset($config['school_info']['colors']['secondary']) ? $config['school_info']['colors']['secondary'] : '#00f2fe',
+            'gradient' => $this->get_gradient_css()
+        );
+    }
+
+    /**
+     * Get gradient CSS
+     */
+    public function get_gradient_css() {
+        $colors = $this->get_color_scheme();
+        return sprintf('linear-gradient(135deg, %s 0%%, %s 100%%)', $colors['primary'], $colors['secondary']);
+    }
+
+    /**
+     * Generate favicon
+     */
+    public function generate_favicon() {
+        $config = $this->school_config->get_config();
+        $logo_url = isset($config['school_info']['logo']) ? $config['school_info']['logo'] : '';
+
+        if (!empty($logo_url)) {
+            echo '<link rel="icon" type="image/x-icon" href="' . esc_url($logo_url) . '">' . "\n";
+        }
+    }
+
+    /**
+     * Customize admin bar
+     */
+    public function customize_admin_bar() {
+        if (!is_admin_bar_showing()) {
+            return;
+        }
+
+        global $wp_admin_bar;
+        $config = $this->school_config->get_config();
+        $school_name = $config['school_info']['name'];
+
+        $wp_admin_bar->add_node(array(
+            'id' => 'edubot-admin',
+            'title' => sprintf('<span class="ab-icon dashicons-format-chat"></span> %s EduBot', $school_name),
+            'href' => admin_url('admin.php?page=edubot-pro'),
+            'meta' => array(
+                'title' => __('EduBot Pro Dashboard', 'edubot-pro')
+            )
+        ));
+
+        $wp_admin_bar->add_node(array(
+            'parent' => 'edubot-admin',
+            'id' => 'edubot-dashboard',
+            'title' => __('Dashboard', 'edubot-pro'),
+            'href' => admin_url('admin.php?page=edubot-pro')
+        ));
+
+        $wp_admin_bar->add_node(array(
+            'parent' => 'edubot-admin',
+            'id' => 'edubot-applications',
+            'title' => __('Applications', 'edubot-pro'),
+            'href' => admin_url('admin.php?page=edubot-applications')
+        ));
+
+        $wp_admin_bar->add_node(array(
+            'parent' => 'edubot-admin',
+            'id' => 'edubot-settings',
+            'title' => __('Settings', 'edubot-pro'),
+            'href' => admin_url('admin.php?page=edubot-school-settings')
+        ));
+    }
+
+    /**
+     * Add custom body classes
+     */
+    public function add_body_classes($classes) {
+        $config = $this->school_config->get_config();
+        
+        $classes[] = 'edubot-enabled';
+        
+        if (!empty($config['school_info']['logo'])) {
+            $classes[] = 'edubot-has-logo';
+        }
+        
+        // Add color theme class
+        $primary_color = $config['school_info']['colors']['primary'];
+        $color_brightness = $this->get_color_brightness($primary_color);
+        $classes[] = $color_brightness > 128 ? 'edubot-light-theme' : 'edubot-dark-theme';
+
+        return $classes;
+    }
+
+    /**
+     * Get color brightness (0-255)
+     */
+    private function get_color_brightness($hex_color) {
+        $hex_color = ltrim($hex_color, '#');
+        
+        if (strlen($hex_color) === 3) {
+            $hex_color = $hex_color[0] . $hex_color[0] . $hex_color[1] . $hex_color[1] . $hex_color[2] . $hex_color[2];
+        }
+        
+        $r = hexdec(substr($hex_color, 0, 2));
+        $g = hexdec(substr($hex_color, 2, 2));
+        $b = hexdec(substr($hex_color, 4, 2));
+        
+        return ($r * 299 + $g * 587 + $b * 114) / 1000;
+    }
+
+    /**
+     * Generate branded email template
+     */
+    public function get_email_template($content, $title = '') {
+        $config = $this->school_config->get_config();
+        $school_name = $config['school_info']['name'];
+        $colors = $this->get_color_scheme();
+        $logo_html = $this->get_logo_html('large');
+
+        $template = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>' . esc_html($title ?: $school_name) . '</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+                .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .header { background: ' . $this->get_gradient_css() . '; color: white; padding: 30px 20px; text-align: center; }
+                .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+                .content { padding: 30px 20px; }
+                .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; }
+                .button { display: inline-block; background: ' . $this->get_gradient_css() . '; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: 600; margin: 10px 0; }
+                .logo { margin-bottom: 15px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">' . $logo_html . '</div>
+                    <h1>' . esc_html($school_name) . '</h1>
+                    ' . (!empty($title) ? '<p style="margin: 10px 0 0 0; opacity: 0.9;">' . esc_html($title) . '</p>' : '') . '
+                </div>
+                <div class="content">
+                    ' . $content . '
+                </div>
+                <div class="footer">
+                    <p>© ' . date('Y') . ' ' . esc_html($school_name) . '. All rights reserved.</p>
+                    ' . (!empty($config['school_info']['contact_info']['website']) ? 
+                        '<p><a href="' . esc_url($config['school_info']['contact_info']['website']) . '" style="color: ' . $colors['primary'] . ';">' . esc_html($config['school_info']['contact_info']['website']) . '</a></p>' : '') . '
+                </div>
+            </div>
+        </body>
+        </html>';
+
+        return $template;
+    }
+
+    /**
+     * Get branded 404 message
+     */
+    public function get_branded_404_message() {
+        $config = $this->school_config->get_config();
+        $school_name = $config['school_info']['name'];
+
+        return sprintf(
+            __("Sorry, I didn't understand that. I'm %s's admission assistant and I'm here to help you with:", 'edubot-pro'),
+            $school_name
+        ) . "\n\n" .
+        "🎓 " . __("New admission applications", 'edubot-pro') . "\n" .
+        "📞 " . __("Contact information", 'edubot-pro') . "\n" .
+        "🏫 " . __("School information", 'edubot-pro') . "\n" .
+        "❓ " . __("General admission queries", 'edubot-pro');
+    }
+
+    /**
+     * Apply branding to WordPress login page
+     */
+    public function customize_login_page() {
+        $config = $this->school_config->get_config();
+        $logo_url = isset($config['school_info']['logo']) ? $config['school_info']['logo'] : '';
+        $colors = $this->get_color_scheme();
+
+        if (!empty($logo_url)) {
+            echo '<style>
+                .login h1 a {
+                    background-image: url(' . esc_url($logo_url) . ') !important;
+                    background-size: contain !important;
+                    width: 200px !important;
+                    height: 100px !important;
+                }
+                .wp-core-ui .button-primary {
+                    background: ' . $this->get_gradient_css() . ' !important;
+                    border-color: ' . $colors['primary'] . ' !important;
+                    text-shadow: none !important;
+                    box-shadow: none !important;
+                }
+                .wp-core-ui .button-primary:hover {
+                    opacity: 0.9 !important;
+                }
+            </style>';
+        }
+    }
+
+    /**
+     * Get custom CSS file path
+     */
+    public function get_custom_css_file() {
+        $upload_dir = wp_upload_dir();
+        $edubot_dir = $upload_dir['basedir'] . '/edubot-pro/';
+        
+        if (!file_exists($edubot_dir)) {
+            wp_mkdir_p($edubot_dir);
+        }
+        
+        return $edubot_dir . 'custom-branding.css';
+    }
+
+    /**
+     * Save custom CSS to file
+     */
+    public function save_custom_css_file() {
+        $css_content = $this->generate_custom_css();
+        $css_file = $this->get_custom_css_file();
+        
+        return file_put_contents($css_file, $css_content) !== false;
+    }
+
+    /**
+     * Enqueue custom CSS file
+     */
+    public function enqueue_custom_css_file() {
+        $css_file = $this->get_custom_css_file();
+        $upload_dir = wp_upload_dir();
+        $css_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $css_file);
+        
+        if (file_exists($css_file)) {
+            wp_enqueue_style(
+                'edubot-custom-branding',
+                $css_url,
+                array(),
+                filemtime($css_file)
+            );
+        }
+    }
+}

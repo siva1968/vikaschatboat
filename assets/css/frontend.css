@@ -1,0 +1,166 @@
+/* EduBot Pro Frontend Styles */
+
+/* Chat Button Animation */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.edubot-chat-button {
+    animation: pulse 2s infinite;
+}
+
+/* Smooth transitions */
+.edubot-chat-window {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transform-origin: bottom right;
+}
+
+.edubot-chatbot.position-bottom-left .edubot-chat-window {
+    transform-origin: bottom left;
+}
+
+/* Message animations */
+.message {
+    opacity: 0;
+    animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Application form enhancements */
+.edubot-application-form {
+    position: relative;
+}
+
+.form-group {
+    position: relative;
+}
+
+.form-group input:valid,
+.form-group select:valid,
+.form-group textarea:valid {
+    border-color: #28a745;
+}
+
+.form-group input:invalid:not(:placeholder-shown),
+.form-group select:invalid:not(:placeholder-shown),
+.form-group textarea:invalid:not(:placeholder-shown) {
+    border-color: #dc3545;
+}
+
+/* Loading states */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Success/Error messages */
+.form-message {
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.form-message.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.form-message.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .edubot-chatbot {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+    }
+    
+    .edubot-chat-window {
+        width: 100%;
+        height: 70vh;
+        max-height: 500px;
+        right: 0;
+        left: 0;
+    }
+    
+    .edubot-application-form {
+        margin: 10px;
+        padding: 20px;
+    }
+}
+
+/* Accessibility improvements */
+.edubot-chat-button:focus,
+.quick-action:focus,
+#send-message:focus,
+.submit-button:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .edubot-application-form {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        background: #4a5568;
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .form-group label {
+        color: #cbd5e0;
+    }
+}
+
+/* Print styles */
+@media print {
+    .edubot-chatbot {
+        display: none !important;
+    }
+}
