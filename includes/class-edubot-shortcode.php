@@ -1414,8 +1414,19 @@ class EduBot_Shortcode {
             $session_data = $this->get_conversation_session($session_id);
             $collected_data = $session_data ? $session_data['data'] : array();
             
+            error_log("EduBot Debug: Simple email detected: {$message}");
+            error_log("EduBot Debug: Session data for email: " . print_r($collected_data, true));
+            
+            // Initialize admission session if not already initialized
+            if (!$session_data || empty($session_data['flow_type'])) {
+                error_log("EduBot Debug: Initializing admission session for email input");
+                $this->init_conversation_session($session_id, 'admission');
+                $session_data = $this->get_conversation_session($session_id);
+                $collected_data = $session_data ? $session_data['data'] : array();
+            }
+            
             if (!empty($collected_data['student_name']) && empty($collected_data['email'])) {
-                error_log("EduBot: Detected email input for existing session: {$message}");
+                error_log("EduBot: Processing email input for existing session with name: {$collected_data['student_name']}");
                 
                 $email = trim($message);
                 $this->update_conversation_data($session_id, 'email', $email);
@@ -1425,6 +1436,46 @@ class EduBot_Shortcode {
                        "📱 **Phone Number**\n\n" .
                        "Please enter your 10-digit mobile number.\n\n" .
                        "**Example:** 9876543210";
+            }
+        }
+        
+        // Handle simple phone number inputs when we have name and email in session
+        if (preg_match('/^\s*(\+?91|0)?[\s-]?[6-9]\d{9}\s*$/', trim($message)) || 
+            preg_match('/^\s*\d{10}\s*$/', trim($message))) {
+            $session_data = $this->get_conversation_session($session_id);
+            $collected_data = $session_data ? $session_data['data'] : array();
+            
+            error_log("EduBot Debug: Simple phone detected: {$message}");
+            error_log("EduBot Debug: Session data for phone: " . print_r($collected_data, true));
+            
+            if (!empty($collected_data['student_name']) && 
+                !empty($collected_data['email']) && 
+                empty($collected_data['phone'])) {
+                
+                error_log("EduBot: Processing phone input for existing session");
+                
+                $phone = preg_replace('/[^\d+]/', '', trim($message));
+                if (!preg_match('/^\+/', $phone) && strlen($phone) === 10) {
+                    $phone = '+91' . $phone;
+                }
+                
+                $this->update_conversation_data($session_id, 'phone', $phone);
+                
+                // Move to academic information step
+                $this->update_conversation_data($session_id, 'step', 'academic');
+                
+                return "✅ **Personal Information Complete!**\n\n" .
+                       "Perfect! I have your contact details:\n" .
+                       "👶 **Student:** {$collected_data['student_name']}\n" .
+                       "📧 **Email:** {$collected_data['email']}\n" .
+                       "📱 **Phone:** {$phone}\n\n" .
+                       "**Step 2: Academic Information** 🎓\n\n" .
+                       "Please share:\n" .
+                       "• **Grade/Class** seeking admission for\n" .
+                       "• **Board Preference** (CBSE/CAIE)\n\n" .
+                       "You can type like:\n" .
+                       "Grade 5, CBSE\n\n" .
+                       "Or just tell me the grade and I'll ask about board preference.";
             }
         }
         
