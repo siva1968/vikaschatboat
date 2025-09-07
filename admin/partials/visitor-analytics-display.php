@@ -9,10 +9,24 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get analytics data
-$visitor_analytics = new EduBot_Visitor_Analytics();
+// Get analytics data with class existence check
 $date_range = isset($_GET['range']) ? intval($_GET['range']) : 30;
-$analytics_data = $visitor_analytics->get_visitor_analytics($date_range);
+
+if (class_exists('EduBot_Visitor_Analytics')) {
+    $visitor_analytics = new EduBot_Visitor_Analytics();
+    $analytics_data = $visitor_analytics->get_visitor_analytics($date_range);
+} else {
+    // Fallback data structure
+    $analytics_data = array(
+        'total_visitors' => 0,
+        'new_visitors' => 0,
+        'returning_visitors' => 0,
+        'visitors_by_source' => array(),
+        'visitors_over_time' => array(),
+        'bounce_rate' => 0,
+        'avg_session_duration' => 0
+    );
+}
 
 // Get database manager for existing analytics
 $db_manager = new EduBot_Database_Manager();

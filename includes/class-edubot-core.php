@@ -62,7 +62,8 @@ class EduBot_Core {
             'includes/class-edubot-shortcode.php',
             'includes/class-edubot-health-check.php',
             'includes/class-edubot-autoloader.php',
-            'includes/class-enquiries-migration.php'
+            'includes/class-enquiries-migration.php',
+            'includes/class-visitor-analytics.php'
         );
 
         $missing_files = array();
