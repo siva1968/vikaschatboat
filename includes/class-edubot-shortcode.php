@@ -13,18 +13,32 @@ if (!class_exists('Edubot_Academic_Config')) {
     require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-academic-config.php';
 }
 
+// Load the new flow manager
+if (!class_exists('EduBot_Flow_Manager')) {
+    require_once plugin_dir_path(__FILE__) . 'class-edubot-flow-manager.php';
+}
+
 class EduBot_Shortcode {
     
     private $debug_enabled = false; // Set to true for debugging
+    private $flow_manager = null;
     
     public function __construct() {
         $this->debug_enabled = defined('WP_DEBUG') && WP_DEBUG;
+        $this->flow_manager = EduBot_Flow_Manager_Instance::get_instance();
+        
         add_action('init', array($this, 'init_shortcode'), 15); // Higher priority to override public class
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_scripts'));
         add_action('wp_ajax_edubot_submit_application', array($this, 'handle_application_submission'));
         add_action('wp_ajax_nopriv_edubot_submit_application', array($this, 'handle_application_submission'));
         add_action('wp_ajax_edubot_chatbot_response', array($this, 'handle_chatbot_response'));
         add_action('wp_ajax_nopriv_edubot_chatbot_response', array($this, 'handle_chatbot_response'));
+        
+        // Add new AJAX handlers for enhanced flow management
+        add_action('wp_ajax_edubot_start_flow', array($this, 'handle_start_flow'));
+        add_action('wp_ajax_nopriv_edubot_start_flow', array($this, 'handle_start_flow'));
+        add_action('wp_ajax_edubot_get_user_flows', array($this, 'handle_get_user_flows'));
+        add_action('wp_ajax_nopriv_edubot_get_user_flows', array($this, 'handle_get_user_flows'));
     }
     
     /**
@@ -997,7 +1011,23 @@ class EduBot_Shortcode {
             
             switch ($action_type) {
                 case 'admission':
-                    // Initialize session for admission flow
+                    // Initialize session for admission flow using new flow manager
+                    try {
+                        $flow_session = $this->flow_manager->init_flow('admission', $session_id);
+                        return array(
+                            'response' => $this->get_flow_welcome_message('admission'),
+                            'action' => 'flow_started',
+                            'session_data' => array(
+                                'session_id' => $session_id,
+                                'flow_type' => 'admission',
+                                'step' => $flow_session['step_name']
+                            )
+                        );
+                    } catch (Exception $e) {
+                        error_log('EduBot Flow Error: ' . $e->getMessage());
+                        // Fallback to legacy admission flow
+                    }
+                    // Legacy fallback - Initialize session for admission flow
                     $this->init_conversation_session($session_id, 'admission');
                     return array(
                         'response' => "🎓 **Welcome to {$school_name} Admission Process!**\n\n" .
@@ -1114,7 +1144,39 @@ class EduBot_Shortcode {
         )) {
             error_log('EduBot: Message contains personal info, routing to admission flow');
             
-            // If session is completed or doesn't exist, create a new session for new admission enquiry
+            // Try to use new flow manager first
+            if ($this->flow_manager) {
+                try {
+                    // Check if there's an existing flow session
+                    $existing_session = $this->flow_manager->get_session($session_id);
+                    
+                    if (!$existing_session || $existing_session['status'] === 'completed') {
+                        // Start new admission flow
+                        $flow_session = $this->flow_manager->init_flow('admission', $session_id);
+                        $session_id = $flow_session['session_id'];
+                        error_log('EduBot Debug: Started new admission flow session: ' . $session_id);
+                    }
+                    
+                    // Process message through flow manager
+                    $flow_result = $this->flow_manager->process_message($session_id, $message);
+                    
+                    return array(
+                        'response' => $flow_result['response'],
+                        'action' => 'flow_processed',
+                        'session_data' => array(
+                            'session_id' => $session_id,
+                            'flow_type' => 'admission',
+                            'step' => $flow_result['next_step'] ?? 'processing'
+                        )
+                    );
+                    
+                } catch (Exception $e) {
+                    error_log('EduBot Flow Manager Error: ' . $e->getMessage());
+                    // Fall back to legacy handling
+                }
+            }
+            
+            // Legacy fallback handling
             if (empty($session_id) || $this->is_session_completed($session_id)) {
                 $session_id = 'sess_' . uniqid();  // Create fresh session
                 error_log('EduBot Debug: Created fresh session for new personal info: ' . $session_id);
@@ -1148,6 +1210,131 @@ class EduBot_Shortcode {
                 'action' => 'error_fallback',
                 'session_data' => array()
             );
+        }
+    }
+
+    /**
+     * Get welcome message for specific flow type
+     */
+    private function get_flow_welcome_message($flow_type, $topic = null) {
+        $settings = get_option('edubot_pro_settings', array());
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        
+        switch ($flow_type) {
+            case 'admission':
+                return "Hello! **Welcome to {$school_name}.**\n\n" .
+                       "We are currently accepting applications for **AY 2026–27**.\n\n" .
+                       "I'll help you with your admission enquiry. Please provide:\n\n" .
+                       "👶 **Student Name**\n" .
+                       "📱 **Mobile Number**\n" .
+                       "📧 **Email Address**\n\n" .
+                       "You can type them like:\n" .
+                       "• Name: Sujay\n" .
+                       "• Mobile: 9876543210\n" .
+                       "• Email: parent@email.com\n\n" .
+                       "Or just start with the student's name and I'll ask for the rest step by step.";
+                       
+            case 'information':
+                if ($topic === 'curriculum') {
+                    return "📚 **Academic Information Request**\n\n" .
+                           "I'd be happy to provide detailed information about our curriculum and academic programs.\n\n" .
+                           "To send you the most relevant information, please provide:\n" .
+                           "• **Your Name**\n" .
+                           "• **Email Address**\n" .
+                           "• **Specific grade/program of interest**\n\n" .
+                           "What specific aspect of our curriculum interests you most?";
+                } else {
+                    return "ℹ️ **Information Request**\n\n" .
+                           "I'll be happy to provide you with detailed information.\n\n" .
+                           "Please let me know:\n" .
+                           "• **Your Name**\n" .
+                           "• **Email Address**\n" .
+                           "• **What information you need**\n\n" .
+                           "What would you like to know about {$school_name}?";
+                }
+                
+            case 'callback':
+                return "📞 **Callback Request**\n\n" .
+                       "I'll arrange for our admission counselor to call you back.\n\n" .
+                       "Please provide:\n" .
+                       "• **Your Name**\n" .
+                       "• **Phone Number**\n" .
+                       "• **Preferred time for callback**\n\n" .
+                       "When would be the best time to reach you?";
+                       
+            case 'tour':
+                return "🏫 **Virtual Tour Request**\n\n" .
+                       "I'll help you schedule a virtual tour of our campus.\n\n" .
+                       "Please provide:\n" .
+                       "• **Your Name**\n" .
+                       "• **Email Address**\n" .
+                       "• **Phone Number**\n" .
+                       "• **Preferred date/time**\n\n" .
+                       "When would you like to visit our campus virtually?";
+                       
+            case 'fees':
+                return "💰 **Fee Structure Information**\n\n" .
+                       "I'll provide you with detailed fee information.\n\n" .
+                       "Please specify:\n" .
+                       "• **Your Name**\n" .
+                       "• **Email Address**\n" .
+                       "• **Grade/Level of interest**\n\n" .
+                       "Which grade level are you inquiring about?";
+                       
+            default:
+                return "Hello! How can I assist you with your enquiry about {$school_name}?";
+        }
+    }
+
+    /**
+     * Handle new AJAX endpoint for starting specific flows
+     */
+    public function handle_start_flow() {
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed.'));
+            return;
+        }
+
+        $flow_type = sanitize_text_field($_POST['flow_type'] ?? '');
+        $user_identifier = sanitize_text_field($_POST['user_identifier'] ?? wp_get_current_user()->ID);
+
+        try {
+            $flow_session = $this->flow_manager->init_flow($flow_type);
+            
+            wp_send_json_success(array(
+                'message' => $this->get_flow_welcome_message($flow_type),
+                'session_id' => $flow_session['session_id'],
+                'flow_type' => $flow_type,
+                'step' => $flow_session['step_name'],
+                'available_flows' => $this->flow_manager->get_available_flows()
+            ));
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Unable to start flow: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Handle AJAX endpoint for getting user's active flows
+     */
+    public function handle_get_user_flows() {
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed.'));
+            return;
+        }
+
+        $user_identifier = sanitize_text_field($_POST['user_identifier'] ?? wp_get_current_user()->ID);
+
+        try {
+            $active_flows = $this->flow_manager->get_user_active_flows($user_identifier);
+            $available_flows = $this->flow_manager->get_available_flows();
+
+            wp_send_json_success(array(
+                'active_flows' => $active_flows,
+                'available_flows' => $available_flows,
+                'can_start_multiple' => $this->flow_manager->can_start_multiple_flows($user_identifier)
+            ));
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Unable to retrieve flows: ' . $e->getMessage()));
         }
     }
     
