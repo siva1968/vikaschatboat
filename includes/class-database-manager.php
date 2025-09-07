@@ -357,7 +357,19 @@ class EduBot_Database_Manager {
                 'phone' => $enquiry['phone'] ?? 'N/A',
                 'created_at' => $enquiry['created_at'],
                 'status' => $enquiry['status'],
-                'source' => 'chatbot'
+                'source' => 'chatbot',
+                'student_data' => json_encode(array(
+                    'student_name' => $enquiry['student_name'] ?? '',
+                    'date_of_birth' => $enquiry['date_of_birth'] ?? '',
+                    'grade' => $enquiry['grade'] ?? '',
+                    'educational_board' => $enquiry['board'] ?? '',
+                    'academic_year' => $enquiry['academic_year'] ?? '',
+                    'parent_name' => $enquiry['parent_name'] ?? '',
+                    'email' => $enquiry['email'] ?? '',
+                    'phone' => $enquiry['phone'] ?? '',
+                    'address' => $enquiry['address'] ?? '',
+                    'gender' => $enquiry['gender'] ?? ''
+                ))
             );
         }
 
