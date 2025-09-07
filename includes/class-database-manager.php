@@ -342,6 +342,10 @@ class EduBot_Database_Manager {
             $enquiries = $wpdb->get_results($wpdb->prepare($query, $where_values), ARRAY_A);
         }
 
+        // Debug logging
+        error_log("EduBot Debug: Query executed: $query");
+        error_log("EduBot Debug: Enquiries found: " . count($enquiries));
+
         // Convert to standard format
         $formatted_applications = array();
         foreach ($enquiries as $enquiry) {

@@ -763,7 +763,7 @@ class EduBot_Admin {
             
             // Pass the parsed data to the view
             $applications = $applications_data['applications'] ?? array();
-            $total_applications = $applications_data['total'] ?? 0;
+            $total_applications = $applications_data['total_records'] ?? 0;
             $total_pages = $applications_data['total_pages'] ?? 1;
             
         } catch (Exception $e) {
