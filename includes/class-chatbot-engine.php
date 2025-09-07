@@ -1047,6 +1047,21 @@ class EduBot_Chatbot_Engine {
         ));
 
         if ($application_id) {
+            // Track enhanced conversion with full marketing attribution
+            if (class_exists('EduBot_Visitor_Analytics')) {
+                $visitor_analytics = new EduBot_Visitor_Analytics();
+                $conversion_data = array(
+                    'application_id' => $application_id,
+                    'application_number' => $application_number,
+                    'student_name' => $session['user_data']['student_name'] ?? '',
+                    'grade' => $session['user_data']['grade'] ?? '',
+                    'phone' => $session['user_data']['phone'] ?? '',
+                    'email' => $session['user_data']['email'] ?? '',
+                    'source' => 'chatbot_conversation'
+                );
+                $visitor_analytics->track_enhanced_application_conversion($conversion_data);
+            }
+            
             // Send notifications
             $notification_manager->send_application_notifications($application_id, $session['user_data']);
             

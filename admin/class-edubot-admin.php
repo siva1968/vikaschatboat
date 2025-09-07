@@ -1567,6 +1567,18 @@ class EduBot_Admin {
                 )
             ));
             
+            // Process WhatsApp template settings
+            $whatsapp_use_templates = isset($_POST['whatsapp_use_templates']) ? 1 : 0;
+            $whatsapp_template_namespace = sanitize_text_field($_POST['whatsapp_template_namespace'] ?? '');
+            $whatsapp_template_name = sanitize_text_field($_POST['whatsapp_template_name'] ?? '');
+            $whatsapp_template_language = sanitize_text_field($_POST['whatsapp_template_language'] ?? 'en');
+            
+            // Validate template language
+            $allowed_template_languages = array('en', 'hi', 'en_US', 'en_GB', 'es', 'fr', 'de', 'pt', 'ar');
+            if (!in_array($whatsapp_template_language, $allowed_template_languages)) {
+                $whatsapp_template_language = 'en';
+            }
+            
             // Update WordPress options
             $api_options = array(
                 'edubot_openai_api_key' => $encrypted_openai_key,
@@ -1574,6 +1586,10 @@ class EduBot_Admin {
                 'edubot_whatsapp_provider' => $whatsapp_provider,
                 'edubot_whatsapp_token' => $encrypted_whatsapp_token,
                 'edubot_whatsapp_phone_id' => $whatsapp_phone_id,
+                'edubot_whatsapp_use_templates' => $whatsapp_use_templates,
+                'edubot_whatsapp_template_namespace' => $whatsapp_template_namespace,
+                'edubot_whatsapp_template_name' => $whatsapp_template_name,
+                'edubot_whatsapp_template_language' => $whatsapp_template_language,
                 'edubot_email_service' => $email_provider,
                 'edubot_smtp_host' => $smtp_host,
                 'edubot_smtp_port' => $smtp_port,
