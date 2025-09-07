@@ -1143,6 +1143,9 @@ class EduBot_Shortcode {
             !empty($personal_info['phone'])
         )) {
             error_log('EduBot: Message contains personal info, routing to admission flow');
+            error_log('EduBot Debug: Personal info details - Name: ' . ($personal_info['name'] ?? 'none') . 
+                     ', Email: ' . ($personal_info['email'] ?? 'none') . 
+                     ', Phone: ' . ($personal_info['phone'] ?? 'none'));
             
             // Always use legacy handling for now to ensure stability
             if (empty($session_id) || $this->is_session_completed($session_id)) {
@@ -1153,6 +1156,9 @@ class EduBot_Shortcode {
             }
             
             $result = $this->handle_admission_flow_safe($message, 'admission', $session_id);
+            
+            error_log('EduBot Debug: handle_admission_flow_safe returned: ' . 
+                     (is_array($result) ? json_encode($result) : substr($result, 0, 100)));
             
             // Ensure we return the proper array format expected by the caller
             if (is_string($result)) {
@@ -1430,6 +1436,11 @@ class EduBot_Shortcode {
         // Session data already retrieved above
         error_log("EduBot Debug: Current collected data: " . print_r($collected_data, true));
         
+        // Enhanced personal info detection - handle name-only inputs better
+        $has_name_only = !empty($personal_info['name']) && 
+                        empty($personal_info['email']) && 
+                        empty($personal_info['phone']);
+        
         // Check if this looks like personal info input
         if (!empty($personal_info) && (
             !empty($personal_info['name']) || 
@@ -1439,7 +1450,9 @@ class EduBot_Shortcode {
             // Only process personal info if we don't have complete personal information yet
             empty($collected_data['student_name']) || 
             empty($collected_data['email']) || 
-            empty($collected_data['phone'])
+            empty($collected_data['phone']) ||
+            // OR if this is a name-only input and we're starting fresh
+            ($has_name_only && empty($collected_data))
         )) {
             
             error_log("EduBot Debug: Processing personal information input");
@@ -1458,23 +1471,27 @@ class EduBot_Shortcode {
             // Store any collected info with validation
             if (!empty($personal_info['name']) && strlen(trim($personal_info['name'])) >= 2) {
                 $this->update_conversation_data($session_id, 'student_name', $personal_info['name']);
+                error_log("EduBot Debug: Stored student name: " . $personal_info['name']);
             }
             if (!empty($personal_info['email']) && filter_var($personal_info['email'], FILTER_VALIDATE_EMAIL)) {
                 $this->update_conversation_data($session_id, 'email', $personal_info['email']);
+                error_log("EduBot Debug: Stored email: " . $personal_info['email']);
             }
             if (!empty($personal_info['phone']) && preg_match('/^\+?[\d\s-]{10,15}$/', $personal_info['phone'])) {
                 $this->update_conversation_data($session_id, 'phone', $personal_info['phone']);
+                error_log("EduBot Debug: Stored phone: " . $personal_info['phone']);
             }
             
             // Always refresh session data to get the latest complete data
             $session_data = $this->get_conversation_session($session_id);
             $collected_data = $session_data && isset($session_data['data']) ? $session_data['data'] : array();
             
-            // If we only got name and didn't have it before, ask for email and phone
+            // ENHANCED: Better handling for name-only inputs
             if (!empty($personal_info['name']) && 
                 empty($personal_info['email']) && 
-                empty($personal_info['phone']) &&
-                !$had_name_before) {
+                empty($personal_info['phone'])) {
+                
+                error_log("EduBot Debug: Name-only input detected, asking for contact details");
                 return "✅ **Student Name: {$personal_info['name']}**\n\n" .
                        "Great! Now I need your contact details:\n\n" .
                        "📧 **Your Email Address**\n" .
@@ -1879,6 +1896,23 @@ class EduBot_Shortcode {
                     );
                 }
             }
+        }
+        
+        // FALLBACK: Handle potential name-only inputs that might have been missed
+        if (preg_match('/^[A-Za-z]{2,20}(\s+[A-Za-z]{2,20})?$/i', trim($message))) {
+            error_log('EduBot: Fallback name detection for: ' . $message);
+            // This looks like a name (2-40 characters, only letters and spaces, max 2 words)
+            return array(
+                'response' => "✅ **Student Name: " . trim($message) . "**\n\n" .
+                           "Great! Now I need your contact details:\n\n" .
+                           "📧 **Your Email Address**\n" .
+                           "📱 **Your Phone Number**\n\n" .
+                           "You can enter them like:\n" .
+                           "Email: parent@email.com, Phone: 9876543210\n\n" .
+                           "Or just enter your email address first.",
+                'action' => 'name_processed',
+                'session_data' => array('student_name' => trim($message), 'step' => 'collect_contact')
+            );
         }
         
         // Simple keyword-based responses
