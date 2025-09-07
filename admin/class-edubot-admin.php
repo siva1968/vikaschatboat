@@ -1286,7 +1286,8 @@ class EduBot_Admin {
             $notification_settings = array(
                 'edubot_email_notifications' => isset($_POST['edubot_email_notifications']) ? 1 : 0,
                 'edubot_whatsapp_notifications' => isset($_POST['edubot_whatsapp_notifications']) ? 1 : 0,
-                'edubot_school_notifications' => isset($_POST['edubot_school_notifications']) ? 1 : 0
+                'edubot_school_notifications' => isset($_POST['edubot_school_notifications']) ? 1 : 0,
+                'edubot_school_whatsapp_notifications' => isset($_POST['edubot_school_whatsapp_notifications']) ? 1 : 0
             );
             
             error_log('EduBot: Processing notification settings: ' . print_r($notification_settings, true));
@@ -1331,6 +1332,41 @@ class EduBot_Admin {
                     throw new Exception('Failed to update WhatsApp template language');
                 }
                 error_log('EduBot: Saved WhatsApp template language: ' . $template_language);
+            }
+            
+            // School WhatsApp template settings
+            if (isset($_POST['edubot_school_whatsapp_template'])) {
+                $school_whatsapp_template = sanitize_textarea_field($_POST['edubot_school_whatsapp_template']);
+                if (!$this->safe_update_option('edubot_school_whatsapp_template', $school_whatsapp_template)) {
+                    throw new Exception('Failed to update school WhatsApp template');
+                }
+                error_log('EduBot: Saved school WhatsApp template');
+            }
+            
+            if (isset($_POST['edubot_school_whatsapp_template_type'])) {
+                $school_template_type = sanitize_text_field($_POST['edubot_school_whatsapp_template_type']);
+                if (in_array($school_template_type, ['freeform', 'business_template'])) {
+                    if (!$this->safe_update_option('edubot_school_whatsapp_template_type', $school_template_type)) {
+                        throw new Exception('Failed to update school WhatsApp template type');
+                    }
+                    error_log('EduBot: Saved school WhatsApp template type: ' . $school_template_type);
+                }
+            }
+            
+            if (isset($_POST['edubot_school_whatsapp_template_name'])) {
+                $school_template_name = sanitize_text_field($_POST['edubot_school_whatsapp_template_name']);
+                if (!$this->safe_update_option('edubot_school_whatsapp_template_name', $school_template_name)) {
+                    throw new Exception('Failed to update school WhatsApp template name');
+                }
+                error_log('EduBot: Saved school WhatsApp template name: ' . $school_template_name);
+            }
+            
+            if (isset($_POST['edubot_school_whatsapp_template_language'])) {
+                $school_template_language = sanitize_text_field($_POST['edubot_school_whatsapp_template_language']);
+                if (!$this->safe_update_option('edubot_school_whatsapp_template_language', $school_template_language)) {
+                    throw new Exception('Failed to update school WhatsApp template language');
+                }
+                error_log('EduBot: Saved school WhatsApp template language: ' . $school_template_language);
             }
             
             // Create consolidated config for school config class

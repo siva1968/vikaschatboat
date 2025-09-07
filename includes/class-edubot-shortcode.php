@@ -2467,6 +2467,9 @@ class EduBot_Shortcode {
             // Send enquiry notification to school (this is for admin, not tracked in parent notification status)
             $this->send_school_enquiry_notification($collected_data, $enquiry_number, $school_name);
             
+            // Send WhatsApp notification to school if enabled
+            $this->send_school_whatsapp_notification($collected_data, $enquiry_number, $school_name);
+            
             // Clear session
             $transient_key = 'edubot_session_' . $session_id;
             delete_transient($transient_key);
@@ -2644,6 +2647,166 @@ class EduBot_Shortcode {
             
         } catch (Exception $e) {
             error_log('EduBot: School notification email error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Send WhatsApp notification to school admission team
+     */
+    private function send_school_whatsapp_notification($collected_data, $enquiry_number, $school_name) {
+        try {
+            // Check if school WhatsApp notifications are enabled
+            $school_whatsapp_enabled = get_option('edubot_school_whatsapp_notifications', 0);
+            if (!$school_whatsapp_enabled) {
+                error_log('EduBot: School WhatsApp notifications are disabled in settings');
+                return false;
+            }
+            
+            // Check if WhatsApp is configured
+            $whatsapp_enabled = get_option('edubot_whatsapp_notifications', 0);
+            if (!$whatsapp_enabled) {
+                error_log('EduBot: WhatsApp notifications are not configured');
+                return false;
+            }
+            
+            // Get school phone number
+            $school_phone = get_option('edubot_school_phone', '');
+            if (empty($school_phone)) {
+                error_log('EduBot: School phone number not configured for WhatsApp notifications');
+                return false;
+            }
+            
+            // Normalize phone number
+            $school_phone = preg_replace('/[^0-9+]/', '', $school_phone);
+            if (strlen($school_phone) < 10) {
+                error_log('EduBot: Invalid school phone number format for WhatsApp');
+                return false;
+            }
+            
+            // Check school template type (separate from parent templates)
+            $template_type = get_option('edubot_school_whatsapp_template_type', 'freeform');
+            
+            if ($template_type === 'business_template') {
+                // Use business template for school notifications
+                return $this->send_school_whatsapp_template($school_phone, $collected_data, $enquiry_number, $school_name);
+            } else {
+                // Use freeform message
+                return $this->send_school_whatsapp_freeform($school_phone, $collected_data, $enquiry_number, $school_name);
+            }
+            
+        } catch (Exception $e) {
+            error_log('EduBot: School WhatsApp notification error: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Send school WhatsApp using business template
+     */
+    private function send_school_whatsapp_template($phone, $collected_data, $enquiry_number, $school_name) {
+        try {
+            $template_name = get_option('edubot_school_whatsapp_template_name', 'school_notification');
+            $template_language = get_option('edubot_school_whatsapp_template_language', 'en');
+            
+            // Prepare template parameters for school notification
+            $template_params = [
+                $school_name, // {{1}}
+                $enquiry_number, // {{2}}  
+                $collected_data['student_name'] ?? 'N/A', // {{3}}
+                $collected_data['grade'] ?? 'N/A', // {{4}}
+                $collected_data['board'] ?? 'N/A', // {{5}}
+                $collected_data['parent_name'] ?? 'Not Provided', // {{6}}
+                $collected_data['phone'] ?? 'N/A', // {{7}}
+                $collected_data['email'] ?? 'N/A', // {{8}}
+                $this->get_indian_time('d/m/Y H:i') // {{9}} - submission time
+            ];
+            
+            if (!class_exists('EduBot_API_Integrations')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
+            }
+            
+            $api_integrations = new EduBot_API_Integrations();
+            
+            $message_data = [
+                'template_name' => $template_name,
+                'template_language' => $template_language,
+                'template_params' => $template_params
+            ];
+            
+            $result = $api_integrations->send_meta_whatsapp($phone, $message_data);
+            
+            if ($result && isset($result['success']) && $result['success']) {
+                error_log("EduBot: School WhatsApp template notification sent successfully to {$phone}");
+                return true;
+            } else {
+                error_log("EduBot: Failed to send school WhatsApp template notification: " . json_encode($result));
+                return false;
+            }
+            
+        } catch (Exception $e) {
+            error_log('EduBot: School WhatsApp template error: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Send school WhatsApp using freeform message
+     */
+    private function send_school_whatsapp_freeform($phone, $collected_data, $enquiry_number, $school_name) {
+        try {
+            // Get school-specific WhatsApp template
+            $default_school_template = "🎓 *New Admission Enquiry - {school_name}*\n\n" .
+                "📋 *Enquiry Number:* {enquiry_number}\n" .
+                "👶 *Student:* {student_name}\n" .
+                "🎯 *Grade:* {grade}\n" .
+                "📚 *Board:* {board}\n" .
+                "👨‍👩‍👧 *Parent:* {parent_name}\n" .
+                "📱 *Phone:* {phone}\n" .
+                "📧 *Email:* {email}\n" .
+                "📅 *Submitted:* {submission_date}\n\n" .
+                "Please review and contact the family for next steps.\n\n" .
+                "EduBot Pro - Admission Management";
+            
+            $template = get_option('edubot_school_whatsapp_template', $default_school_template);
+            
+            // Replace placeholders
+            $message = str_replace(
+                ['{school_name}', '{enquiry_number}', '{student_name}', '{grade}', '{board}', 
+                 '{parent_name}', '{phone}', '{email}', '{submission_date}', '{academic_year}'],
+                [
+                    $school_name,
+                    $enquiry_number,
+                    $collected_data['student_name'] ?? 'N/A',
+                    $collected_data['grade'] ?? 'N/A',
+                    $collected_data['board'] ?? 'N/A',
+                    $collected_data['parent_name'] ?? 'N/A',
+                    $collected_data['phone'] ?? 'N/A',
+                    $collected_data['email'] ?? 'N/A',
+                    $this->get_indian_time('d/m/Y H:i'),
+                    $collected_data['academic_year'] ?? '2026-27'
+                ],
+                $template
+            );
+            
+            if (!class_exists('EduBot_API_Integrations')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
+            }
+            
+            $api_integrations = new EduBot_API_Integrations();
+            $result = $api_integrations->send_whatsapp_message($phone, $message);
+            
+            if ($result && !is_wp_error($result)) {
+                error_log("EduBot: School WhatsApp freeform notification sent successfully to {$phone}");
+                return true;
+            } else {
+                $error_msg = is_wp_error($result) ? $result->get_error_message() : 'Unknown error';
+                error_log("EduBot: Failed to send school WhatsApp freeform notification: {$error_msg}");
+                return false;
+            }
+            
+        } catch (Exception $e) {
+            error_log('EduBot: School WhatsApp freeform error: ' . $e->getMessage());
             return false;
         }
     }
