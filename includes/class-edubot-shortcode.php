@@ -2377,6 +2377,30 @@ class EduBot_Shortcode {
             $ip_address = $this->get_client_ip();
             $user_agent = $this->get_user_agent();
             
+            // Extract click IDs for separate storage
+            $gclid = $utm_data['gclid'] ?? null;
+            $fbclid = $utm_data['fbclid'] ?? null;
+            
+            // Prepare click ID data for comprehensive tracking
+            $click_id_data = array();
+            if ($gclid) {
+                $click_id_data['gclid'] = $gclid;
+                $click_id_data['gclid_captured_at'] = current_time('mysql');
+            }
+            if ($fbclid) {
+                $click_id_data['fbclid'] = $fbclid;
+                $click_id_data['fbclid_captured_at'] = current_time('mysql');
+            }
+            
+            // Add other tracking IDs if present
+            $other_click_params = array('msclkid', 'ttclid', 'twclid', '_kenshoo_clickid', 'irclickid');
+            foreach ($other_click_params as $param) {
+                if (isset($utm_data[$param])) {
+                    $click_id_data[$param] = $utm_data[$param];
+                    $click_id_data[$param . '_captured_at'] = current_time('mysql');
+                }
+            }
+            
             $result = $wpdb->insert(
                 $table_name,
                 array(
@@ -2392,6 +2416,9 @@ class EduBot_Shortcode {
                     'ip_address' => $ip_address,
                     'user_agent' => $user_agent,
                     'utm_data' => wp_json_encode($utm_data),
+                    'gclid' => $gclid,
+                    'fbclid' => $fbclid,
+                    'click_id_data' => !empty($click_id_data) ? wp_json_encode($click_id_data) : null,
                     'whatsapp_sent' => 0,
                     'email_sent' => 0,
                     'sms_sent' => 0,
@@ -2401,7 +2428,7 @@ class EduBot_Shortcode {
                     'status' => 'pending',
                     'source' => 'chatbot'
                 ),
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s')
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s')
             );
             
             if ($result === false) {
@@ -5314,10 +5341,22 @@ Reply STOP to unsubscribe");
             session_start();
         }
         
-        // UTM parameters to capture
+        // UTM parameters and click IDs to capture
         $utm_params = array(
+            // Standard UTM parameters
             'utm_source', 'utm_medium', 'utm_campaign', 
-            'utm_term', 'utm_content', 'gclid', 'fbclid'
+            'utm_term', 'utm_content',
+            // Click IDs from major platforms
+            'gclid',        // Google Ads Click ID
+            'fbclid',       // Facebook Click ID  
+            'msclkid',      // Microsoft Ads Click ID
+            'ttclid',       // TikTok Click ID
+            'twclid',       // Twitter Click ID
+            '_kenshoo_clickid', // Kenshoo/Sizmek Click ID
+            'irclickid',    // Impact Radius Click ID
+            'li_fat_id',    // LinkedIn Click ID
+            'sc_click_id',  // Snapchat Click ID
+            'yclid'         // Yandex Click ID
         );
         
         foreach ($utm_params as $param) {

@@ -59,7 +59,10 @@ class EduBot_Core {
             'includes/class-api-integrations.php',
             'includes/class-notification-manager.php',
             'includes/class-branding-manager.php',
-            'includes/class-edubot-shortcode.php'
+            'includes/class-edubot-shortcode.php',
+            'includes/class-edubot-health-check.php',
+            'includes/class-edubot-autoloader.php',
+            'includes/class-enquiries-migration.php'
         );
 
         $missing_files = array();

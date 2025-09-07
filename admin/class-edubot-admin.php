@@ -824,14 +824,36 @@ class EduBot_Admin {
             wp_die(__('You do not have sufficient permissions to access this page.', 'edubot-pro'));
         }
 
-        // Get system status information
-        $health_check = EduBot_Health_Check::get_health_status();
-        $available_classes = EduBot_Autoloader::get_available_classes();
+        // Get system status information with class existence checks
+        $health_check = array();
+        if (class_exists('EduBot_Health_Check')) {
+            $health_check = EduBot_Health_Check::get_health_status();
+        } else {
+            $health_check = array(
+                'status' => 'warning',
+                'message' => 'Health check class not available',
+                'checks' => array()
+            );
+        }
+        
+        $available_classes = array();
+        if (class_exists('EduBot_Autoloader')) {
+            $available_classes = EduBot_Autoloader::get_available_classes();
+        } else {
+            // Manually check for core classes
+            $core_classes = array(
+                'EduBot_Core', 'EduBot_Admin', 'EduBot_Database_Manager', 
+                'EduBot_Shortcode', 'Notification_Manager', 'EduBot_Health_Check'
+            );
+            foreach ($core_classes as $class) {
+                $available_classes[$class] = class_exists($class) ? 'Available' : 'Missing';
+            }
+        }
         
         // Get plugin information
         $plugin_info = array(
             'version' => EDUBOT_PRO_VERSION,
-            'db_version' => get_option('edubot_analytics_db_version', '0.0.0'),
+            'db_version' => get_option('edubot_enquiries_db_version', '0.0.0'),
             'plugin_path' => EDUBOT_PRO_PLUGIN_PATH,
             'plugin_url' => EDUBOT_PRO_PLUGIN_URL
         );
@@ -848,11 +870,29 @@ class EduBot_Admin {
 
         // Get database status
         global $wpdb;
+        $enquiries_table = $wpdb->prefix . 'edubot_enquiries';
+        
         $db_info = array(
             'mysql_version' => $wpdb->db_version(),
             'charset' => $wpdb->charset,
-            'collate' => $wpdb->collate
+            'collate' => $wpdb->collate,
+            'enquiries_table_exists' => $wpdb->get_var("SHOW TABLES LIKE '{$enquiries_table}'") == $enquiries_table
         );
+        
+        // Check if new columns exist
+        if ($db_info['enquiries_table_exists']) {
+            $columns = $wpdb->get_results("SHOW COLUMNS FROM {$enquiries_table}");
+            $column_names = wp_list_pluck($columns, 'Field');
+            
+            $db_info['required_columns'] = array(
+                'gclid' => in_array('gclid', $column_names),
+                'fbclid' => in_array('fbclid', $column_names),
+                'click_id_data' => in_array('click_id_data', $column_names),
+                'utm_data' => in_array('utm_data', $column_names),
+                'ip_address' => in_array('ip_address', $column_names),
+                'user_agent' => in_array('user_agent', $column_names)
+            );
+        }
 
         include EDUBOT_PRO_PLUGIN_PATH . 'admin/partials/system-status-display.php';
     }
@@ -3313,6 +3353,57 @@ class EduBot_Admin {
                 $html .= '</table>';
                 $html .= '</div>';
             }
+        }
+
+        // Click ID Tracking (for Paid Campaigns)
+        if (!empty($application['gclid']) || !empty($application['fbclid']) || !empty($application['click_id_data'])) {
+            $html .= '<div class="detail-section">';
+            $html .= '<h4>Campaign Click IDs</h4>';
+            $html .= '<table class="detail-table">';
+            
+            // Google Ads Click ID
+            if (!empty($application['gclid'])) {
+                $html .= '<tr><td><strong>Google Ads (gclid):</strong></td><td>' . esc_html($application['gclid']) . '</td></tr>';
+            }
+            
+            // Facebook Click ID  
+            if (!empty($application['fbclid'])) {
+                $html .= '<tr><td><strong>Facebook (fbclid):</strong></td><td>' . esc_html($application['fbclid']) . '</td></tr>';
+            }
+            
+            // Other Click IDs
+            if (!empty($application['click_id_data'])) {
+                $click_ids = json_decode($application['click_id_data'], true);
+                if (is_array($click_ids)) {
+                    foreach ($click_ids as $platform => $click_id) {
+                        $platform_name = ucfirst(str_replace('clid', '', $platform));
+                        switch($platform) {
+                            case 'msclkid':
+                                $platform_name = 'Microsoft Ads';
+                                break;
+                            case 'ttclid':
+                                $platform_name = 'TikTok Ads';
+                                break;
+                            case 'twclid':
+                                $platform_name = 'Twitter Ads';
+                                break;
+                            case 'liclid':
+                                $platform_name = 'LinkedIn Ads';
+                                break;
+                            case 'snapclid':
+                                $platform_name = 'Snapchat Ads';
+                                break;
+                            case 'yclid':
+                                $platform_name = 'Yandex Ads';
+                                break;
+                        }
+                        $html .= '<tr><td><strong>' . esc_html($platform_name) . ':</strong></td><td>' . esc_html($click_id) . '</td></tr>';
+                    }
+                }
+            }
+            
+            $html .= '</table>';
+            $html .= '</div>';
         }
 
         // Notification Status

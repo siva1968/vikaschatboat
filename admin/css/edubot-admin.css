@@ -857,6 +857,15 @@
     background: #28a745;
 }
 
+/* Campaign Click IDs Section Special Styling */
+.application-details .detail-section:has(h4:contains("Campaign Click")) {
+    border-left-color: #fd7e14;
+}
+
+.application-details .detail-section:has(h4:contains("Campaign Click")) h4:before {
+    background: #fd7e14;
+}
+
 /* Notification Status Section Special Styling */
 .application-details .detail-section:has(h4:contains("Notification")) {
     border-left-color: #17a2b8;

@@ -188,6 +188,9 @@ class EduBot_Database_Manager {
                 'ip_address' => $enquiry['ip_address'] ?? null,
                 'user_agent' => $enquiry['user_agent'] ?? null,
                 'utm_data' => $enquiry['utm_data'] ?? null,
+                'gclid' => $enquiry['gclid'] ?? null,
+                'fbclid' => $enquiry['fbclid'] ?? null,
+                'click_id_data' => $enquiry['click_id_data'] ?? null,
                 'whatsapp_sent' => $enquiry['whatsapp_sent'] ?? 0,
                 'email_sent' => $enquiry['email_sent'] ?? 0,
                 'sms_sent' => $enquiry['sms_sent'] ?? 0

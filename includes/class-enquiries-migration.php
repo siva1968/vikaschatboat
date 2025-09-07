@@ -17,6 +17,12 @@ class EduBot_Enquiries_Migration {
             self::migrate_to_v1_3_0();
             update_option('edubot_enquiries_db_version', '1.3.0');
         }
+        
+        // Migration to 1.3.1 - Add click ID fields
+        if (version_compare($current_version, '1.3.1', '<')) {
+            self::migrate_to_v1_3_1();
+            update_option('edubot_enquiries_db_version', '1.3.1');
+        }
     }
 
     /**
@@ -39,7 +45,10 @@ class EduBot_Enquiries_Migration {
             'ip_address' => "ALTER TABLE {$enquiries_table} ADD COLUMN ip_address varchar(45) NULL AFTER phone",
             'user_agent' => "ALTER TABLE {$enquiries_table} ADD COLUMN user_agent text NULL AFTER ip_address", 
             'utm_data' => "ALTER TABLE {$enquiries_table} ADD COLUMN utm_data longtext NULL AFTER user_agent",
-            'whatsapp_sent' => "ALTER TABLE {$enquiries_table} ADD COLUMN whatsapp_sent tinyint(1) DEFAULT 0 AFTER utm_data",
+            'gclid' => "ALTER TABLE {$enquiries_table} ADD COLUMN gclid varchar(255) NULL AFTER utm_data",
+            'fbclid' => "ALTER TABLE {$enquiries_table} ADD COLUMN fbclid varchar(255) NULL AFTER gclid",
+            'click_id_data' => "ALTER TABLE {$enquiries_table} ADD COLUMN click_id_data longtext NULL AFTER fbclid",
+            'whatsapp_sent' => "ALTER TABLE {$enquiries_table} ADD COLUMN whatsapp_sent tinyint(1) DEFAULT 0 AFTER click_id_data",
             'email_sent' => "ALTER TABLE {$enquiries_table} ADD COLUMN email_sent tinyint(1) DEFAULT 0 AFTER whatsapp_sent",
             'sms_sent' => "ALTER TABLE {$enquiries_table} ADD COLUMN sms_sent tinyint(1) DEFAULT 0 AFTER email_sent"
         );
@@ -132,6 +141,64 @@ class EduBot_Enquiries_Migration {
         dbDelta($sql);
         
         error_log("EduBot Migration: Created enquiries table with all fields");
+    }
+
+    /**
+     * Migration to version 1.3.1 - Add click ID specific fields
+     */
+    private static function migrate_to_v1_3_1() {
+        global $wpdb;
+        
+        $enquiries_table = $wpdb->prefix . 'edubot_enquiries';
+        
+        // Add click ID specific columns if they don't exist
+        $columns_to_add = array(
+            'gclid' => "ALTER TABLE {$enquiries_table} ADD COLUMN gclid varchar(255) NULL",
+            'fbclid' => "ALTER TABLE {$enquiries_table} ADD COLUMN fbclid varchar(255) NULL",
+            'click_id_data' => "ALTER TABLE {$enquiries_table} ADD COLUMN click_id_data longtext NULL"
+        );
+
+        foreach ($columns_to_add as $column => $sql) {
+            // Check if column already exists
+            $column_exists = $wpdb->get_results($wpdb->prepare(
+                "SHOW COLUMNS FROM {$enquiries_table} LIKE %s",
+                $column
+            ));
+
+            if (empty($column_exists)) {
+                $result = $wpdb->query($sql);
+                if ($result !== false) {
+                    error_log("EduBot Migration: Added column {$column} to enquiries table");
+                } else {
+                    error_log("EduBot Migration: Failed to add column {$column}: " . $wpdb->last_error);
+                }
+            } else {
+                error_log("EduBot Migration: Column {$column} already exists in enquiries table");
+            }
+        }
+
+        // Add indexes for better performance
+        $indexes_to_add = array(
+            'idx_gclid' => "CREATE INDEX idx_gclid ON {$enquiries_table} (gclid)",
+            'idx_fbclid' => "CREATE INDEX idx_fbclid ON {$enquiries_table} (fbclid)"
+        );
+
+        foreach ($indexes_to_add as $index_name => $sql) {
+            // Check if index exists
+            $index_exists = $wpdb->get_results($wpdb->prepare(
+                "SHOW INDEX FROM {$enquiries_table} WHERE Key_name = %s",
+                $index_name
+            ));
+
+            if (empty($index_exists)) {
+                $result = $wpdb->query($sql);
+                if ($result !== false) {
+                    error_log("EduBot Migration: Added index {$index_name} to enquiries table");
+                } else {
+                    error_log("EduBot Migration: Failed to add index {$index_name}: " . $wpdb->last_error);
+                }
+            }
+        }
     }
 
     /**

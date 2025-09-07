@@ -120,32 +120,52 @@ if (!defined('ABSPATH')) {
 
         <!-- Database Tables Status -->
         <h3>Database Tables</h3>
-        <?php
-        global $wpdb;
-        $required_tables = array(
-            'edubot_school_configs',
-            'edubot_applications', 
-            'edubot_analytics',
-            'edubot_sessions',
-            'edubot_security_log',
-            'edubot_visitor_analytics',
-            'edubot_visitors'
-        );
-        ?>
+        <div style="margin-bottom: 20px;">
+            <?php
+            $status_icon = $db_info['enquiries_table_exists'] ? 'yes' : 'no';
+            $status_color = $db_info['enquiries_table_exists'] ? '#46b450' : '#dc3232';
+            $status_text = $db_info['enquiries_table_exists'] ? 'EXISTS' : 'MISSING';
+            ?>
+            <div style="padding: 15px; border: 1px solid #ddd; border-radius: 4px; display: flex; align-items: center; gap: 10px;">
+                <span class="dashicons dashicons-<?php echo $status_icon; ?>" style="color: <?php echo $status_color; ?>; font-size: 20px;"></span>
+                <div>
+                    <strong>edubot_enquiries</strong> - Main enquiries table
+                    <div style="font-size: 12px; color: #666;"><?php echo $status_text; ?></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Column Status -->
+        <?php if ($db_info['enquiries_table_exists'] && isset($db_info['required_columns'])): ?>
+        <h3>Required Columns Status</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-            <?php foreach ($required_tables as $table): ?>
+            <?php foreach ($db_info['required_columns'] as $column => $exists): ?>
                 <?php
-                $table_name = $wpdb->prefix . $table;
-                $exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_name}'");
                 $status_icon = $exists ? 'yes' : 'no';
                 $status_color = $exists ? '#46b450' : '#dc3232';
+                $status_text = $exists ? 'EXISTS' : 'MISSING';
                 ?>
                 <div style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-align: center;">
                     <span class="dashicons dashicons-<?php echo $status_icon; ?>" style="color: <?php echo $status_color; ?>;"></span>
-                    <div style="font-size: 12px; margin-top: 5px;"><?php echo esc_html($table); ?></div>
+                    <div style="font-size: 11px; margin-top: 5px; font-weight: bold;"><?php echo esc_html($column); ?></div>
+                    <div style="font-size: 10px; color: #666;"><?php echo $status_text; ?></div>
                 </div>
             <?php endforeach; ?>
         </div>
+        
+        <!-- Migration Button -->
+        <?php
+        $missing_columns = array_filter($db_info['required_columns'], function($exists) { return !$exists; });
+        if (!empty($missing_columns)):
+        ?>
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+            <h4 style="margin: 0 0 10px 0; color: #856404;">Migration Required</h4>
+            <p style="margin: 0 0 15px 0; color: #856404;">Some database columns are missing. Click the button below to run the migration.</p>
+            <button type="button" id="run-migration-btn" class="button button-primary">Run Database Migration</button>
+            <div id="migration-status" style="margin-top: 10px;"></div>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
     </div>
 
     <!-- Loaded Classes -->
