@@ -1144,39 +1144,7 @@ class EduBot_Shortcode {
         )) {
             error_log('EduBot: Message contains personal info, routing to admission flow');
             
-            // Try to use new flow manager first
-            if ($this->flow_manager) {
-                try {
-                    // Check if there's an existing flow session
-                    $existing_session = $this->flow_manager->get_session($session_id);
-                    
-                    if (!$existing_session || $existing_session['status'] === 'completed') {
-                        // Start new admission flow
-                        $flow_session = $this->flow_manager->init_flow('admission', $session_id);
-                        $session_id = $flow_session['session_id'];
-                        error_log('EduBot Debug: Started new admission flow session: ' . $session_id);
-                    }
-                    
-                    // Process message through flow manager
-                    $flow_result = $this->flow_manager->process_message($session_id, $message);
-                    
-                    return array(
-                        'response' => $flow_result['response'],
-                        'action' => 'flow_processed',
-                        'session_data' => array(
-                            'session_id' => $session_id,
-                            'flow_type' => 'admission',
-                            'step' => $flow_result['next_step'] ?? 'processing'
-                        )
-                    );
-                    
-                } catch (Exception $e) {
-                    error_log('EduBot Flow Manager Error: ' . $e->getMessage());
-                    // Fall back to legacy handling
-                }
-            }
-            
-            // Legacy fallback handling
+            // Always use legacy handling for now to ensure stability
             if (empty($session_id) || $this->is_session_completed($session_id)) {
                 $session_id = 'sess_' . uniqid();  // Create fresh session
                 error_log('EduBot Debug: Created fresh session for new personal info: ' . $session_id);
@@ -1197,6 +1165,28 @@ class EduBot_Shortcode {
             return $result;
         }
         
+        // Check if this message contains academic information for existing session
+        $academic_info = $this->parse_academic_info($message);
+        if (!empty($academic_info) && !empty($session_id)) {
+            error_log('EduBot: Message contains academic info, checking for existing session');
+            
+            $existing_session = $this->get_conversation_session($session_id);
+            if ($existing_session && !empty($existing_session['data']['student_name'])) {
+                error_log('EduBot Debug: Found existing session with personal info, processing academic info');
+                
+                $result = $this->handle_admission_flow_safe($message, 'academic_info', $session_id);
+                
+                if (is_string($result)) {
+                    return array(
+                        'response' => $result,
+                        'action' => 'academic_info_processed',
+                        'session_data' => array('session_id' => $session_id)
+                    );
+                }
+                return $result;
+            }
+        }
+
         // Process regular text messages with safe fallback
         error_log('EduBot: Processing regular message: ' . substr($message, 0, 30));
         return $this->process_user_message_safely($message, $session_id);
@@ -1409,12 +1399,15 @@ class EduBot_Shortcode {
             }
         }
         
-        // Handle admission enquiry initiation
-        if (strpos($message_lower, 'admission') !== false || 
+        // Handle admission enquiry initiation (but only if no existing session with data)
+        $session_data = $this->get_conversation_session($session_id);
+        $collected_data = $session_data ? $session_data['data'] : array();
+        
+        if ((strpos($message_lower, 'admission') !== false || 
             strpos($message_lower, 'apply') !== false || 
             strpos($message_lower, 'enroll') !== false ||
             strpos($message_lower, 'join') !== false ||
-            $action_type === 'admission') {
+            $action_type === 'admission') && empty($collected_data)) {
             
             // No specific information found, show generic admission welcome
             return "Hello! **Welcome to {$school_name}.**\n\n" .
@@ -1434,8 +1427,7 @@ class EduBot_Shortcode {
         $personal_info = $this->parse_personal_info($message);
         error_log("EduBot Debug: Parsed personal info: " . print_r($personal_info, true));
         
-        $session_data = $this->get_conversation_session($session_id);
-        $collected_data = $session_data ? $session_data['data'] : array();
+        // Session data already retrieved above
         error_log("EduBot Debug: Current collected data: " . print_r($collected_data, true));
         
         // Check if this looks like personal info input
@@ -1696,6 +1688,88 @@ class EduBot_Shortcode {
             }
         }
         
+        // Handle academic information (grade and board) after personal info is complete
+        $session_data = $this->get_conversation_session($session_id);
+        $collected_data = $session_data ? $session_data['data'] : array();
+        
+        // Check if we have complete personal info and this looks like academic info
+        if (!empty($collected_data['student_name']) && 
+            !empty($collected_data['email']) && 
+            !empty($collected_data['phone']) && 
+            (empty($collected_data['grade']) || empty($collected_data['board']))) {
+            
+            $academic_info = $this->parse_academic_info($message);
+            error_log("EduBot Debug: Academic info parsing result: " . print_r($academic_info, true));
+            
+            // Check if this looks like academic info
+            if (!empty($academic_info) || 
+                preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade|grde|class|\d+th|\d+st|\d+nd|\d+rd|cbse|caie|cambridge|state|icse|igcse)\b/i', strtolower($message))) {
+                
+                error_log("EduBot: Processing academic information input");
+                
+                // Store any collected academic info
+                if (!empty($academic_info['grade'])) {
+                    $this->update_conversation_data($session_id, 'grade', $academic_info['grade']);
+                    $collected_data['grade'] = $academic_info['grade'];
+                }
+                if (!empty($academic_info['board'])) {
+                    $this->update_conversation_data($session_id, 'board', $academic_info['board']);
+                    $collected_data['board'] = $academic_info['board'];
+                }
+                if (!empty($academic_info['academic_year'])) {
+                    $this->update_conversation_data($session_id, 'academic_year', $academic_info['academic_year']);
+                    $collected_data['academic_year'] = $academic_info['academic_year'];
+                }
+                
+                // Check what's still needed for academic info
+                $missing_academic = array();
+                if (empty($collected_data['grade'])) $missing_academic[] = "🎓 Grade/Class";
+                if (empty($collected_data['board'])) $missing_academic[] = "📚 Board Preference";
+                
+                if (!empty($missing_academic)) {
+                    $response = "✅ **Academic Information Recorded:**\n";
+                    if (!empty($collected_data['grade'])) $response .= "• Grade: {$collected_data['grade']}\n";
+                    if (!empty($collected_data['board'])) $response .= "• Board: {$collected_data['board']}\n";
+                    if (!empty($collected_data['academic_year'])) $response .= "• Academic Year: {$collected_data['academic_year']}\n";
+                    
+                    $response .= "\n**Still needed:**\n";
+                    foreach ($missing_academic as $field) {
+                        $response .= "• {$field}\n";
+                    }
+                    
+                    if (empty($collected_data['board'])) {
+                        $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
+                    }
+                    
+                    return $response;
+                }
+                
+                // Set default academic year if not provided
+                if (empty($collected_data['academic_year'])) {
+                    $academic_year = '2026-27';  // Default for current admissions
+                    $this->update_conversation_data($session_id, 'academic_year', $academic_year);
+                    $collected_data['academic_year'] = $academic_year;
+                }
+                
+                // All academic info collected, move to final details
+                $this->update_conversation_data($session_id, 'step', 'final');
+                
+                $academic_summary = "• Grade: {$collected_data['grade']}\n• Board: {$collected_data['board']}\n";
+                if (!empty($collected_data['academic_year'])) {
+                    $academic_summary .= "• Academic Year: {$collected_data['academic_year']}\n";
+                }
+                
+                return "✅ **Academic Information Complete!**\n" .
+                       $academic_summary . "\n" .
+                       "**Step 3: Final Details** 📋\n\n" .
+                       "Please provide:\n\n" .
+                       "**Student's Date of Birth** (dd/mm/yyyy format)\n\n" .
+                       "**Example:**\n" .
+                       "• 16/10/2010\n\n" .
+                       "Please enter the date of birth in dd/mm/yyyy format only.";
+            }
+        }
+        
         // Failsafe: If message looks like date of birth format, try to process it
         // This handles cases where session step might not be set correctly
         if (preg_match('/^\s*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\s*$/', trim($message))) {
@@ -1781,6 +1855,29 @@ class EduBot_Shortcode {
                     'action' => 'admission_started',
                     'session_data' => array('session_id' => $session_id, 'step' => 'personal_info_received')
                 );
+            }
+        }
+        
+        // Check if this message contains academic information for existing session
+        $academic_info = $this->parse_academic_info($message);
+        if (!empty($academic_info) && !empty($session_id)) {
+            error_log('EduBot: Academic info detected in safe mode, checking for existing session');
+            
+            $existing_session = $this->get_conversation_session($session_id);
+            if ($existing_session && !empty($existing_session['data']['student_name'])) {
+                error_log('EduBot Debug: Found existing session in safe mode, processing academic info');
+                
+                $admission_result = $this->handle_admission_flow_safe($message, 'academic_info', $session_id);
+                
+                if (is_array($admission_result)) {
+                    return $admission_result;
+                } else {
+                    return array(
+                        'response' => $admission_result,
+                        'action' => 'academic_info_processed',
+                        'session_data' => array('session_id' => $session_id, 'step' => 'academic_info_received')
+                    );
+                }
             }
         }
         
