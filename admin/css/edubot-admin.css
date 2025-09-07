@@ -737,3 +737,150 @@
     font-style: italic;
     margin-top: 5px;
 }
+
+/* Application Details Modal Enhancements */
+.application-details {
+    max-width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.application-details .detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e1e5e9;
+    margin-bottom: 20px;
+}
+
+.application-details .detail-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.application-details .status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.application-details .status-pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.application-details .status-approved {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.application-details .status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.application-details .detail-section {
+    margin-bottom: 25px;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #4facfe;
+}
+
+.application-details .detail-section h4 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.application-details .detail-section h4:before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: #4facfe;
+    margin-right: 10px;
+    border-radius: 2px;
+}
+
+.application-details .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.application-details .detail-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: top;
+}
+
+.application-details .detail-table td:first-child {
+    background: #f1f3f4;
+    font-weight: 600;
+    color: #495057;
+    width: 35%;
+    min-width: 140px;
+}
+
+.application-details .detail-table td:last-child {
+    color: #212529;
+}
+
+.application-details .detail-table tr:last-child td {
+    border-bottom: none;
+}
+
+.application-details .detail-table tr:hover {
+    background: #f8f9fa;
+}
+
+/* UTM Tracking Section Special Styling */
+.application-details .detail-section:has(h4:contains("UTM")) {
+    border-left-color: #28a745;
+}
+
+.application-details .detail-section:has(h4:contains("UTM")) h4:before {
+    background: #28a745;
+}
+
+/* Notification Status Section Special Styling */
+.application-details .detail-section:has(h4:contains("Notification")) {
+    border-left-color: #17a2b8;
+}
+
+.application-details .detail-section:has(h4:contains("Notification")) h4:before {
+    background: #17a2b8;
+}
+
+/* Status indicators for notifications */
+.application-details .detail-table span[style*="green"] {
+    background: #d4edda;
+    color: #155724;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.application-details .detail-table span[style*="#999"] {
+    background: #e9ecef;
+    color: #6c757d;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}

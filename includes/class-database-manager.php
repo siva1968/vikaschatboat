@@ -185,8 +185,12 @@ class EduBot_Database_Manager {
                 'status' => $enquiry['status'],
                 'source' => 'chatbot',
                 'created_at' => $enquiry['created_at'],
-                'ip_address' => null,
-                'user_agent' => null
+                'ip_address' => $enquiry['ip_address'] ?? null,
+                'user_agent' => $enquiry['user_agent'] ?? null,
+                'utm_data' => $enquiry['utm_data'] ?? null,
+                'whatsapp_sent' => $enquiry['whatsapp_sent'] ?? 0,
+                'email_sent' => $enquiry['email_sent'] ?? 0,
+                'sms_sent' => $enquiry['sms_sent'] ?? 0
             );
         }
         
@@ -369,7 +373,14 @@ class EduBot_Database_Manager {
                     'phone' => $enquiry['phone'] ?? '',
                     'address' => $enquiry['address'] ?? '',
                     'gender' => $enquiry['gender'] ?? ''
-                ))
+                )),
+                // Add new tracking fields
+                'ip_address' => $enquiry['ip_address'] ?? null,
+                'user_agent' => $enquiry['user_agent'] ?? null,
+                'utm_data' => $enquiry['utm_data'] ?? null,
+                'whatsapp_sent' => $enquiry['whatsapp_sent'] ?? 0,
+                'email_sent' => $enquiry['email_sent'] ?? 0,
+                'sms_sent' => $enquiry['sms_sent'] ?? 0
             );
         }
 
@@ -606,10 +617,16 @@ class EduBot_Database_Manager {
 
     /**
      * Mark notifications as sent
+     * Works with both applications and enquiries tables
      */
-    public function update_notification_status($application_id, $notification_type, $status = 1) {
+    public function update_notification_status($id, $notification_type, $status = 1, $table_type = 'enquiries') {
         global $wpdb;
-        $table = $wpdb->prefix . 'edubot_applications';
+        
+        // Determine which table to use
+        $table = ($table_type === 'applications') 
+            ? $wpdb->prefix . 'edubot_applications'
+            : $wpdb->prefix . 'edubot_enquiries';
+        
         $site_id = get_current_blog_id();
 
         $field_map = array(
@@ -625,7 +642,7 @@ class EduBot_Database_Manager {
         return $wpdb->update(
             $table,
             array($field_map[$notification_type] => $status),
-            array('id' => $application_id, 'site_id' => $site_id),
+            array('id' => $id, 'site_id' => $site_id),
             array('%d'),
             array('%d', '%d')
         );
@@ -946,5 +963,36 @@ class EduBot_Database_Manager {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Get enquiry by enquiry number
+     */
+    public function get_enquiry_by_number($enquiry_number) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_enquiries';
+        
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE enquiry_number = %s",
+            $enquiry_number
+        ), ARRAY_A);
+    }
+    
+    /**
+     * Get enquiries with notification status
+     */
+    public function get_enquiries_by_notification_status($notification_type, $status = 0, $limit = 100) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_enquiries';
+        $valid_types = array('whatsapp_sent', 'email_sent', 'sms_sent');
+        
+        if (!in_array($notification_type, $valid_types)) {
+            return array();
+        }
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE $notification_type = %d ORDER BY created_at DESC LIMIT %d",
+            $status, $limit
+        ), ARRAY_A);
     }
 }

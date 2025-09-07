@@ -37,7 +37,7 @@ if (!defined('EDUBOT_PRO_PLUGIN_DIR')) {
 
 // Database constants
 if (!defined('EDUBOT_PRO_DB_VERSION')) {
-    define('EDUBOT_PRO_DB_VERSION', '1.2.0');
+    define('EDUBOT_PRO_DB_VERSION', '1.3.0');
 }
 
 // Feature flags

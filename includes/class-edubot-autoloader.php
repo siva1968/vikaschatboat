@@ -39,6 +39,9 @@ class EduBot_Autoloader {
         'EduBot_Analytics_AJAX' => 'includes/class-analytics-ajax.php',
         'EduBot_Analytics_Migration' => 'includes/class-analytics-migration.php',
         
+        // Migration classes
+        'EduBot_Enquiries_Migration' => 'includes/class-enquiries-migration.php',
+        
         // Workflow Management (Enhanced v1.2.0)
         'EduBot_Session_Manager' => 'includes/class-edubot-session-manager.php',
         'EduBot_Workflow_Manager' => 'includes/class-edubot-workflow-manager.php',

@@ -3277,6 +3277,64 @@ class EduBot_Admin {
         if (!empty($application['ip_address'])) {
             $html .= '<tr><td><strong>IP Address:</strong></td><td>' . esc_html($application['ip_address']) . '</td></tr>';
         }
+        if (!empty($application['user_agent'])) {
+            $html .= '<tr><td><strong>Browser/Device:</strong></td><td>' . esc_html($application['user_agent']) . '</td></tr>';
+        }
+        $html .= '</table>';
+        $html .= '</div>';
+
+        // UTM Tracking Information
+        if (!empty($application['utm_data'])) {
+            $utm_data = json_decode($application['utm_data'], true);
+            if ($utm_data && is_array($utm_data)) {
+                $html .= '<div class="detail-section">';
+                $html .= '<h4>Marketing Tracking (UTM)</h4>';
+                $html .= '<table class="detail-table">';
+                
+                if (!empty($utm_data['utm_source'])) {
+                    $html .= '<tr><td><strong>Source:</strong></td><td>' . esc_html($utm_data['utm_source']) . '</td></tr>';
+                }
+                if (!empty($utm_data['utm_medium'])) {
+                    $html .= '<tr><td><strong>Medium:</strong></td><td>' . esc_html($utm_data['utm_medium']) . '</td></tr>';
+                }
+                if (!empty($utm_data['utm_campaign'])) {
+                    $html .= '<tr><td><strong>Campaign:</strong></td><td>' . esc_html($utm_data['utm_campaign']) . '</td></tr>';
+                }
+                if (!empty($utm_data['utm_term'])) {
+                    $html .= '<tr><td><strong>Term:</strong></td><td>' . esc_html($utm_data['utm_term']) . '</td></tr>';
+                }
+                if (!empty($utm_data['utm_content'])) {
+                    $html .= '<tr><td><strong>Content:</strong></td><td>' . esc_html($utm_data['utm_content']) . '</td></tr>';
+                }
+                if (!empty($utm_data['referrer'])) {
+                    $html .= '<tr><td><strong>Referrer:</strong></td><td>' . esc_html($utm_data['referrer']) . '</td></tr>';
+                }
+                
+                $html .= '</table>';
+                $html .= '</div>';
+            }
+        }
+
+        // Notification Status
+        $html .= '<div class="detail-section">';
+        $html .= '<h4>Notification Status</h4>';
+        $html .= '<table class="detail-table">';
+        
+        // Email status
+        $email_status = isset($application['email_sent']) && $application['email_sent'] ? 
+            '<span style="color: green;">✓ Sent</span>' : '<span style="color: #999;">✗ Not Sent</span>';
+        $html .= '<tr><td><strong>Email:</strong></td><td>' . $email_status . '</td></tr>';
+        
+        // WhatsApp status
+        $whatsapp_status = isset($application['whatsapp_sent']) && $application['whatsapp_sent'] ? 
+            '<span style="color: green;">✓ Sent</span>' : '<span style="color: #999;">✗ Not Sent</span>';
+        $html .= '<tr><td><strong>WhatsApp:</strong></td><td>' . $whatsapp_status . '</td></tr>';
+        
+        // SMS status
+        $sms_status = isset($application['sms_sent']) && $application['sms_sent'] ? 
+            '<span style="color: green;">✓ Sent</span>' : '<span style="color: #999;">✗ Not Sent</span>';
+        $html .= '<tr><td><strong>SMS:</strong></td><td>' . $sms_status . '</td></tr>';
+        
         $html .= '</table>';
         $html .= '</div>';
 

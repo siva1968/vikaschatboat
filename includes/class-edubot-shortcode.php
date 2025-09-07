@@ -2372,6 +2372,11 @@ class EduBot_Shortcode {
             // Create table if it doesn't exist
             $this->ensure_enquiry_table_exists();
             
+            // Capture tracking data
+            $utm_data = $this->get_utm_data();
+            $ip_address = $this->get_client_ip();
+            $user_agent = $this->get_user_agent();
+            
             $result = $wpdb->insert(
                 $table_name,
                 array(
@@ -2384,13 +2389,19 @@ class EduBot_Shortcode {
                     'parent_name' => $collected_data['parent_name'] ?? '',
                     'email' => $collected_data['email'] ?? '',
                     'phone' => $collected_data['phone'] ?? '',
+                    'ip_address' => $ip_address,
+                    'user_agent' => $user_agent,
+                    'utm_data' => wp_json_encode($utm_data),
+                    'whatsapp_sent' => 0,
+                    'email_sent' => 0,
+                    'sms_sent' => 0,
                     'address' => $collected_data['address'] ?? '',
                     'gender' => $collected_data['gender'] ?? '',
                     'created_at' => current_time('mysql'),
                     'status' => 'pending',
                     'source' => 'chatbot'
                 ),
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s')
             );
             
             if ($result === false) {
@@ -5290,6 +5301,53 @@ Reply STOP to unsubscribe");
         }
         
         return null;
+    }
+
+    /**
+     * Get UTM parameters from the current session or request
+     */
+    private function get_utm_data() {
+        $utm_data = array();
+        
+        // Check session first (preferred)
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        // UTM parameters to capture
+        $utm_params = array(
+            'utm_source', 'utm_medium', 'utm_campaign', 
+            'utm_term', 'utm_content', 'gclid', 'fbclid'
+        );
+        
+        foreach ($utm_params as $param) {
+            // Check session storage first (persists across page loads)
+            if (isset($_SESSION['edubot_' . $param])) {
+                $utm_data[$param] = sanitize_text_field($_SESSION['edubot_' . $param]);
+            }
+            // Fallback to current request
+            elseif (isset($_GET[$param])) {
+                $utm_data[$param] = sanitize_text_field($_GET[$param]);
+                // Store in session for future use
+                $_SESSION['edubot_' . $param] = $utm_data[$param];
+            }
+            // Check POST data as well
+            elseif (isset($_POST[$param])) {
+                $utm_data[$param] = sanitize_text_field($_POST[$param]);
+                $_SESSION['edubot_' . $param] = $utm_data[$param];
+            }
+        }
+        
+        // Add timestamp when UTM data was first captured
+        if (!empty($utm_data) && !isset($_SESSION['edubot_utm_captured_at'])) {
+            $_SESSION['edubot_utm_captured_at'] = current_time('mysql');
+        }
+        
+        if (isset($_SESSION['edubot_utm_captured_at'])) {
+            $utm_data['captured_at'] = $_SESSION['edubot_utm_captured_at'];
+        }
+        
+        return $utm_data;
     }
 }
 
