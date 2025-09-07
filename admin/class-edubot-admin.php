@@ -3084,7 +3084,8 @@ class EduBot_Admin {
         }
 
         $bulk_action = sanitize_text_field($_POST['bulk_action'] ?? '');
-        $application_ids = array_map('absint', $_POST['application_ids'] ?? array());
+        $application_ids = array_map('sanitize_text_field', $_POST['application_ids'] ?? array());
+        $application_ids = array_filter($application_ids); // Remove empty values
 
         if (empty($bulk_action) || empty($application_ids)) {
             wp_send_json_error('Invalid request parameters');
@@ -3135,9 +3136,9 @@ class EduBot_Admin {
             return;
         }
 
-        $application_id = absint($_POST['application_id'] ?? 0);
+        $application_id = sanitize_text_field($_POST['application_id'] ?? '');
 
-        if (!$application_id) {
+        if (empty($application_id)) {
             wp_send_json_error('Invalid application ID');
             return;
         }
@@ -3172,9 +3173,9 @@ class EduBot_Admin {
             return;
         }
 
-        $application_id = absint($_POST['application_id'] ?? 0);
+        $application_id = sanitize_text_field($_POST['application_id'] ?? '');
 
-        if (!$application_id) {
+        if (empty($application_id)) {
             wp_send_json_error('Invalid application ID');
             return;
         }
