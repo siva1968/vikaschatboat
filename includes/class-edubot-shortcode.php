@@ -4542,7 +4542,13 @@ Reply STOP to unsubscribe");
             $debug_msg = "6. Sending WhatsApp Message:\n";
             $debug_msg .= "   - Method: " . ($template_type === 'business_template' ? 'send_meta_whatsapp (Business Template)' : 'send_whatsapp (Freeform)') . "\n";
             $debug_msg .= "   - Phone: $phone\n";
-            $debug_msg .= "   - Message Data: " . json_encode($message) . "\n";
+            if ($template_type === 'business_template') {
+                $debug_msg .= "   - Template Name: " . $message_data['template_name'] . "\n";
+                $debug_msg .= "   - Template Language: " . $message_data['template_language'] . "\n";
+                $debug_msg .= "   - Template Parameters: " . json_encode($message_data['template_params']) . "\n";
+            } else {
+                $debug_msg .= "   - Message Data: " . json_encode($message) . "\n";
+            }
             file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
             
             if (!class_exists('EduBot_API_Integrations')) {
@@ -4553,7 +4559,30 @@ Reply STOP to unsubscribe");
             
             // Use the correct API method based on template type
             if ($template_type === 'business_template') {
-                $result = $api_integrations->send_meta_whatsapp($message_data);
+                // Prepare API keys array
+                $api_keys = [
+                    'whatsapp_phone_id' => get_option('edubot_whatsapp_phone_id', ''),
+                    'whatsapp_token' => get_option('edubot_whatsapp_token', '')
+                ];
+                
+                // Format message for Meta Business API
+                $formatted_message = [
+                    'type' => 'template',
+                    'template' => [
+                        'name' => $message_data['template_name'],
+                        'language' => ['code' => $message_data['template_language']],
+                        'components' => [
+                            [
+                                'type' => 'body',
+                                'parameters' => array_map(function($param) {
+                                    return ['type' => 'text', 'text' => (string)$param];
+                                }, $message_data['template_params'])
+                            ]
+                        ]
+                    ]
+                ];
+                
+                $result = $api_integrations->send_meta_whatsapp($phone, $formatted_message, $api_keys);
             } else {
                 $result = $api_integrations->send_whatsapp($phone, $message);
             }
