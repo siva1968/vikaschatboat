@@ -1215,8 +1215,11 @@ class EduBot_Shortcode {
         
         // Handle personal information collection
         $personal_info = $this->parse_personal_info($message);
+        error_log("EduBot Debug: Parsed personal info: " . print_r($personal_info, true));
+        
         $session_data = $this->get_conversation_session($session_id);
         $collected_data = $session_data ? $session_data['data'] : array();
+        error_log("EduBot Debug: Current collected data: " . print_r($collected_data, true));
         
         // Check if this looks like personal info input
         if (!empty($personal_info) && (
@@ -1229,6 +1232,16 @@ class EduBot_Shortcode {
             empty($collected_data['email']) || 
             empty($collected_data['phone'])
         )) {
+            
+            error_log("EduBot Debug: Processing personal information input");
+            
+            // Initialize admission session if not already initialized
+            if (!$session_data || empty($session_data['flow_type'])) {
+                error_log("EduBot Debug: Initializing admission session for personal info collection");
+                $this->init_conversation_session($session_id, 'admission');
+                $session_data = $this->get_conversation_session($session_id);
+                $collected_data = $session_data ? $session_data['data'] : array();
+            }
             
             // Store original session state to check if name was already present
             $had_name_before = !empty($collected_data['student_name']);
@@ -1376,6 +1389,13 @@ class EduBot_Shortcode {
             strlen(trim($message)) <= 20) {
             
             error_log("EduBot: Detected simple name input: {$message}");
+            
+            // Initialize admission session if not already initialized
+            $session_data = $this->get_conversation_session($session_id);
+            if (!$session_data || empty($session_data['flow_type'])) {
+                error_log("EduBot Debug: Initializing admission session for simple name input");
+                $this->init_conversation_session($session_id, 'admission');
+            }
             
             // Treat this as student name and start admission flow
             $this->update_conversation_data($session_id, 'student_name', ucwords(strtolower(trim($message))));
