@@ -2706,7 +2706,7 @@ class EduBot_Shortcode {
      */
     private function send_school_whatsapp_template($phone, $collected_data, $enquiry_number, $school_name) {
         try {
-            $template_name = get_option('edubot_school_whatsapp_template_name', 'school_notification');
+            $template_name = get_option('edubot_school_whatsapp_template_name', 'edubot_school_whatsapp_template_name_');
             $template_language = get_option('edubot_school_whatsapp_template_language', 'en');
             
             // Prepare template parameters for school notification
@@ -2728,13 +2728,30 @@ class EduBot_Shortcode {
             
             $api_integrations = new EduBot_API_Integrations();
             
-            $message_data = [
-                'template_name' => $template_name,
-                'template_language' => $template_language,
-                'template_params' => $template_params
+            // Prepare API keys array
+            $api_keys = [
+                'whatsapp_phone_id' => get_option('edubot_whatsapp_phone_id', ''),
+                'whatsapp_token' => get_option('edubot_whatsapp_token', '')
             ];
             
-            $result = $api_integrations->send_meta_whatsapp($phone, $message_data);
+            // Format message for Meta Business API
+            $formatted_message = [
+                'type' => 'template',
+                'template' => [
+                    'name' => $template_name,
+                    'language' => ['code' => $template_language],
+                    'components' => [
+                        [
+                            'type' => 'body',
+                            'parameters' => array_map(function($param) {
+                                return ['type' => 'text', 'text' => (string)$param];
+                            }, $template_params)
+                        ]
+                    ]
+                ]
+            ];
+            
+            $result = $api_integrations->send_meta_whatsapp($phone, $formatted_message, $api_keys);
             
             if ($result && isset($result['success']) && $result['success']) {
                 error_log("EduBot: School WhatsApp template notification sent successfully to {$phone}");
@@ -2794,7 +2811,7 @@ class EduBot_Shortcode {
             }
             
             $api_integrations = new EduBot_API_Integrations();
-            $result = $api_integrations->send_whatsapp_message($phone, $message);
+            $result = $api_integrations->send_whatsapp($phone, $message);
             
             if ($result && !is_wp_error($result)) {
                 error_log("EduBot: School WhatsApp freeform notification sent successfully to {$phone}");

@@ -277,7 +277,7 @@ Reply STOP to unsubscribe";
                     <tr>
                         <th scope="row">School WhatsApp Template Name</th>
                         <td>
-                            <input type="text" name="edubot_school_whatsapp_template_name" value="<?php echo esc_attr(get_option('edubot_school_whatsapp_template_name', 'school_notification')); ?>" class="regular-text" />
+                            <input type="text" name="edubot_school_whatsapp_template_name" value="<?php echo esc_attr(get_option('edubot_school_whatsapp_template_name', 'edubot_school_whatsapp_template_name_')); ?>" class="regular-text" />
                             <p class="description">Template name for school notifications (only required for Business API Templates)</p>
                         </td>
                     </tr>
