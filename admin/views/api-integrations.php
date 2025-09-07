@@ -152,12 +152,58 @@ if (!empty($encrypted_email_api_key)) {
                         <th scope="row">Access Token</th>
                         <td>
                             <input type="password" name="whatsapp_token" value="<?php echo esc_attr(get_option('edubot_whatsapp_token', '')); ?>" class="regular-text" />
+                            <p class="description">For Meta: Permanent Access Token | For Twilio: Account SID:Auth Token</p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row">Phone Number ID</th>
                         <td>
                             <input type="text" name="whatsapp_phone_id" value="<?php echo esc_attr(get_option('edubot_whatsapp_phone_id', '')); ?>" class="regular-text" />
+                            <p class="description">For Meta: Phone Number ID | For Twilio: WhatsApp Number (e.g., +14155238886)</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <h3>📋 WhatsApp Business API Template Settings</h3>
+                <div class="notice notice-info inline">
+                    <p><strong>Important:</strong> WhatsApp Business API requires pre-approved templates for production messaging. Configure your approved template details below.</p>
+                </div>
+                
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Use Templates</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="whatsapp_use_templates" value="1" <?php checked(get_option('edubot_whatsapp_use_templates', 0), 1); ?> />
+                                Enable WhatsApp Business API Templates (Required for Production)
+                            </label>
+                            <p class="description">Disable only for sandbox testing. Production WhatsApp Business API requires approved templates.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Template Namespace</th>
+                        <td>
+                            <input type="text" name="whatsapp_template_namespace" value="<?php echo esc_attr(get_option('edubot_whatsapp_template_namespace', '')); ?>" class="regular-text" placeholder="your_business_namespace" />
+                            <p class="description">Your WhatsApp Business namespace (found in Meta Business Manager)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Template Name</th>
+                        <td>
+                            <input type="text" name="whatsapp_template_name" value="<?php echo esc_attr(get_option('edubot_whatsapp_template_name', '')); ?>" class="regular-text" placeholder="admission_confirmation" />
+                            <p class="description">Name of your approved admission confirmation template</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Template Language</th>
+                        <td>
+                            <select name="whatsapp_template_language">
+                                <option value="en" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'en'); ?>>English (en)</option>
+                                <option value="hi" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'hi'); ?>>Hindi (hi)</option>
+                                <option value="en_US" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'en_US'); ?>>English US (en_US)</option>
+                                <option value="en_GB" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'en_GB'); ?>>English UK (en_GB)</option>
+                            </select>
+                            <p class="description">Language of your approved template</p>
                         </td>
                     </tr>
                 </table>

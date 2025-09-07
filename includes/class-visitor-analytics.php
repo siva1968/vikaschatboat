@@ -177,28 +177,68 @@ class EduBot_Visitor_Analytics {
     }
 
     /**
-     * Capture marketing parameters from URL
+     * Capture marketing parameters from URL - Enterprise Enhanced
      */
     private function capture_marketing_parameters() {
         $marketing_params = array();
         
-        // Common marketing parameters
+        // Standard UTM parameters
         $utm_params = array(
-            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-            'gclid', 'fbclid', 'msclkid', 'ref', 'referrer'
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'
         );
         
-        foreach ($utm_params as $param) {
+        // Platform-specific click IDs
+        $click_ids = array(
+            'gclid',    // Google Ads
+            'fbclid',   // Facebook Ads
+            'msclkid',  // Microsoft Ads (Bing)
+            'ttclid',   // TikTok Ads
+            'li_fat_id', // LinkedIn Ads
+            'twclid',   // Twitter Ads
+            'igshid',   // Instagram
+            'yclid',    // Yandex
+            'wbraid',   // Google Ads enhanced conversions
+            'gbraid'    // Google Ads privacy sandbox
+        );
+        
+        // Custom parameters (configurable)
+        $custom_params = array(
+            'ref', 'referrer', 'source', 'medium', 'campaign', 'ad_group', 
+            'keyword', 'placement', 'creative', 'target', 'adset',
+            'affiliate', 'partner', 'promo', 'discount', 'coupon'
+        );
+        
+        // Capture all parameter types
+        $all_params = array_merge($utm_params, $click_ids, $custom_params);
+        
+        foreach ($all_params as $param) {
             if (isset($_GET[$param]) && !empty($_GET[$param])) {
                 $marketing_params[$param] = sanitize_text_field($_GET[$param]);
             }
         }
         
-        // Capture referrer
+        // Enhanced referrer analysis
         if (!empty($_SERVER['HTTP_REFERER'])) {
-            $marketing_params['http_referrer'] = esc_url_raw($_SERVER['HTTP_REFERER']);
-            $marketing_params['referrer_domain'] = parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST);
+            $referrer_url = esc_url_raw($_SERVER['HTTP_REFERER']);
+            $referrer_domain = parse_url($referrer_url, PHP_URL_HOST);
+            
+            $marketing_params['http_referrer'] = $referrer_url;
+            $marketing_params['referrer_domain'] = $referrer_domain;
+            
+            // Classify referrer source
+            $marketing_params['referrer_type'] = $this->classify_referrer_source($referrer_domain);
         }
+        
+        // Add advanced browser fingerprinting
+        $marketing_params['browser_fingerprint'] = $this->generate_browser_fingerprint();
+        
+        // Landing page context
+        $marketing_params['landing_page'] = esc_url_raw($_SERVER['REQUEST_URI']);
+        $marketing_params['landing_page_title'] = get_the_title();
+        
+        // Capture timestamp with timezone
+        $marketing_params['capture_timestamp'] = current_time('mysql');
+        $marketing_params['capture_timezone'] = get_option('timezone_string', 'UTC');
         
         // Store marketing parameters if any exist
         if (!empty($marketing_params)) {
@@ -555,6 +595,250 @@ class EduBot_Visitor_Analytics {
      */
     public function cleanup_old_analytics() {
         self::cleanup_old_analytics_static();
+    }
+    
+    /**
+     * Get conversion attribution summary for dashboard
+     */
+    public function get_conversion_attribution_summary($date_range = 30) {
+        global $wpdb;
+        
+        $date_from = date('Y-m-d', strtotime("-{$date_range} days"));
+        $site_id = get_current_blog_id();
+        
+        // Get total conversions with attribution
+        $total_conversions = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$this->table_name} 
+             WHERE site_id = %d AND event_type = 'application_converted' AND timestamp >= %s",
+            $site_id, $date_from
+        ));
+        
+        // Get conversions by source (first-touch attribution)
+        $conversions_by_source = $wpdb->get_results($wpdb->prepare(
+            "SELECT 
+                JSON_UNQUOTE(JSON_EXTRACT(event_data, '$.first_touch_source')) as source,
+                COUNT(*) as conversions,
+                AVG(CAST(JSON_UNQUOTE(JSON_EXTRACT(event_data, '$.conversion_time_minutes')) AS UNSIGNED)) as avg_time
+             FROM {$this->table_name}
+             WHERE site_id = %d AND event_type = 'application_converted' AND timestamp >= %s
+             GROUP BY source
+             ORDER BY conversions DESC",
+            $site_id, $date_from
+        ), ARRAY_A);
+        
+        // Get attribution model comparison (first vs last touch)
+        $attribution_comparison = $wpdb->get_results($wpdb->prepare(
+            "SELECT 
+                JSON_UNQUOTE(JSON_EXTRACT(event_data, '$.first_touch_source')) as first_touch,
+                JSON_UNQUOTE(JSON_EXTRACT(event_data, '$.last_touch_source')) as last_touch,
+                COUNT(*) as count
+             FROM {$this->table_name}
+             WHERE site_id = %d AND event_type = 'application_converted' AND timestamp >= %s
+             GROUP BY first_touch, last_touch
+             ORDER BY count DESC
+             LIMIT 10",
+            $site_id, $date_from
+        ), ARRAY_A);
+        
+        return array(
+            'total_conversions' => $total_conversions,
+            'conversions_by_source' => $conversions_by_source,
+            'attribution_comparison' => $attribution_comparison,
+            'date_range' => $date_range
+        );
+    }
+    
+    /**
+     * Classify referrer source type
+     */
+    private function classify_referrer_source($domain) {
+        if (empty($domain)) return 'direct';
+        
+        // Search engines
+        $search_engines = ['google.', 'bing.', 'yahoo.', 'duckduckgo.', 'yandex.', 'baidu.'];
+        foreach ($search_engines as $engine) {
+            if (strpos($domain, $engine) !== false) return 'search';
+        }
+        
+        // Social media platforms
+        $social_platforms = [
+            'facebook.', 'instagram.', 'twitter.', 'linkedin.', 'tiktok.', 
+            'youtube.', 'snapchat.', 'pinterest.', 'reddit.', 'whatsapp.'
+        ];
+        foreach ($social_platforms as $platform) {
+            if (strpos($domain, $platform) !== false) return 'social';
+        }
+        
+        // Email platforms
+        $email_platforms = ['gmail.', 'outlook.', 'yahoo.', 'mail.'];
+        foreach ($email_platforms as $platform) {
+            if (strpos($domain, $platform) !== false) return 'email';
+        }
+        
+        return 'referral';
+    }
+    
+    /**
+     * Generate advanced browser fingerprint
+     */
+    private function generate_browser_fingerprint() {
+        $fingerprint_data = array(
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+            'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
+            'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '',
+            'ip_address' => $this->get_client_ip(),
+            'date' => date('Y-m-d') // Same day grouping
+        );
+        
+        return md5(serialize($fingerprint_data));
+    }
+    
+    /**
+     * Store attribution data with business contact linking
+     */
+    public function link_attribution_to_contact($phone = '', $email = '') {
+        $visitor_id = isset($_COOKIE['edubot_visitor_id']) ? sanitize_text_field($_COOKIE['edubot_visitor_id']) : '';
+        
+        if (empty($visitor_id)) return;
+        
+        global $wpdb;
+        
+        // Update visitor record with business contact information
+        $update_data = array();
+        if (!empty($phone)) $update_data['phone'] = sanitize_text_field($phone);
+        if (!empty($email)) $update_data['email'] = sanitize_email($email);
+        
+        if (!empty($update_data)) {
+            $wpdb->update(
+                $this->visitor_table,
+                $update_data,
+                array('visitor_id' => $visitor_id),
+                array('%s'),
+                array('%s')
+            );
+            
+            // Log the contact linking event
+            $session_id = isset($_COOKIE['edubot_session_id']) ? sanitize_text_field($_COOKIE['edubot_session_id']) : '';
+            $this->log_analytics_event('contact_linked', array(
+                'phone' => $phone,
+                'email' => $email,
+                'linked_timestamp' => current_time('mysql')
+            ), $visitor_id, $session_id);
+        }
+    }
+    
+    /**
+     * Get attribution data for a contact (phone or email)
+     */
+    public function get_contact_attribution($phone = '', $email = '') {
+        global $wpdb;
+        
+        $where_clause = array();
+        $where_values = array();
+        
+        if (!empty($phone)) {
+            $where_clause[] = "phone = %s";
+            $where_values[] = sanitize_text_field($phone);
+        }
+        
+        if (!empty($email)) {
+            $where_clause[] = "email = %s";  
+            $where_values[] = sanitize_email($email);
+        }
+        
+        if (empty($where_clause)) return null;
+        
+        $query = "SELECT v.*, va.event_data as marketing_data 
+                  FROM {$this->visitor_table} v
+                  LEFT JOIN {$this->table_name} va ON v.visitor_id = va.visitor_id 
+                  WHERE (" . implode(' OR ', $where_clause) . ")
+                  AND va.event_type = 'marketing_params_captured'
+                  ORDER BY v.first_visit ASC, va.timestamp ASC";
+        
+        return $wpdb->get_results($wpdb->prepare($query, $where_values));
+    }
+    
+    /**
+     * Enhanced application conversion tracking with full attribution
+     */
+    public function track_enhanced_application_conversion($application_data) {
+        $visitor_id = isset($_COOKIE['edubot_visitor_id']) ? sanitize_text_field($_COOKIE['edubot_visitor_id']) : '';
+        $session_id = isset($_COOKIE['edubot_session_id']) ? sanitize_text_field($_COOKIE['edubot_session_id']) : '';
+        
+        if (empty($visitor_id)) return;
+        
+        // Link attribution to contact information
+        $phone = isset($application_data['phone']) ? $application_data['phone'] : '';
+        $email = isset($application_data['email']) ? $application_data['email'] : '';
+        
+        if (!empty($phone) || !empty($email)) {
+            $this->link_attribution_to_contact($phone, $email);
+        }
+        
+        // Get full attribution journey
+        $attribution_journey = $this->get_visitor_journey($visitor_id);
+        
+        // Track the conversion with complete attribution data
+        $this->log_analytics_event('application_converted', array(
+            'application_id' => $application_data['application_id'] ?? '',
+            'application_number' => $application_data['application_number'] ?? '',
+            'student_name' => $application_data['student_name'] ?? '',
+            'grade' => $application_data['grade'] ?? '',
+            'phone' => $phone,
+            'email' => $email,
+            'conversion_value' => 1, // Each application has value of 1
+            'conversion_time_minutes' => $this->calculate_conversion_time($session_id),
+            'attribution_journey' => json_encode($attribution_journey),
+            'first_touch_source' => $attribution_journey['first_touch']['utm_source'] ?? 'direct',
+            'last_touch_source' => $attribution_journey['last_touch']['utm_source'] ?? 'direct',
+            'conversion_timestamp' => current_time('mysql')
+        ), $visitor_id, $session_id);
+        
+        error_log('EduBot Attribution: Application converted with full tracking - ' . 
+                 ($application_data['application_number'] ?? 'Unknown'));
+    }
+    
+    /**
+     * Get complete visitor journey for attribution analysis
+     */
+    private function get_visitor_journey($visitor_id) {
+        global $wpdb;
+        
+        // Get all marketing touchpoints for this visitor
+        $touchpoints = $wpdb->get_results($wpdb->prepare(
+            "SELECT event_data, timestamp FROM {$this->table_name} 
+             WHERE visitor_id = %s 
+             AND event_type = 'marketing_params_captured'
+             ORDER BY timestamp ASC",
+            $visitor_id
+        ));
+        
+        $journey = array(
+            'first_touch' => null,
+            'last_touch' => null,
+            'all_touchpoints' => array(),
+            'total_touchpoints' => 0
+        );
+        
+        if (!empty($touchpoints)) {
+            $journey['total_touchpoints'] = count($touchpoints);
+            
+            foreach ($touchpoints as $touchpoint) {
+                $data = json_decode($touchpoint->event_data, true);
+                $marketing_data = isset($data['marketing_data']) ? $data['marketing_data'] : array();
+                
+                $journey['all_touchpoints'][] = array(
+                    'timestamp' => $touchpoint->timestamp,
+                    'marketing_data' => $marketing_data
+                );
+            }
+            
+            // Set first and last touch
+            $journey['first_touch'] = $journey['all_touchpoints'][0]['marketing_data'] ?? array();
+            $journey['last_touch'] = end($journey['all_touchpoints'])['marketing_data'] ?? array();
+        }
+        
+        return $journey;
     }
 }
 

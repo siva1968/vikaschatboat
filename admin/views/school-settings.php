@@ -129,6 +129,124 @@ if (!defined('ABSPATH')) {
             </div>
 
             <div class="edubot-card">
+                <h2>Notification Settings</h2>
+                <p class="description">Configure how parents receive admission enquiry confirmations</p>
+                
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Email Notifications</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="edubot_email_notifications" value="1" <?php checked(get_option('edubot_email_notifications', 1)); ?> />
+                                Send email confirmations to parents
+                            </label>
+                            <p class="description">Parents will receive HTML email confirmations with enquiry details</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WhatsApp Notifications</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="edubot_whatsapp_notifications" value="1" <?php checked(get_option('edubot_whatsapp_notifications', 0)); ?> />
+                                Send WhatsApp confirmations to parents
+                            </label>
+                            <p class="description">
+                                Parents will receive WhatsApp messages with enquiry confirmation. 
+                                <strong>Note:</strong> You must configure WhatsApp API settings in 
+                                <a href="<?php echo admin_url('admin.php?page=edubot-api-settings'); ?>">API Integrations</a> first.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">School Notifications</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="edubot_school_notifications" value="1" <?php checked(get_option('edubot_school_notifications', 1)); ?> />
+                                Send email notifications to school admission team
+                            </label>
+                            <p class="description">School will receive detailed enquiry notifications with all submitted information</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WhatsApp Template Type</th>
+                        <td>
+                            <select name="edubot_whatsapp_template_type">
+                                <option value="freeform" <?php selected(get_option('edubot_whatsapp_template_type', 'freeform'), 'freeform'); ?>>Free-form Message</option>
+                                <option value="business_template" <?php selected(get_option('edubot_whatsapp_template_type', 'freeform'), 'business_template'); ?>>Business API Template</option>
+                            </select>
+                            <p class="description">Choose how WhatsApp messages are sent. Business API templates require pre-approval from Meta/Facebook.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WhatsApp Template Name</th>
+                        <td>
+                            <input type="text" name="edubot_whatsapp_template_name" value="<?php echo esc_attr(get_option('edubot_whatsapp_template_name', 'admission_confirmation')); ?>" class="regular-text" />
+                            <p class="description">Template name registered with WhatsApp Business API (only required for Business API Templates)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WhatsApp Template Language</th>
+                        <td>
+                            <select name="edubot_whatsapp_template_language">
+                                <option value="en" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'en'); ?>>English</option>
+                                <option value="hi" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'hi'); ?>>Hindi</option>
+                                <option value="te" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'te'); ?>>Telugu</option>
+                                <option value="ta" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'ta'); ?>>Tamil</option>
+                                <option value="kn" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'kn'); ?>>Kannada</option>
+                                <option value="ml" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'ml'); ?>>Malayalam</option>
+                                <option value="bn" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'bn'); ?>>Bengali</option>
+                                <option value="gu" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'gu'); ?>>Gujarati</option>
+                                <option value="mr" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'mr'); ?>>Marathi</option>
+                                <option value="pa" <?php selected(get_option('edubot_whatsapp_template_language', 'en'), 'pa'); ?>>Punjabi</option>
+                            </select>
+                            <p class="description">Template language code for WhatsApp Business API</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WhatsApp Message Template</th>
+                        <td>
+                            <textarea name="edubot_whatsapp_template" rows="12" cols="80" class="large-text" placeholder="Enter your WhatsApp message template..."><?php 
+                            $default_template = "Admission Enquiry Confirmation
+Dear {parent_name},
+
+Thank you for your enquiry at {school_name}. Your enquiry number is {enquiry_number} for Grade {grade}.
+
+We have received your application on {submission_date} and will contact you within 24-48 hours with the next steps.
+
+Best regards,
+Admissions Team
+Reply STOP to unsubscribe";
+                            echo esc_textarea(get_option('edubot_whatsapp_template', $default_template)); 
+                            ?></textarea>
+                            <p class="description">
+                                <strong>Available placeholders (Free-form):</strong> {school_name}, {parent_name}, {student_name}, {enquiry_number}, {grade}, {board}, {academic_year}, {submission_date}, {phone}, {email}<br>
+                                <strong>For Free-form:</strong> Use *text* for bold, _text_ for italic, ```code``` for monospace<br>
+                                <strong>For Business API Template:</strong> Parameters are sent in order: {{1}}=Parent Name, {{2}}=Enquiry Number, {{3}}=School Name, {{4}}=Grade, {{5}}=Submission Date<br>
+                                <strong>Your Template Format:</strong> admission_confirmation template with Header, Body ({{1}}-{{5}} parameters), Footer<br>
+                                <br>
+                                <strong>Template Parameter Order for Business API:</strong><br>
+                                1: {school_name}, 2: {parent_name}, 3: {student_name}, 4: {enquiry_number}, 
+                                5: {grade}, 6: {board}, 7: {academic_year}, 8: {submission_date}
+                            </p>
+                            <div style="background: #f0f8ff; border: 1px solid #0073aa; padding: 15px; border-radius: 5px; margin-top: 10px;">
+                                <strong>📋 WhatsApp Business Template Setup Guide:</strong><br><br>
+                                <strong>For Meta WhatsApp Business:</strong><br>
+                                1. Create template in Meta Business Manager<br>
+                                2. Get template approval from Facebook<br>
+                                3. Use approved template name in "Template Name" field<br>
+                                4. Select correct language code<br><br>
+                                <strong>For Twilio:</strong><br>
+                                1. Create Content Template in Twilio Console<br>
+                                2. Get Content SID after approval<br>
+                                3. Use Content SID in "Template Name" field<br><br>
+                                <strong>⚠️ Important:</strong> Business API templates require pre-approval and can only be sent to opted-in users.
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="edubot-card">
                 <h2>Educational Boards Configuration</h2>
                 <p class="description">Configure the educational boards your school offers. Students can select their preferred board during application.</p>
                 

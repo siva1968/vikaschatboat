@@ -80,7 +80,9 @@ class EduBot_Shortcode {
                         'new_application' => __('New Application', 'edubot-pro'),
                         'school_info' => __('School Information', 'edubot-pro'),
                         'contact_info' => __('Contact Information', 'edubot-pro'),
-                        'admission' => __('Admission', 'edubot-pro')
+                        'admission' => __('Admission', 'edubot-pro'),
+                        'school_visit' => __('School Visit', 'edubot-pro'),
+                        'other_info' => __('Any Other Information', 'edubot-pro')
                     )
                 )
             );
@@ -89,7 +91,7 @@ class EduBot_Shortcode {
     
     public function render_chatbot($atts) {
         // Set the new welcome message format
-        $new_welcome_message = "Hello! Welcome to Epistemo Vikas Leadership School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
+        $new_welcome_message = "Hello! Welcome to Epistemo Vikas Leadership School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Fee Details\n3. Curriculum & Classes\n4. Facilities\n5. Contact / Visit School\n6. Online Enquiry Form";
         
         // Get configured welcome message or use new default
         $school_config = EduBot_School_Config::getInstance();
@@ -108,19 +110,10 @@ class EduBot_Shortcode {
         $config = $school_config->get_config();
         $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
         
-        // Force your database colors - Updated for your specific colors
         $colors = array(
-            'primary' => '#74a211',   // Your green primary color from database
-            'secondary' => '#113b02'  // Your dark green secondary color from database
+            'primary' => isset($config['school_info']['colors']['primary']) ? $config['school_info']['colors']['primary'] : get_option('edubot_primary_color', '#4facfe'),
+            'secondary' => isset($config['school_info']['colors']['secondary']) ? $config['school_info']['colors']['secondary'] : get_option('edubot_secondary_color', '#00f2fe')
         );
-        
-        // Fallback to config/options only if not set above
-        if (empty($colors['primary'])) {
-            $colors['primary'] = isset($config['school_info']['colors']['primary']) ? $config['school_info']['colors']['primary'] : get_option('edubot_primary_color', '#4facfe');
-        }
-        if (empty($colors['secondary'])) {
-            $colors['secondary'] = isset($config['school_info']['colors']['secondary']) ? $config['school_info']['colors']['secondary'] : get_option('edubot_secondary_color', '#00f2fe');
-        }
         
         ob_start();
         ?>
@@ -166,10 +159,11 @@ class EduBot_Shortcode {
                             <p><?php echo esc_html($atts['welcome_message']); ?></p>
                             <div class="quick-actions">
                                 <button class="quick-action" data-action="admission">1. Admission Enquiry</button>
-                                <button class="quick-action" data-action="curriculum">2. Curriculum & Classes</button>
-                                <button class="quick-action" data-action="facilities">3. Facilities</button>
-                                <button class="quick-action" data-action="contact_visit">4. Contact / Visit School</button>
-                                <button class="quick-action" data-action="online_enquiry">5. Online Enquiry Form</button>
+                                <button class="quick-action" data-action="fee_details">2. Fee Details</button>
+                                <button class="quick-action" data-action="curriculum">3. Curriculum & Classes</button>
+                                <button class="quick-action" data-action="facilities">4. Facilities</button>
+                                <button class="quick-action" data-action="contact_visit">5. Contact / Visit School</button>
+                                <button class="quick-action" data-action="online_enquiry">6. Online Enquiry Form</button>
                             </div>
                         </div>
                     </div>
@@ -330,25 +324,18 @@ class EduBot_Shortcode {
             flex-direction: column;
             gap: 5px;
         }
-        .edubot-chatbot .quick-action,
         .quick-action {
-            background: <?php echo esc_attr($colors['primary']); ?> !important;
-            border: 1px solid <?php echo esc_attr($colors['primary']); ?> !important;
-            border-radius: 6px !important;
-            padding: 10px 15px !important;
-            font-size: 13px !important;
-            font-weight: 500 !important;
-            cursor: pointer !important;
-            text-align: left !important;
-            color: white !important;
-            transition: all 0.3s ease !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.2s;
         }
-        .edubot-chatbot .quick-action:hover,
         .quick-action:hover {
-            background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+            background: #e9ecef;
         }
         .chat-input-area {
             padding: 20px;
@@ -708,7 +695,16 @@ class EduBot_Shortcode {
                     <textarea id="address" name="address" rows="3" required></textarea>
                 </div>
                 
-                <!-- Previous school fields removed for streamlined admission process -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="previous_school">Previous School</label>
+                        <input type="text" id="previous_school" name="previous_school">
+                    </div>
+                    <div class="form-group">
+                        <label for="transfer_reason">Reason for Transfer</label>
+                        <input type="text" id="transfer_reason" name="transfer_reason">
+                    </div>
+                </div>
                 
                 <div class="form-group">
                     <label for="special_requirements">Special Requirements/Medical Conditions</label>
@@ -916,60 +912,68 @@ class EduBot_Shortcode {
      * Handle chatbot response with enhanced security
      */
     public function handle_chatbot_response() {
-        // Simplified nonce verification - more forgiving for development
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_nonce')) {
-            error_log('EduBot: Nonce verification failed');
-            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page.'));
-            return;
+        // Enhanced nonce verification
+        if (!check_ajax_referer('edubot_nonce', 'nonce', false)) {
+            $this->log_security_violation('invalid_nonce_chatbot', array(
+                'ip' => $this->get_client_ip(),
+                'user_agent' => $this->get_user_agent()
+            ));
+            wp_send_json_error(array('message' => 'Security verification failed. Please refresh the page.'));
         }
 
-        // Input sanitization
-        $message = sanitize_text_field($_POST['message'] ?? '');
-        $action_type = sanitize_text_field($_POST['action_type'] ?? '');
-        $session_id = sanitize_text_field($_POST['session_id'] ?? '');
+        // Rate limiting - more lenient for development/testing
+        $security_manager = new EduBot_Security_Manager();
+        $client_ip = $this->get_client_ip();
         
-        // Generate session ID if not provided
-        if (empty($session_id)) {
-            $session_id = wp_generate_uuid4();
+        // Temporarily disable rate limiting for development
+        // if (!$security_manager->check_rate_limit('chatbot_response_' . md5($client_ip), 20, 900)) {
+        //     $security_manager->log_security_event('rate_limit_exceeded_chatbot', array(
+        //         'ip' => $client_ip,
+        //         'endpoint' => 'chatbot_response'
+        //     ));
+        //     wp_send_json_error(array('message' => 'Too many requests. Please wait a moment before trying again.'));
+        // }
+
+        // Input validation and sanitization
+        $message = isset($_POST['message']) ? sanitize_text_field($_POST['message']) : '';
+        $action_type = isset($_POST['action_type']) ? sanitize_text_field($_POST['action_type']) : '';
+        $session_id = isset($_POST['session_id']) ? sanitize_text_field($_POST['session_id']) : '';
+        
+        // Validate message length
+        if (!empty($message) && strlen($message) > 500) {
+            wp_send_json_error(array('message' => 'Message too long. Please keep it under 500 characters.'));
+        }
+
+        // Security content filtering - temporarily disabled for testing
+        // if (!empty($message) && $security_manager->is_malicious_content($message)) {
+        //     $security_manager->log_security_event('malicious_content_chatbot_shortcode', array(
+        //         'message' => substr($message, 0, 100),
+        //         'ip' => $client_ip
+        //     ));
+        //     wp_send_json_error(array('message' => 'Your message contains invalid content. Please rephrase your question.'));
+        // }
+
+        // Validate action parameter
+        $allowed_actions = array('admission', 'fee_details', 'curriculum', 'facilities', 'contact_visit', 'school_visit', 'other_info', 'online_enquiry');
+        if (!empty($action_type) && !in_array($action_type, $allowed_actions)) {
+            wp_send_json_error(array('message' => 'Invalid action specified.'));
         }
         
-        // Basic validation
         if (empty($message) && empty($action_type)) {
             wp_send_json_error(array('message' => 'Please provide a message or select an action.'));
-            return;
         }
         
         try {
-            error_log("EduBot: Processing request - Message: '{$message}' | Action: '{$action_type}' | Session: '{$session_id}'");
+            $response = $this->generate_response($message, $action_type, $session_id);
             
-            // Use the restored AI-powered conversation handler
-            $response = $this->handle_admission_flow_safe($message, $action_type, $session_id);
-            
-            // Ensure response is in the correct format expected by JavaScript
-            if (is_array($response)) {
-                // Convert old 'response' key to 'message' for compatibility
-                if (isset($response['response'])) {
-                    $response['message'] = $response['response'];
-                    unset($response['response']);
-                }
-                wp_send_json_success(array(
-                    'message' => $response['message'] ?? 'Thank you for your message!',
-                    'action' => $response['action'] ?? 'info',
-                    'session_data' => $response['session_data'] ?? array(),
-                    'session_id' => $session_id
-                ));
-            } else {
-                // Handle string responses
-                wp_send_json_success(array(
-                    'message' => is_string($response) ? $response : 'Thank you for your message!',
-                    'action' => 'info',
-                    'session_data' => array(),
-                    'session_id' => $session_id
-                ));
-            }
+            wp_send_json_success(array(
+                'message' => esc_html($response),
+                'session_id' => $session_id,
+                'timestamp' => current_time('c')
+            ));
         } catch (Exception $e) {
-            error_log('EduBot Error: ' . $e->getMessage());
-            wp_send_json_error(array('message' => 'Sorry, there was an error. Please try again.'));
+            error_log('EduBot Shortcode: Error generating response - ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Sorry, there was an error processing your request. Please try again.'));
         }
     }
     
@@ -982,544 +986,184 @@ class EduBot_Shortcode {
                 $session_id = 'sess_' . uniqid();
             }
             
-            // Handle quick actions FIRST (even for completed sessions - user wants to start new flow)
+            // Handle quick actions first
             if (!empty($action_type)) {
                 error_log('EduBot Debug: Processing quick action: ' . $action_type);
-                
-                // If user clicks quick action after completing enquiry, create fresh session
-                if (!empty($session_id) && $this->is_session_completed($session_id)) {
-                    $session_id = 'sess_' . uniqid();  // Create fresh session
-                    error_log('EduBot Debug: Created fresh session for new quick action: ' . $session_id);
-                }
-                
                 $settings = get_option('edubot_pro_settings', array());
-                $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+                $school_config = EduBot_School_Config::getInstance();
+                $config = $school_config->get_config();
+                $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
             
             switch ($action_type) {
                 case 'admission':
                     // Initialize session for admission flow
                     $this->init_conversation_session($session_id, 'admission');
-                    return array(
-                        'response' => "🎓 **Welcome to {$school_name} Admission Process!**\n\n" .
-                                   "I'm here to help you with the admission enquiry process. Let me collect some basic information to get started.\n\n" .
-                                   "📝 **Please tell me your child's full name:**",
-                        'action' => 'collect_name',
-                        'session_data' => array('step' => 'collect_name', 'flow_type' => 'admission')
-                    );
+                    // Use direct intelligent fallback instead of complex engine
+                    return $this->provide_intelligent_fallback('admission', 'admission', $session_id);
                 
-
+                case 'fee_details':
+                    return "💰 **Fee Information for {$school_name}**\n\n" .
+                           "Our fee structure is designed to be transparent and value-driven:\n\n" .
+                           "📋 **What's Included:**\n" .
+                           "• Tuition and academic programs\n" .
+                           "• Learning materials and resources\n" .
+                           "• Extracurricular activities\n" .
+                           "• Infrastructure and facilities\n\n" .
+                           "💳 **Payment Options:**\n" .
+                           "• Annual payment with discounts\n" .
+                           "• Quarterly installments\n" .
+                           "• Monthly payment plans\n\n" .
+                           "🎓 **Scholarships Available:**\n" .
+                           "• Merit-based scholarships\n" .
+                           "• Need-based financial assistance\n\n" .
+                           "For detailed fee structure by grade, contact our admissions team:\n" .
+                           "📞 Call for personalized fee consultation\n" .
+                           "📧 Email for detailed fee brochure\n\n" .
+                           "Would you like me to connect you with our admissions counselor?";
+                
                 case 'curriculum':
-                    return array(
-                        'response' => "📚 **Academic Programs & Curriculum at {$school_name}**\n\n" .
-                                   "🎯 **Our Academic Approach:**\n" .
-                                   "• Student-centered learning methodology\n" .
-                                   "• Integrated curriculum design\n" .
-                                   "• Critical thinking and problem-solving focus\n" .
-                                   "• Technology-enhanced education\n\n" .
-                                   "📖 **Curriculum Boards:**\n" .
-                                   "• CBSE (Central Board of Secondary Education)\n" .
-                                   "• CAIE (Cambridge Assessment International Education)\n\n" .
-                                   "🏫 **Grade Levels:**\n" .
-                                   "• Early Childhood: Nursery, PP1, PP2\n" .
-                                   "• Primary School: Grades 1-5\n" .
-                                   "• Middle School: Grades 6-8\n" .
-                                   "• High School: Grades 9-12\n\n" .
-                                   "🌟 **Special Programs:**\n" .
-                                   "• STEAM education\n" .
-                                   "• Language immersion programs\n" .
-                                   "• Leadership development\n" .
-                                   "• Arts and creative expression\n\n" .
-                                   "Which grade level or subject area interests you most?\n\n" .
-                                   "Ready to **start your admission enquiry**? Just type '**admission**' or click the admission button!",
-                        'action' => 'curriculum_info',
-                        'session_data' => array()
-                    );
+                    return "📚 **Academic Programs & Curriculum at {$school_name}**\n\n" .
+                           "🎯 **Our Academic Approach:**\n" .
+                           "• Student-centered learning methodology\n" .
+                           "• Integrated curriculum design\n" .
+                           "• Critical thinking and problem-solving focus\n" .
+                           "• Technology-enhanced education\n\n" .
+                           "📖 **Curriculum Boards:**\n" .
+                           "• CBSE (Central Board of Secondary Education)\n" .
+                           "• CAIE (Cambridge Assessment International Education)\n\n" .
+                           "🏫 **Grade Levels:**\n" .
+                           "• Early Childhood: Nursery, PP1, PP2\n" .
+                           "• Primary School: Grades 1-5\n" .
+                           "• Middle School: Grades 6-8\n" .
+                           "• High School: Grades 9-12\n\n" .
+                           "🌟 **Special Programs:**\n" .
+                           "• STEAM education\n" .
+                           "• Language immersion programs\n" .
+                           "• Leadership development\n" .
+                           "• Arts and creative expression\n\n" .
+                           "Which grade level or subject area interests you most?";
                 
                 case 'facilities':
-                    return array(
-                        'response' => "🏢 **World-Class Facilities at {$school_name}**\n\n" .
-                                   "🎯 **Academic Facilities:**\n" .
-                                   "• Modern, well-equipped classrooms\n" .
-                                   "• Advanced science laboratories\n" .
-                                   "• Computer and robotics labs\n" .
-                                   "• Comprehensive library and media center\n\n" .
-                                   "🏃 **Sports & Recreation:**\n" .
-                                   "• Multi-purpose sports complex\n" .
-                                   "• Swimming pool\n" .
-                                   "• Indoor and outdoor courts\n" .
-                                   "• Fitness and wellness center\n\n" .
-                                   "🎨 **Creative Spaces:**\n" .
-                                   "• Art and design studios\n" .
-                                   "• Music and performance halls\n" .
-                                   "• Drama and theater facilities\n" .
-                                   "• Maker spaces and innovation labs\n\n" .
-                                   "🚌 **Support Services:**\n" .
-                                   "• Safe transportation network\n" .
-                                   "• Nutritious cafeteria meals\n" .
-                                   "• Health and medical support\n" .
-                                   "• 24/7 security systems\n\n" .
-                                   "Would you like to schedule a campus tour to see these facilities?",
-                        'action' => 'facilities_info',
-                        'session_data' => array()
-                    );
+                    return "🏢 **World-Class Facilities at {$school_name}**\n\n" .
+                           "🎯 **Academic Facilities:**\n" .
+                           "• Modern, well-equipped classrooms\n" .
+                           "• Advanced science laboratories\n" .
+                           "• Computer and robotics labs\n" .
+                           "• Comprehensive library and media center\n\n" .
+                           "🏃 **Sports & Recreation:**\n" .
+                           "• Multi-purpose sports complex\n" .
+                           "• Swimming pool\n" .
+                           "• Indoor and outdoor courts\n" .
+                           "• Fitness and wellness center\n\n" .
+                           "🎨 **Creative Spaces:**\n" .
+                           "• Art and design studios\n" .
+                           "• Music and performance halls\n" .
+                           "• Drama and theater facilities\n" .
+                           "• Maker spaces and innovation labs\n\n" .
+                           "🚌 **Support Services:**\n" .
+                           "• Safe transportation network\n" .
+                           "• Nutritious cafeteria meals\n" .
+                           "• Health and medical support\n" .
+                           "• 24/7 security systems\n\n" .
+                           "Would you like to schedule a campus tour to see these facilities?";
                 
                 case 'contact_visit':
-                    return array(
-                        'response' => "🏫 **Contact / Visit {$school_name}**\n\n" .
-                                   "You can reach us in the following ways:\n\n" .
-                                   "📞 **Call Admission Office**\n" .
-                                   "• 7702800800 / 9248111448\n\n" .
-                                   "📧 **Email Us**\n" .
-                                   "• admissions@epistemo.in\n\n" .
-                                   "🏫 **Book a Campus Tour**\n" .
-                                   "• Schedule a personalized campus visit\n\n" .
-                                   "📞 **Request a Callback**\n" .
-                                   "• We'll call you at your convenience\n\n" .
-                                   "How would you like to connect with us?",
-                        'action' => 'contact_info',
-                        'session_data' => array()
-                    );
+                case 'school_visit':
+                    return "🏫 **Contact / Visit {$school_name}**\n\n" .
+                           "You can reach us in the following ways:\n\n" .
+                           "📞 **Call Admission Office**\n" .
+                           "• 7702800800 / 9248111448\n\n" .
+                           "📧 **Email Us**\n" .
+                           "• admissions@epistemo.in\n\n" .
+                           "🏫 **Book a Campus Tour**\n" .
+                           "• Schedule a personalized campus visit\n\n" .
+                           "📞 **Request a Callback**\n" .
+                           "• We'll call you at your convenience\n\n" .
+                           "**Please select an option:**\n" .
+                           "• Type '**Call**' for immediate phone contact\n" .
+                           "• Type '**Email**' for email communication\n" .
+                           "• Type '**Tour**' to book a campus tour\n" .
+                           "• Type '**Callback**' to request a callback\n\n" .
+                           "How would you like to connect with us?";
+                           "� **Campus Tour Experience:**\n" .
+                           "• Guided tour of all facilities\n" .
+                           "• Meet our experienced faculty\n" .
+                           "• Interact with current students\n" .
+                           "• Q&A session with admissions team\n" .
+                           "• Sample our academic programs\n\n" .
+                           "⏰ **Visit Schedule:**\n" .
+                           "• Monday to Friday: 9:00 AM - 5:00 PM\n" .
+                           "• Saturday: 9:00 AM - 1:00 PM\n" .
+                           "• Tours available by appointment\n\n" .
+                           "� **Contact Information:**\n" .
+                           "• Phone: Call for immediate assistance\n" .
+                           "• Email: Send us your preferred dates\n" .
+                           "• Online: Fill our visit request form\n\n" .
+                           "🗺️ **Location:**\n" .
+                           "• Easy access via major routes\n" .
+                           "• Ample parking available\n" .
+                           "• Public transport connectivity\n\n" .
+                           "Ready to schedule your visit? I can help you book an appointment!";
                 
-
+                case 'other_info':
+                    $contact_info = "I'm here to help with any questions about {$school_name}!\n\nYou can ask me about:\n• Admission requirements\n• Fee structure\n• Academic programs\n• Extracurricular activities\n• Infrastructure facilities\n• Transportation\n• Scholarships\n\nOr contact us directly:\n";
+                    if (!empty($settings['phone'])) {
+                        $contact_info .= "📞 Phone: " . $settings['phone'] . "\n";
+                    }
+                    if (!empty($settings['email'])) {
+                        $contact_info .= "📧 Email: " . $settings['email'] . "\n";
+                    }
+                    if (!empty($settings['address'])) {
+                        $contact_info .= "📍 Address: " . $settings['address'] . "\n";
+                    }
+                    $contact_info .= "\nWhat specific information would you like to know?";
+                    return $contact_info;
+                
                 case 'online_enquiry':
-                    return array(
-                        'response' => "🌐 **Online Enquiry Form**\n\n" .
-                                   "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
-                                   "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
-                                   "📋 **What you can do on the form:**\n" .
-                                   "• Provide detailed student information\n" .
-                                   "• Select preferred curriculum and grade\n" .
-                                   "• Specify your requirements and preferences\n" .
-                                   "• Upload necessary documents\n" .
-                                   "• Schedule a campus visit\n\n" .
-                                   "✅ **Benefits:**\n" .
-                                   "• Save time with pre-filled information\n" .
-                                   "• Upload documents directly\n" .
-                                   "• Get faster response from our team\n" .
-                                   "• Track your application status\n\n" .
-                                   "🚀 **Click the link above to get started!**\n\n" .
-                                   "If you prefer, I can also help you with the admission process right here in the chat. Just let me know!",
-                        'action' => 'online_enquiry_info',
-                        'session_data' => array()
-                    );
+                    return "🌐 **Online Enquiry Form**\n\n" .
+                           "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
+                           "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
+                           "📋 **What you can do on the form:**\n" .
+                           "• Provide detailed student information\n" .
+                           "• Select preferred curriculum and grade\n" .
+                           "• Specify your requirements and preferences\n" .
+                           "• Upload necessary documents\n" .
+                           "• Schedule a campus visit\n\n" .
+                           "✅ **Benefits:**\n" .
+                           "• Save time with pre-filled information\n" .
+                           "• Upload documents directly\n" .
+                           "• Get faster response from our team\n" .
+                           "• Track your application status\n\n" .
+                           "🚀 **Click the link above to get started!**\n\n" .
+                           "If you prefer, I can also help you with the admission process right here in the chat. Just let me know!";
             }
         }
         
-        // Process regular text messages with safe fallback
-        error_log('EduBot: Processing regular message: ' . substr($message, 0, 30));
-        return $this->process_user_message_safely($message, $session_id);
+        // Use hybrid approach: Rule-based for structured data + OpenAI for natural conversation
+        try {
+            // Check if this is structured admission data that should use rule-based system
+            if ($this->is_structured_admission_data($message, $session_id)) {
+                error_log('EduBot: Using rule-based system for structured admission data');
+                return $this->provide_intelligent_fallback($message, $action_type, $session_id);
+            }
+            
+            // Use OpenAI for natural language queries and complex questions
+            error_log('EduBot: Using OpenAI for natural language processing');
+            return $this->get_ai_enhanced_response($message, $session_id, $action_type);
             
         } catch (Exception $e) {
+            error_log('EduBot Shortcode: Error in hybrid system - ' . $e->getMessage());
+            error_log('EduBot Debug: Stack trace: ' . $e->getTraceAsString());
+            
+            // Always fallback to rule-based system for reliability
+            return $this->provide_intelligent_fallback($message, $action_type, $session_id);
+        }
+        
+        } catch (Exception $e) {
             error_log('EduBot Error in generate_response: ' . $e->getMessage());
-            $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
-            return array(
-                'response' => "Thank you for your interest in {$school_name}! For immediate assistance, please contact our admission office at 7702800800 or email admissions@epistemo.in",
-                'action' => 'error_fallback',
-                'session_data' => array()
-            );
+            error_log('EduBot Error trace: ' . $e->getTraceAsString());
+            return "I apologize, but I'm experiencing some technical difficulties. Please try again or contact our admissions team directly.";
         }
-    }
-    
-    /**
-     * Handle admission flow with full AI conversation management
-     * Restored from backup with enhanced session handling
-     */
-    private function handle_admission_flow_safe($message, $action_type = '', $session_id = '') {
-        $settings = get_option('edubot_pro_settings', array());
-        $school_config = EduBot_School_Config::getInstance();
-        $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
-        $message_lower = strtolower($message);
-        
-        // Get conversation session data
-        $session_data = $this->get_conversation_session($session_id);
-        $current_step = $session_data ? ($session_data['step'] ?? '') : '';
-        
-        error_log("EduBot: Session ID: {$session_id}");
-        error_log("EduBot: Session data retrieved: " . print_r($session_data, true));
-        error_log("EduBot: Current step: '{$current_step}', Message: '{$message}'");
-        
-        // If no session data but we have a session ID, log this issue
-        if (!empty($session_id) && !$session_data) {
-            error_log("EduBot: WARNING - Session ID provided but no session data found!");
-        }
-        
-        // Handle legacy "CONFIRM" messages and variations
-        if (preg_match('/^(confirm|confrim|confrm|yes|submit|proceed)$/i', trim($message)) && empty($current_step)) {
-            return "Hello! 👋 Our admission process has been **streamlined for your convenience!**\n\n" .
-                   "✨ **Good News:** You no longer need to type 'CONFIRM'!\n\n" .
-                   "🚀 **New Process:** Simply provide your details and we'll generate your **enquiry number automatically** after collecting your information.\n\n" .
-                   "**Let's start your admission enquiry:**\n\n" .
-                   "Please share your:\n" .
-                   "👶 **Student Name**\n" .
-                   "📧 **Email Address**\n" .
-                   "📱 **Mobile Number**\n\n" .
-                   "You can type them like:\n" .
-                   "• Name: Rahul Kumar\n" .
-                   "• Mobile: 9876543210\n" .
-                   "• Email: parent@email.com\n\n" .
-                   "Or just start with the student's name and I'll guide you step by step! 😊";
-        }
-        
-        // Handle final details step (DOB collection)
-        if ($current_step === 'final' || $current_step === 'age') {
-            error_log("EduBot: Processing final step - current_step: {$current_step}, message: {$message}");
-            $collected_data = $session_data ? $session_data['data'] : array();
-            
-            // Parse the message for DOB
-            $additional_info = $this->parse_additional_info($message);
-            error_log("EduBot: Additional info parsed: " . print_r($additional_info, true));
-            
-            // Check for validation errors first
-            if (!empty($additional_info['error'])) {
-                return "❌ " . $additional_info['error'];
-            }
-            
-            // Store collected DOB if valid
-            if (!empty($additional_info['date_of_birth'])) {
-                $this->update_conversation_data($session_id, 'date_of_birth', $additional_info['date_of_birth']);
-                $collected_data['date_of_birth'] = $additional_info['date_of_birth'];
-                
-                // Automatically generate enquiry number and save to database
-                $this->update_conversation_data($session_id, 'step', 'completed');
-                
-                return $this->process_final_submission($collected_data, $session_id);
-            } else {
-                return "Please enter the student's date of birth in **dd/mm/yyyy** format.\n\n" .
-                       "**Example:** 16/10/2010\n\n" .
-                       "Make sure to use the correct format with 4-digit year.";
-            }
-        }
-        
-        // Handle admission enquiry initiation
-        if (strpos($message_lower, 'admission') !== false || 
-            strpos($message_lower, 'apply') !== false || 
-            strpos($message_lower, 'enroll') !== false ||
-            strpos($message_lower, 'join') !== false ||
-            $action_type === 'admission') {
-            
-            // No specific information found, show generic admission welcome
-            return "Hello! **Welcome to {$school_name}.**\n\n" .
-                   "We are currently accepting applications for **AY 2026–27**.\n\n" .
-                   "Please help me with your:\n\n" .
-                   "👶 **Student Name**\n" .
-                   "📱 **Mobile Number**\n" .
-                   "📧 **Email Address**\n\n" .
-                   "You can type them like:\n" .
-                   "• Name: Sujay\n" .
-                   "• Mobile: 9876543210\n" .
-                   "• Email: parent@email.com\n\n" .
-                   "Or just start with the student's name and I'll ask for the rest step by step.";
-        }
-        
-        // Handle personal information collection
-        $personal_info = $this->parse_personal_info($message);
-        $session_data = $this->get_conversation_session($session_id);
-        $collected_data = $session_data ? $session_data['data'] : array();
-        
-        // Check if this looks like personal info input
-        if (!empty($personal_info) && (
-            !empty($personal_info['name']) || 
-            !empty($personal_info['email']) || 
-            !empty($personal_info['phone'])
-        ) && (
-            // Only process personal info if we don't have complete personal information yet
-            empty($collected_data['student_name']) || 
-            empty($collected_data['email']) || 
-            empty($collected_data['phone'])
-        )) {
-            
-            // Store original session state to check if name was already present
-            $had_name_before = !empty($collected_data['student_name']);
-            
-            // Store any collected info with validation
-            if (!empty($personal_info['name']) && strlen(trim($personal_info['name'])) >= 2) {
-                $this->update_conversation_data($session_id, 'student_name', $personal_info['name']);
-            }
-            if (!empty($personal_info['email']) && filter_var($personal_info['email'], FILTER_VALIDATE_EMAIL)) {
-                $this->update_conversation_data($session_id, 'email', $personal_info['email']);
-            }
-            if (!empty($personal_info['phone']) && preg_match('/^\+?[\d\s-]{10,15}$/', $personal_info['phone'])) {
-                $this->update_conversation_data($session_id, 'phone', $personal_info['phone']);
-            }
-            
-            // Always refresh session data to get the latest complete data
-            $session_data = $this->get_conversation_session($session_id);
-            $collected_data = $session_data && isset($session_data['data']) ? $session_data['data'] : array();
-            
-            // If we only got name and didn't have it before, ask for email and phone
-            if (!empty($personal_info['name']) && 
-                empty($personal_info['email']) && 
-                empty($personal_info['phone']) &&
-                !$had_name_before) {
-                return "✅ **Student Name: {$personal_info['name']}**\n\n" .
-                       "Great! Now I need your contact details:\n\n" .
-                       "📧 **Your Email Address**\n" .
-                       "📱 **Your Phone Number**\n\n" .
-                       "You can enter them like:\n" .
-                       "Email: parent@email.com, Phone: 9876543210\n\n" .
-                       "Or just enter your email address first.";
-            }
-            
-            // Check what's still needed
-            $missing_fields = array();
-            if (empty($collected_data['student_name'])) $missing_fields[] = "👶 Student Name";
-            if (empty($collected_data['email'])) $missing_fields[] = "📧 Email Address";
-            if (empty($collected_data['phone'])) $missing_fields[] = "📱 Phone Number";
-            
-            if (!empty($missing_fields)) {
-                $response = "✅ **Information Recorded:**\n";
-                if (!empty($collected_data['student_name'])) $response .= "• Student: {$collected_data['student_name']}\n";
-                if (!empty($collected_data['email'])) $response .= "• Email: {$collected_data['email']}\n";
-                if (!empty($collected_data['phone'])) $response .= "• Phone: {$collected_data['phone']}\n";
-                
-                $response .= "\n**Still needed:**\n";
-                foreach ($missing_fields as $field) {
-                    $response .= "• {$field}\n";
-                }
-                $response .= "\nPlease provide the remaining information.";
-                return $response;
-            }
-            
-            // All personal info collected, move to academic info
-            $this->update_conversation_data($session_id, 'step', 'academic');
-            
-            return "✅ **Personal Information Complete!**\n\n" .
-                   "Perfect! I have your contact details:\n" .
-                   "👶 **Student:** {$collected_data['student_name']}\n" .
-                   "📧 **Email:** {$collected_data['email']}\n" .
-                   "📱 **Phone:** {$collected_data['phone']}\n\n" .
-                   "**Step 2: Academic Information** 🎓\n\n" .
-                   "Please share:\n" .
-                   "• **Grade/Class** seeking admission for\n" .
-                   "• **Board Preference** (CBSE/CAIE)\n\n" .
-                   "You can type like:\n" .
-                   "Grade 5, CBSE\n\n" .
-                   "Or just tell me the grade and I'll ask about board preference.";
-        }
-        
-        // Handle academic information (grade and board)
-        $academic_info = $this->parse_academic_info($message);
-        $session_data = $this->get_conversation_session($session_id);
-        $collected_data = $session_data ? $session_data['data'] : array();
-        
-        // Check if this looks like academic info and we have personal info already
-        if (!empty($academic_info) && !empty($collected_data['student_name']) && 
-            (preg_match('/\b(nursery|pp1|pp2|pre-?kg|lkg|ukg|grade|grde|class|\d+th|\d+st|\d+nd|\d+rd|cbse|caie|cambridge|state|icse|igcse)\b/i', $message_lower))) {
-            
-            // Store any collected academic info
-            if (!empty($academic_info['grade'])) {
-                $this->update_conversation_data($session_id, 'grade', $academic_info['grade']);
-                $collected_data['grade'] = $academic_info['grade'];
-            }
-            if (!empty($academic_info['board'])) {
-                $this->update_conversation_data($session_id, 'board', $academic_info['board']);
-                $collected_data['board'] = $academic_info['board'];
-            }
-            if (!empty($academic_info['academic_year'])) {
-                $this->update_conversation_data($session_id, 'academic_year', $academic_info['academic_year']);
-                $collected_data['academic_year'] = $academic_info['academic_year'];
-            }
-            
-            // Check what's still needed for academic info
-            $missing_academic = array();
-            if (empty($collected_data['grade'])) $missing_academic[] = "🎓 Grade/Class";
-            if (empty($collected_data['board'])) $missing_academic[] = "📚 Board Preference";
-            
-            if (!empty($missing_academic)) {
-                $response = "✅ **Academic Information Recorded:**\n";
-                if (!empty($collected_data['grade'])) $response .= "• Grade: {$collected_data['grade']}\n";
-                if (!empty($collected_data['board'])) $response .= "• Board: {$collected_data['board']}\n";
-                if (!empty($collected_data['academic_year'])) $response .= "• Academic Year: {$collected_data['academic_year']}\n";
-                
-                $response .= "\n**Still needed:**\n";
-                foreach ($missing_academic as $field) {
-                    $response .= "• {$field}\n";
-                }
-                
-                if (empty($collected_data['board'])) {
-                    $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
-                }
-                
-                return $response;
-            }
-            
-            // Set default academic year if not provided
-            if (empty($collected_data['academic_year'])) {
-                $academic_year = '2026-27';  // Default for current admissions
-                $this->update_conversation_data($session_id, 'academic_year', $academic_year);
-                $collected_data['academic_year'] = $academic_year;
-            }
-            
-            // All academic info collected, move to final details
-            $this->update_conversation_data($session_id, 'step', 'final');
-            
-            $academic_summary = "• Grade: {$collected_data['grade']}\n• Board: {$collected_data['board']}\n";
-            if (!empty($collected_data['academic_year'])) {
-                $academic_summary .= "• Academic Year: {$collected_data['academic_year']}\n";
-            }
-            
-            return "✅ **Academic Information Complete!**\n" .
-                   $academic_summary . "\n" .
-                   "**Step 3: Final Details** 📋\n\n" .
-                   "Please provide:\n\n" .
-                   "**Student's Date of Birth** (dd/mm/yyyy format)\n\n" .
-                   "**Example:**\n" .
-                   "• 16/10/2010\n\n" .
-                   "Please enter the date of birth in dd/mm/yyyy format only.";
-        }
-        
-        // Handle simple name inputs (like "sujay") - treat as start of admission process
-        if (preg_match('/^[a-zA-Z\s\.]{2,50}$/', trim($message)) && 
-            !preg_match('/\b(admission|hello|hi|help|info|contact|about|school|curriculum|facility|fee|grade|class|board)\b/i', $message) &&
-            strlen(trim($message)) <= 20) {
-            
-            error_log("EduBot: Detected simple name input: {$message}");
-            
-            // Treat this as student name and start admission flow
-            $this->update_conversation_data($session_id, 'student_name', ucwords(strtolower(trim($message))));
-            
-            return "✅ **Student Name: " . ucwords(strtolower(trim($message))) . "**\n\n" .
-                   "Great! Now I need your contact details:\n\n" .
-                   "📧 **Your Email Address**\n" .
-                   "📱 **Your Phone Number**\n\n" .
-                   "You can enter them like:\n" .
-                   "Email: parent@email.com, Phone: 9876543210\n\n" .
-                   "Or just enter your email address first.";
-        }
-        
-        // Handle simple email inputs when we already have a name in session
-        if (preg_match('/^\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\s*$/', trim($message))) {
-            $session_data = $this->get_conversation_session($session_id);
-            $collected_data = $session_data ? $session_data['data'] : array();
-            
-            if (!empty($collected_data['student_name']) && empty($collected_data['email'])) {
-                error_log("EduBot: Detected email input for existing session: {$message}");
-                
-                $email = trim($message);
-                $this->update_conversation_data($session_id, 'email', $email);
-                
-                return "✅ **Email Address: {$email}**\n\n" .
-                       "Great! Now I need your phone number:\n\n" .
-                       "📱 **Phone Number**\n\n" .
-                       "Please enter your 10-digit mobile number.\n\n" .
-                       "**Example:** 9876543210";
-            }
-        }
-        
-        // Failsafe: If message looks like date of birth format, try to process it
-        // This handles cases where session step might not be set correctly
-        if (preg_match('/^\s*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\s*$/', trim($message))) {
-            error_log("EduBot: Detected date format input: {$message}, checking if we have enough data to process");
-            
-            $session_data = $this->get_conversation_session($session_id);
-            $collected_data = $session_data ? $session_data['data'] : array();
-            
-            // Check if we have the required data for final submission
-            if (!empty($collected_data['student_name']) && 
-                !empty($collected_data['email']) && 
-                !empty($collected_data['phone']) && 
-                !empty($collected_data['grade']) && 
-                !empty($collected_data['board'])) {
-                
-                error_log("EduBot: Have required data, processing date input as DOB");
-                
-                // Parse the message for DOB
-                $additional_info = $this->parse_additional_info($message);
-                error_log("EduBot: DOB parsing result: " . print_r($additional_info, true));
-                
-                // Check for validation errors first
-                if (!empty($additional_info['error'])) {
-                    return "❌ " . $additional_info['error'];
-                }
-                
-                // Store collected DOB if valid
-                if (!empty($additional_info['date_of_birth'])) {
-                    $this->update_conversation_data($session_id, 'date_of_birth', $additional_info['date_of_birth']);
-                    $collected_data['date_of_birth'] = $additional_info['date_of_birth'];
-                    
-                    // Automatically generate enquiry number and save to database
-                    $this->update_conversation_data($session_id, 'step', 'completed');
-                    
-                    error_log("EduBot: Processing final submission with failsafe");
-                    return $this->process_final_submission($collected_data, $session_id);
-                } else {
-                    return "Please enter the student's date of birth in **dd/mm/yyyy** format.\n\n" .
-                           "**Example:** 16/10/2010\n\n" .
-                           "Make sure to use the correct format with 4-digit year.";
-                }
-            }
-        }
-        
-        // Fall back to the basic message processing for other queries
-        return $this->process_user_message_safely($message, $session_id);
-    }
-    
-
-    
-    /**
-     * Process user messages safely without external dependencies
-     */
-    private function process_user_message_safely($message, $session_id) {
-        $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
-        
-        // Simple keyword-based responses
-        $message_lower = strtolower(trim($message));
-        
-        if (preg_match('/\b(admission|admissions|admit|enroll|enrollment|join|apply|application)\b/i', $message)) {
-            return array(
-                'response' => "🎓 I'd be happy to help with admission information! Would you like to start the admission enquiry process?",
-                'action' => 'admission_info',
-                'session_data' => array()
-            );
-        }
-        
-        if (preg_match('/\b(curriculum|academic|program|course|study|subject)\b/i', $message)) {
-            return array(
-                'response' => "📚 Our curriculum includes CBSE and CAIE boards with comprehensive programs. Would you like to know more about our academic approach?",
-                'action' => 'curriculum_info',
-                'session_data' => array()
-            );
-        }
-        
-        if (preg_match('/\b(fees?|cost|price|tuition|payment)\b/i', $message)) {
-            return array(
-                'response' => "💰 For detailed fee structure and payment options, our admission counselor will provide complete information. Shall I help you start the admission process?",
-                'action' => 'fee_info',
-                'session_data' => array()
-            );
-        }
-        
-        if (preg_match('/\b(facilities|infrastructure|campus|building)\b/i', $message)) {
-            return array(
-                'response' => "🏫 We have world-class facilities including modern classrooms, labs, sports complex, and creative spaces. Would you like to schedule a campus tour?",
-                'action' => 'facility_info',
-                'session_data' => array()
-            );
-        }
-        
-        if (preg_match('/\b(contact|phone|email|address|location)\b/i', $message)) {
-            return array(
-                'response' => "📞 Contact us at 7702800800 or admissions@epistemo.in. Ready to start your admission enquiry?",
-                'action' => 'contact_info',
-                'session_data' => array()
-            );
-        }
-        
-        // Default response
-        return array(
-            'response' => "Thank you for your interest in {$school_name}! 🎓\n\n" .
-                       "I can help you with:\n" .
-                       "• 🎓 Admission Process\n" .
-                       "• 📚 Academic Programs\n" .
-                       "• 🏫 School Facilities\n" .
-                       "• 📞 Contact Information\n\n" .
-                       "What would you like to know about our school?",
-            'action' => 'general_help',
-            'session_data' => array()
-        );
     }
     
     /**
@@ -1640,29 +1284,19 @@ class EduBot_Shortcode {
             $message_clean = preg_replace('/\+\d{1,3}[\s-]?\d{6,14}/', '', $message_clean);
         }
         
-        // Try to extract name from structured input first (Student: Name format)
-        if (preg_match('/\b(?:student\s*:?\s*|name\s*:?\s*)\s*([a-zA-Z\s\.]+?)(?:\s+(?:grade|class|board|email|phone|dob)|$)/i', $original_message, $name_matches)) {
-            $candidate_name = trim($name_matches[1]);
-            if (strlen($candidate_name) >= 2 && strlen($candidate_name) <= 50) {
-                $info['name'] = ucwords(strtolower($candidate_name));
-            }
-        }
+        // Clean up the message for name extraction
+        $message_clean = preg_replace('/\s*(name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*)/i', ' ', $message_clean);
+        $message_clean = preg_replace('/[^\w\s\.]/', ' ', $message_clean);
+        $message_clean = preg_replace('/\s+/', ' ', $message_clean);
+        $message_clean = trim($message_clean);
         
-        // If no structured name found, clean up the message for name extraction
-        if (empty($info['name'])) {
-            $message_clean = preg_replace('/\s*(student\s*:?\s*|name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*|grade\s*:?\s*|class\s*:?\s*|board\s*:?\s*|dob\s*:?\s*)/i', ' ', $message_clean);
-            $message_clean = preg_replace('/\b(grade\s*\d+|class\s*\d+|cbse|caie|cambridge|icse|igcse|\d{4}-\d{2}-\d{2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})\b/i', ' ', $message_clean);
-            $message_clean = preg_replace('/[^\w\s\.]/', ' ', $message_clean);
-            $message_clean = preg_replace('/\s+/', ' ', $message_clean);
-            $message_clean = trim($message_clean);
-            
-            // Extract name - if the cleaned message is just a name
-            if (!empty($message_clean) && 
-                strlen($message_clean) >= 2 && 
-                strlen($message_clean) <= 50 &&
-                preg_match('/^[a-zA-Z\s\.]+$/', $message_clean)) {
-                $info['name'] = ucwords(strtolower(trim($message_clean)));
-            }
+        // Extract name - if the cleaned message is just a name (no email/phone extracted)
+        if (!empty($message_clean) && 
+            strlen($message_clean) >= 2 && 
+            strlen($message_clean) <= 50 &&
+            preg_match('/^[a-zA-Z\s\.]+$/', $message_clean) &&
+            !preg_match('/\b(admission|application|school|grade|class|year|board|cbse|icse|cambridge)\b/i', $message_clean)) {
+            $info['name'] = ucwords(strtolower(trim($message_clean)));
         }
         
         return $info;
@@ -1795,251 +1429,111 @@ class EduBot_Shortcode {
         return $info;
     }
 
-
-
-
+    /**
+     * Show final confirmation with all collected information
+     */
+    private function show_final_confirmation($collected_data, $session_id) {
+        $response = "✅ **All Information Collected Successfully!** 🎉\n\n";
+        $response .= "**Complete Summary:**\n";
+        $response .= "👶 Student: {$collected_data['student_name']}\n";
+        $response .= "📧 Email: {$collected_data['email']}\n";
+        $response .= "📱 Phone: {$collected_data['phone']}\n";
+        $response .= "🎓 Grade: {$collected_data['grade']}\n";
+        $response .= "📚 Board: {$collected_data['board']}\n";
+        
+        if (!empty($collected_data['academic_year'])) {
+            $response .= "📅 Academic Year: {$collected_data['academic_year']}\n";
+        }
+        if (!empty($collected_data['age'])) {
+            $response .= "👶 Age: {$collected_data['age']} years\n";
+        }
+        if (!empty($collected_data['date_of_birth'])) {
+            $response .= "🎂 DOB: {$collected_data['date_of_birth']}\n";
+        }
+        
+        $response .= "📍 Address: {$collected_data['address']}\n";
+        
+        // Add parent information if provided
+        if (!empty($collected_data['father_name']) || !empty($collected_data['mother_name']) || 
+            !empty($collected_data['mother_email']) || !empty($collected_data['mother_phone'])) {
+            $response .= "\n**Parent Information:**\n";
+            if (!empty($collected_data['father_name'])) $response .= "👨 Father: {$collected_data['father_name']}\n";
+            if (!empty($collected_data['mother_name'])) $response .= "👩 Mother: {$collected_data['mother_name']}\n";
+            if (!empty($collected_data['mother_email'])) $response .= "📧 Mother's Email: {$collected_data['mother_email']}\n";
+            if (!empty($collected_data['mother_phone'])) $response .= "📱 Mother's Phone: {$collected_data['mother_phone']}\n";
+        }
+        
+        $response .= "\n**Ready to Submit!**\n";
+        $response .= "Type **'CONFIRM'** to complete your admission enquiry and receive your unique enquiry number! ✨";
+        
+        return $response;
+    }
     
     /**
      * Process final submission - save to database and send confirmation
      */
     private function process_final_submission($collected_data, $session_id) {
-        global $wpdb;
-        
         try {
-            error_log("EduBot: Starting final submission with data: " . print_r($collected_data, true));
+            // Get school configuration
+            $school_config = EduBot_School_Config::getInstance();
+            $config = $school_config->get_config();
+            $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
             
-            // Generate enquiry number
-            $enquiry_number = 'ENQ' . date('Y') . wp_rand(1000, 9999);
+            // Generate unique enquiry number
+            $enquiry_number = $this->generate_enquiry_number();
             
-            // Get school name
-            $settings = get_option('edubot_pro_settings', array());
-            $school_name = $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
-            
-            // Save to database - ensure table exists first
-            $table_name = $wpdb->prefix . 'edubot_enquiries';
-            
-            // Create table if it doesn't exist
-            $this->ensure_enquiry_table_exists();
-            
-            $result = $wpdb->insert(
-                $table_name,
-                array(
-                    'enquiry_number' => $enquiry_number,
+            // Prepare application data for database
+            $application_data = array(
+                'application_number' => $enquiry_number,
+                'student_data' => array(
                     'student_name' => $collected_data['student_name'] ?? '',
-                    'date_of_birth' => $collected_data['date_of_birth'] ?? '',
                     'grade' => $collected_data['grade'] ?? '',
                     'board' => $collected_data['board'] ?? '',
-                    'academic_year' => $collected_data['academic_year'] ?? '2026-27',
-                    'parent_name' => $collected_data['parent_name'] ?? '',
+                    'academic_year' => $collected_data['academic_year'] ?? '',
+                    'age' => $collected_data['age'] ?? '',
+                    'date_of_birth' => $collected_data['date_of_birth'] ?? '',
+                    'gender' => $collected_data['gender'] ?? '',
+                    'parent_name' => $collected_data['parent_name'] ?? ($collected_data['father_name'] ?? 'Parent'),
                     'email' => $collected_data['email'] ?? '',
                     'phone' => $collected_data['phone'] ?? '',
                     'address' => $collected_data['address'] ?? '',
-                    'gender' => $collected_data['gender'] ?? '',
-                    'created_at' => current_time('mysql'),
-                    'status' => 'pending',
-                    'source' => 'chatbot'
+                    'father_name' => $collected_data['father_name'] ?? '',
+                    'mother_name' => $collected_data['mother_name'] ?? '',
+                    'mother_email' => $collected_data['mother_email'] ?? '',
+                    'mother_phone' => $collected_data['mother_phone'] ?? '',
                 ),
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+                'conversation_log' => array(
+                    array(
+                        'timestamp' => current_time('mysql'),
+                        'type' => 'enquiry_completion',
+                        'data' => $collected_data
+                    )
+                ),
+                'status' => 'enquiry_submitted',
+                'source' => 'chatbot_enquiry'
             );
             
-            if ($result === false) {
-                error_log('EduBot: Failed to save enquiry to database: ' . $wpdb->last_error);
-                throw new Exception('Database insert failed: ' . $wpdb->last_error);
+            // Save to database
+            $database_manager = new EduBot_Database_Manager();
+            $application_id = $database_manager->save_application($application_data);
+            
+            if (is_wp_error($application_id)) {
+                error_log('EduBot Enquiry Error: ' . $application_id->get_error_message());
+                return "Sorry, there was an error submitting your enquiry. Please try again or contact us directly.";
             }
             
-            error_log("EduBot: Successfully saved enquiry {$enquiry_number} to database");
+            // Send confirmation email
+            $this->send_enquiry_confirmation_email($collected_data, $enquiry_number, $school_name);
             
-            // Send confirmation email to parent
-            $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
+            // Clear session data
+            $this->clear_conversation_session($session_id);
             
-            // Send WhatsApp confirmation to parent if enabled
-            $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
-            $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . date('Y-m-d H:i:s') . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
-            
-            // Send enquiry notification to school
-            $this->send_school_enquiry_notification($collected_data, $enquiry_number, $school_name);
-            
-            // Clear session
-            $transient_key = 'edubot_session_' . $session_id;
-            delete_transient($transient_key);
-            
-            error_log("EduBot: Enquiry submission completed successfully");
-            
-            return "🎉 **Admission Enquiry Submitted Successfully!**\n\n" .
-                   "**📋 Your Enquiry Number: {$enquiry_number}**\n\n" .
-                   "**✅ Information Submitted:**\n" .
-                   "👶 **Student:** {$collected_data['student_name']}\n" .
-                   "🎓 **Grade:** {$collected_data['grade']}\n" .
-                   "📚 **Board:** {$collected_data['board']}\n" .
-                   "📧 **Email:** {$collected_data['email']}\n" .
-                   "📱 **Phone:** {$collected_data['phone']}\n" .
-                   "📅 **DOB:** {$collected_data['date_of_birth']}\n\n" .
-                   "**🔄 Next Steps:**\n" .
-                   "• Our admission team will contact you within 24 hours\n" .
-                   "• You'll receive detailed information about the admission process\n" .
-                   "• Campus visit will be scheduled as per your convenience\n\n" .
-                   "**📞 Need immediate assistance?**\n" .
-                   "Call: 7702800800 / 9248111448\n\n" .
-                   "Thank you for choosing {$school_name}! 🏫";
-                   
-        } catch (Exception $e) {
-            error_log('EduBot: Error in final submission: ' . $e->getMessage());
-            return "Thank you for providing your information! Our admission team will contact you soon at {$collected_data['phone']}. For immediate assistance, please call 7702800800.";
-        }
-    }
-    
-    /**
-     * Send confirmation email to parent
-     */
-    private function send_parent_confirmation_email($collected_data, $enquiry_number, $school_name) {
-        try {
-            // Check if email notifications are enabled
-            $email_enabled = get_option('edubot_email_notifications', 1);
-            if (!$email_enabled) {
-                error_log('EduBot: Email notifications are disabled in settings');
-                return false;
-            }
-            
-            $to = $collected_data['email'] ?? '';
-            if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-                error_log('EduBot: Invalid email address for enquiry notification');
-                return false;
-            }
-            
-            $subject = "Admission Enquiry Confirmation - {$school_name}";
-            
-            // Create HTML email content
-            $message = $this->build_parent_confirmation_html($collected_data, $enquiry_number, $school_name);
-            
-            $headers = array('Content-Type: text/html; charset=UTF-8');
-            
-            $sent = wp_mail($to, $subject, $message, $headers);
-            
-            if ($sent) {
-                error_log("EduBot: Confirmation email sent to {$to}");
-            } else {
-                error_log("EduBot: Failed to send confirmation email to {$to}");
-            }
-            
-            return $sent;
+            // Return success message with enquiry details
+            return $this->format_enquiry_confirmation($collected_data, $enquiry_number, $school_name);
             
         } catch (Exception $e) {
-            error_log('EduBot: Email sending error: ' . $e->getMessage());
-            return false;
-        }
-    }
-    
-    /**
-     * Send enquiry notification to school
-     */
-    private function send_school_enquiry_notification($collected_data, $enquiry_number, $school_name) {
-        try {
-            // Check if school notifications are enabled
-            $school_notifications_enabled = get_option('edubot_school_notifications', 1);
-            if (!$school_notifications_enabled) {
-                error_log('EduBot: School notifications are disabled in settings');
-                return false;
-            }
-            
-            // Get school email from School Information > Contact Email setting
-            $school_email = '';
-            
-            // Debug: Check what classes exist and try to load school config
-            error_log('EduBot: Class EduBot_School_Config exists: ' . (class_exists('EduBot_School_Config') ? 'Yes' : 'No'));
-            
-            // Try to manually include the school config file if class doesn't exist
-            if (!class_exists('EduBot_School_Config')) {
-                $config_file = dirname(__FILE__) . '/class-school-config.php';
-                if (file_exists($config_file)) {
-                    require_once $config_file;
-                    error_log('EduBot: Manually loaded school config class from: ' . $config_file);
-                } else {
-                    error_log('EduBot: School config file not found at: ' . $config_file);
-                }
-            }
-            
-            // Priority 1: Try multiple possible WordPress options for school contact email
-            $possible_options = [
-                'edubot_school_email', // From School Settings page
-                'school_contact_email',
-                'school_information_contact_email', 
-                'edubot_school_contact_email',
-                'admin_email' // WordPress default
-            ];
-            
-            foreach ($possible_options as $option_name) {
-                $option_value = get_option($option_name);
-                error_log("EduBot: Checking option '{$option_name}': " . ($option_value ? $option_value : 'empty'));
-                if (!empty($option_value) && filter_var($option_value, FILTER_VALIDATE_EMAIL)) {
-                    $school_email = $option_value;
-                    error_log('EduBot: Using email from WordPress option ' . $option_name . ': ' . $school_email);
-                    break;
-                }
-            }
-            
-            // Priority 2: Try to get from School Information > Contact Email via EduBot_School_Config
-            if (empty($school_email) && class_exists('EduBot_School_Config')) {
-                try {
-                    $school_config = EduBot_School_Config::getInstance();
-                    $config = $school_config->get_config();
-                    error_log('EduBot: School config structure: ' . print_r($config, true));
-                    $contact_info = $config['school_info']['contact_info'] ?? array();
-                    if (!empty($contact_info['email'])) {
-                        $school_email = $contact_info['email'];
-                        error_log('EduBot: Using school contact email from School Information: ' . $school_email);
-                    }
-                } catch (Exception $e) {
-                    error_log('EduBot: Could not get school config: ' . $e->getMessage());
-                }
-            }
-            
-            // Priority 3: Fallback to plugin settings if School Information not available
-            if (empty($school_email)) {
-                $settings = get_option('edubot_pro_settings', array());
-                error_log('EduBot: Plugin settings structure: ' . print_r($settings, true));
-                if (!empty($settings['contact_email'])) {
-                    $school_email = $settings['contact_email'];
-                    error_log('EduBot: Using contact email from plugin settings: ' . $school_email);
-                } elseif (!empty($settings['admin_email'])) {
-                    $school_email = $settings['admin_email'];
-                    error_log('EduBot: Using admin email from plugin settings: ' . $school_email);
-                }
-            }
-            
-            // Priority 3: Final fallback
-            if (empty($school_email)) {
-                $school_email = 'admissions@epistemo.in';
-                error_log('EduBot: Using fallback email: ' . $school_email);
-            }
-            
-            if (!filter_var($school_email, FILTER_VALIDATE_EMAIL)) {
-                error_log('EduBot: Invalid school email address: ' . $school_email);
-                return false;
-            }
-            
-            $subject = "New Admission Enquiry - {$enquiry_number}";
-            
-            // Create HTML email content for school notification
-            $message = $this->build_school_notification_html($collected_data, $enquiry_number, $school_name);
-            
-            $headers = array('Content-Type: text/html; charset=UTF-8');
-            
-            $sent = wp_mail($school_email, $subject, $message, $headers);
-            
-            if ($sent) {
-                error_log("EduBot: School notification email sent to {$school_email}");
-            } else {
-                error_log("EduBot: Failed to send school notification email to {$school_email}");
-            }
-            
-            return $sent;
-            
-        } catch (Exception $e) {
-            error_log('EduBot: School notification email error: ' . $e->getMessage());
-            return false;
+            error_log('EduBot Enquiry Submission Error: ' . $e->getMessage());
+            return "Sorry, there was a technical error submitting your enquiry. Please try again or contact us directly.";
         }
     }
     
@@ -2100,7 +1594,9 @@ class EduBot_Shortcode {
         $html .= '<tr><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Board</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['board'] ?? '') . '</td></tr>';
         $html .= '<tr style="background-color: #f8f9fa;"><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Academic Year</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['academic_year'] ?? '') . '</td></tr>';
         
-        // Age removed - only using date of birth
+        if (!empty($collected_data['age'])) {
+            $html .= '<tr><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Age</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['age']) . ' years</td></tr>';
+        }
         
         if (!empty($collected_data['date_of_birth'])) {
             $html .= '<tr style="background-color: #f8f9fa;"><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Date of Birth</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['date_of_birth']) . '</td></tr>';
@@ -2166,174 +1662,6 @@ class EduBot_Shortcode {
             unset($sessions[$session_id]);
             update_option('edubot_conversation_sessions', $sessions);
         }
-    }
-    
-    /**
-     * Mark session as completed instead of clearing it
-     */
-    private function mark_session_completed($session_id, $application_id, $enquiry_number) {
-        $session_data = $this->get_conversation_session($session_id);
-        if ($session_data) {
-            $session_data['status'] = 'completed';
-            $session_data['completed_at'] = current_time('mysql');
-            $session_data['application_id'] = $application_id;
-            $session_data['enquiry_number'] = $enquiry_number;
-            $this->save_conversation_session($session_id, $session_data);
-        }
-    }
-    
-    /**
-     * Check if session is completed
-     */
-    private function is_session_completed($session_id) {
-        $session_data = $this->get_conversation_session($session_id);
-        return $session_data && isset($session_data['status']) && $session_data['status'] === 'completed';
-    }
-    
-    /**
-     * Handle post-submission edits
-     */
-    private function handle_post_submission_edit($message, $session_id) {
-        $session_data = $this->get_conversation_session($session_id);
-        
-        if (!$session_data || !isset($session_data['enquiry_number'])) {
-            return "I'm sorry, I can't find your submission details. Please contact our admissions team directly.";
-        }
-        
-        $enquiry_number = $session_data['enquiry_number'];
-        
-        // Parse edit request
-        $edit_request = $this->parse_edit_request($message);
-        
-        if (!$edit_request) {
-            return "I understand you want to make changes to your application (Reference: {$enquiry_number}). " .
-                   "Please tell me what you'd like to update using this format:\n\n" .
-                   "• **Change email to** your_new_email@example.com\n" .
-                   "• **Update phone to** 9876543210\n" .
-                   "• **Change name to** New Student Name\n" .
-                   "• **Update grade to** Grade 8\n" .
-                   "• **Change board to** CBSE\n" .
-                   "• **Update DOB to** 15/05/2010\n\n" .
-                   "What would you like to update?";
-        }
-        
-        // Apply the edit to database
-        $update_result = $this->update_application_in_database($session_data['application_id'], $edit_request);
-        
-        if ($update_result) {
-            // Update session data as well
-            foreach ($edit_request as $field => $value) {
-                if (isset($session_data['data'][$field])) {
-                    $session_data['data'][$field] = $value;
-                }
-            }
-            $this->save_conversation_session($session_id, $session_data);
-            
-            $field_names = array_keys($edit_request);
-            $updated_fields = implode(', ', $field_names);
-            
-            return "✅ **Update Successful!**\n\n" .
-                   "I've successfully updated your {$updated_fields} for application reference: **{$enquiry_number}**\n\n" .
-                   "The changes have been saved in our system. You should receive an updated confirmation email shortly.\n\n" .
-                   "Is there anything else you'd like to update?";
-        } else {
-            return "I apologize, but there was an error updating your information. " .
-                   "Please contact our admissions team directly with your reference number: **{$enquiry_number}**";
-        }
-    }
-    
-    /**
-     * Parse edit request from user message
-     */
-    private function parse_edit_request($message) {
-        $edits = array();
-        $message_lower = strtolower($message);
-        
-        // Email update
-        if (preg_match('/(?:change|update|edit).*?email.*?to.*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i', $message, $matches) ||
-            preg_match('/email.*?(?:change|update).*?to.*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i', $message, $matches)) {
-            $edits['email'] = $matches[1];
-        }
-        
-        // Phone update
-        if (preg_match('/(?:change|update|edit).*?(?:phone|mobile|number).*?to.*?(\+?[\d\s\-]{10,15})/i', $message, $matches) ||
-            preg_match('/(?:phone|mobile|number).*?(?:change|update).*?to.*?(\+?[\d\s\-]{10,15})/i', $message, $matches)) {
-            $edits['phone'] = preg_replace('/[^\d+]/', '', $matches[1]);
-        }
-        
-        // Name update
-        if (preg_match('/(?:change|update|edit).*?name.*?to.*?([a-zA-Z\s]{2,50})/i', $message, $matches) ||
-            preg_match('/name.*?(?:change|update).*?to.*?([a-zA-Z\s]{2,50})/i', $message, $matches)) {
-            $edits['student_name'] = trim($matches[1]);
-        }
-        
-        // Grade update
-        if (preg_match('/(?:change|update|edit).*?grade.*?to.*?((?:grade\s*)?\d+|nursery|pp1|pp2|pre-?kg|lkg|ukg)/i', $message, $matches) ||
-            preg_match('/grade.*?(?:change|update).*?to.*?((?:grade\s*)?\d+|nursery|pp1|pp2|pre-?kg|lkg|ukg)/i', $message, $matches)) {
-            $edits['grade'] = $this->extract_grade_from_message($matches[1]);
-        }
-        
-        // Board update
-        if (preg_match('/(?:change|update|edit).*?board.*?to.*?(cbse|caie|cambridge|icse|igcse|state\s*board)/i', $message, $matches) ||
-            preg_match('/board.*?(?:change|update).*?to.*?(cbse|caie|cambridge|icse|igcse|state\s*board)/i', $message, $matches)) {
-            $edits['board'] = $this->extract_board_from_message($matches[1]);
-        }
-        
-        // Date of birth update
-        if (preg_match('/(?:change|update|edit).*?(?:dob|date.*?birth).*?to.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i', $message, $matches) ||
-            preg_match('/(?:dob|date.*?birth).*?(?:change|update).*?to.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i', $message, $matches)) {
-            $edits['date_of_birth'] = $matches[1];
-        }
-        
-        return !empty($edits) ? $edits : false;
-    }
-    
-    /**
-     * Update application in database
-     */
-    private function update_application_in_database($application_id, $updates) {
-        global $wpdb;
-        
-        if (empty($application_id) || empty($updates)) {
-            return false;
-        }
-        
-        $table_name = $wpdb->prefix . 'edubot_applications';
-        
-        // Get current application data
-        $current_data = $wpdb->get_row($wpdb->prepare(
-            "SELECT student_data FROM {$table_name} WHERE id = %d",
-            $application_id
-        ));
-        
-        if (!$current_data) {
-            return false;
-        }
-        
-        // Decode current student data
-        $student_data = json_decode($current_data->student_data, true);
-        if (!$student_data) {
-            $student_data = array();
-        }
-        
-        // Apply updates
-        foreach ($updates as $field => $value) {
-            $student_data[$field] = $value;
-        }
-        
-        // Update database
-        $result = $wpdb->update(
-            $table_name,
-            array(
-                'student_data' => json_encode($student_data),
-                'updated_at' => current_time('mysql')
-            ),
-            array('id' => $application_id),
-            array('%s', '%s'),
-            array('%d')
-        );
-        
-        return $result !== false;
     }
     
     /**
@@ -2452,9 +1780,18 @@ class EduBot_Shortcode {
         // Validate optional fields with limits
         $educational_board = isset($_POST['educational_board']) ? sanitize_text_field($_POST['educational_board']) : '';
         $academic_year = isset($_POST['academic_year']) ? sanitize_text_field($_POST['academic_year']) : '';
+        $previous_school = isset($_POST['previous_school']) ? sanitize_text_field($_POST['previous_school']) : '';
+        $transfer_reason = isset($_POST['transfer_reason']) ? sanitize_text_field($_POST['transfer_reason']) : '';
         $special_requirements = isset($_POST['special_requirements']) ? sanitize_textarea_field($_POST['special_requirements']) : '';
 
-        // Validate optional text field lengths - previous school fields removed
+        // Validate optional text field lengths
+        if (!empty($previous_school) && strlen($previous_school) > 200) {
+            wp_send_json_error(array('message' => 'Previous school name is too long (max 200 characters).'));
+        }
+        
+        if (!empty($transfer_reason) && strlen($transfer_reason) > 300) {
+            wp_send_json_error(array('message' => 'Transfer reason is too long (max 300 characters).'));
+        }
         
         if (!empty($special_requirements) && strlen($special_requirements) > 1000) {
             wp_send_json_error(array('message' => 'Special requirements text is too long (max 1000 characters).'));
@@ -2488,6 +1825,8 @@ class EduBot_Shortcode {
             'email' => $email,
             'phone' => $phone_cleaned,
             'address' => $address,
+            'previous_school' => $previous_school,
+            'transfer_reason' => $transfer_reason,
             'special_requirements' => $special_requirements,
             'marketing_consent' => isset($_POST['marketing_consent']) ? 1 : 0,
             'submitted_at' => current_time('mysql'),
@@ -2679,23 +2018,6 @@ class EduBot_Shortcode {
         
         $this->debug_log("Current step = " . $current_step . ", Message = " . $message);
         
-        // Handle legacy "CONFIRM" messages and variations - inform users the system has been updated
-        if (preg_match('/^(confirm|confrim|confrm|yes|submit|proceed)$/i', trim($message)) && empty($current_step)) {
-            return "Hello! 👋 Our admission process has been **streamlined for your convenience!**\n\n" .
-                   "✨ **Good News:** You no longer need to type 'CONFIRM'!\n\n" .
-                   "🚀 **New Process:** Simply provide your details and we'll generate your **enquiry number automatically** after collecting your information.\n\n" .
-                   "**Let's start your admission enquiry:**\n\n" .
-                   "Please share your:\n" .
-                   "👶 **Student Name**\n" .
-                   "📧 **Email Address**\n" .
-                   "📱 **Mobile Number**\n\n" .
-                   "You can type them like:\n" .
-                   "• Name: Rahul Kumar\n" .
-                   "• Mobile: 9876543210\n" .
-                   "• Email: parent@email.com\n\n" .
-                   "Or just start with the student's name and I'll guide you step by step! 😊";
-        }
-        
         // OPTIONAL PARENT INFO STEP REMOVED - Now skips directly to confirmation
         /*
         if ($current_step === 'optional_parent_info') {
@@ -2704,7 +2026,22 @@ class EduBot_Shortcode {
         }
         */
         
-        // Confirmation step removed - enquiry auto-generated after DOB collection
+        // PRIORITY: Handle final confirmation step
+        if ($current_step === 'confirmation') {
+            $this->debug_log("Processing final confirmation step");
+            $collected_data = $session_data ? $session_data['data'] : array();
+            
+            if (stripos($message_lower, 'confirm') !== false || 
+                stripos($message_lower, 'yes') !== false || 
+                stripos($message_lower, 'submit') !== false) {
+                
+                // Generate enquiry number and save to database
+                return $this->process_final_submission($collected_data, $session_id);
+            } else {
+                return "Please type **'CONFIRM'** to complete your admission enquiry and receive your unique enquiry number! ✨\n\n" .
+                       "Or if you need to make changes, please let me know what you'd like to update.";
+            }
+        }
         
         // PRIORITY: Handle final details step (DOB collection)
         if ($current_step === 'final' || $current_step === 'age') {
@@ -2720,14 +2057,16 @@ class EduBot_Shortcode {
             }
             
             // Store collected DOB if valid
-            if (!empty($additional_info['date_of_birth'])) {
+            if (!empty($additional_info['date_of_birth']) && !empty($additional_info['age'])) {
                 $this->update_conversation_data($session_id, 'date_of_birth', $additional_info['date_of_birth']);
+                $this->update_conversation_data($session_id, 'age', $additional_info['age']);
                 $collected_data['date_of_birth'] = $additional_info['date_of_birth'];
+                $collected_data['age'] = $additional_info['age'];
                 
-                // Automatically generate enquiry number and save to database
-                $this->update_conversation_data($session_id, 'step', 'completed');
+                // Skip optional parent info and go directly to confirmation
+                $this->update_conversation_data($session_id, 'step', 'confirmation');
                 
-                return $this->process_final_submission($collected_data, $session_id);
+                return $this->show_final_confirmation($collected_data, $session_id);
             } else {
                 return "Please enter the student's date of birth in **dd/mm/yyyy** format.\n\n" .
                        "**Example:** 16/10/2010\n\n" .
@@ -2965,7 +2304,7 @@ class EduBot_Shortcode {
             // Store board in session
             if ($session_id) {
                 $this->update_conversation_data($session_id, 'board', $selected_board['code']);
-                $this->update_conversation_data($session_id, 'step', 'final');
+                $this->update_conversation_data($session_id, 'step', 'age');
             }
             
             return "✅ **Board Selected: {$selected_board['code']}**\n\n" .
@@ -3168,9 +2507,11 @@ class EduBot_Shortcode {
             }
             
             // Store collected DOB if valid
-            if (!empty($additional_info['date_of_birth'])) {
+            if (!empty($additional_info['date_of_birth']) && !empty($additional_info['age'])) {
                 $this->update_conversation_data($session_id, 'date_of_birth', $additional_info['date_of_birth']);
+                $this->update_conversation_data($session_id, 'age', $additional_info['age']);
                 $collected_data['date_of_birth'] = $additional_info['date_of_birth'];
+                $collected_data['age'] = $additional_info['age'];
             }
             
             // Check what's still needed for final details (only DOB)
@@ -3183,6 +2524,7 @@ class EduBot_Shortcode {
                 $response = "✅ **Final Details Recorded:**\n";
                 if (!empty($collected_data['date_of_birth'])) {
                     $response .= "• Date of Birth: {$collected_data['date_of_birth']}\n";
+                    $response .= "• Age: {$collected_data['age']} years\n";
                 }
                 
                 $response .= "\n**Still needed:**\n";
@@ -3193,11 +2535,10 @@ class EduBot_Shortcode {
                 return $response;
             }
             
-            // All required details collected - automatically generate enquiry number
-            $this->update_conversation_data($session_id, 'step', 'completed');
+            // All required details collected, skip optional parent info and go directly to confirmation
+            $this->update_conversation_data($session_id, 'step', 'confirmation');
             
-            // Directly generate enquiry number and save to database
-            return $this->process_final_submission($collected_data, $session_id);
+            return $this->show_final_confirmation($collected_data, $session_id);
         }
         
         // Handle grade selection responses (only if not combined academic input)
@@ -3274,12 +2615,265 @@ class EduBot_Shortcode {
                    "Just type the board code you prefer, like 'CBSE' or 'CAIE'.";
         }
         
-        // Age input is no longer supported - only DOB in dd/mm/yyyy format
+        // Handle age input
+        if (preg_match('/\b(\d{1,2})\s*(years?|yrs?)?\b/i', $message_lower) && 
+            !preg_match('/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/', $message) &&
+            !preg_match('/(\+?91|0)?[\s-]?[6-9]\d{9}/', $message)) {
+            
+            preg_match('/\b(\d{1,2})\s*(years?|yrs?)?\b/i', $message_lower, $age_matches);
+            $age = $age_matches[1];
+            
+            // Store age in session
+            if ($session_id) {
+                $this->update_conversation_data($session_id, 'age', $age);
+                $this->update_conversation_data($session_id, 'step', 'previous_school');
+            }
+            
+            return "✅ **Age Recorded: {$age} years**\n\n" .
+                   "Great! Just a couple more questions.\n\n" .
+                   "**Has your child studied in any previous school?** 🏫\n\n" .
+                   "• Type **'Yes'** if they have previous school experience\n" .
+                   "• Type **'No'** if this is their first school admission\n" .
+                   "• Type **'None'** if not applicable";
+        }
         
-        // Previous school handling removed - go directly to confirmation after DOB
+        // Handle previous school response - including combined responses like "Yes, SchoolName"
+        if (preg_match('/\b(yes|no|none|first\s*time|new|never)\b/i', $message_lower)) {
+            if (preg_match('/\b(yes)\b/i', $message_lower)) {
+                // Check if school name is provided in the same message (e.g., "Yes, Chirac")
+                $school_name_match = preg_replace('/\b(yes|,|\s)+/i', '', trim($message));
+                if (!empty($school_name_match) && strlen($school_name_match) > 2) {
+                    // School name provided with "Yes"
+                    if ($session_id) {
+                        $this->update_conversation_data($session_id, 'previous_school', 'Yes');
+                        $this->update_conversation_data($session_id, 'previous_school_name', $school_name_match);
+                        $this->update_conversation_data($session_id, 'step', 'confirmation');
+                    }
+                    
+                    return "✅ **Previous School: {$school_name_match}**\n\n" .
+                           "Thank you for providing the previous school details!\n\n" .
+                           "**All information collected successfully!** 🎉\n\n" .
+                           "Type **'CONFIRM'** to complete your admission enquiry and receive your unique enquiry number! ✨";
+                } else {
+                    // Only "Yes" provided, ask for school name
+                    if ($session_id) {
+                        $this->update_conversation_data($session_id, 'previous_school', 'Yes');
+                        $this->update_conversation_data($session_id, 'step', 'previous_school_name');
+                    }
+                    
+                    return "📚 **Previous School Experience: Yes**\n\n" .
+                           "Could you please tell me the **name of the previous school**?\n\n" .
+                           "This helps us understand your child's academic background.";
+                }
+            } else {
+                if ($session_id) {
+                    $this->update_conversation_data($session_id, 'previous_school', 'No');
+                    $this->update_conversation_data($session_id, 'step', 'confirmation');
+                }
+                
+                return "📚 **Previous School Experience: None**\n\n" .
+                       "Perfect! This will be a fresh start for your child.\n\n" .
+                       "**Final Step:** Let me confirm all the details and generate your enquiry number.\n\n" .
+                       "Type **'CONFIRM'** to complete your admission enquiry, and I'll generate your unique enquiry number! ✨";
+            }
+        }
         
-        // Legacy confirmation handler removed - now using proper step-based confirmation
-        // that saves to database via process_final_submission() method
+        // Handle previous school name (when provided separately)
+        if (!preg_match('/\b(admission|apply|enroll|join|fee|cost|price|visit|tour|contact|phone|address|school|about|information|facility|program|confirm|yes|complete|finish|nursery|pp1|pp2|pre-?kg|lkg|ukg|grade|class|cbse|caie|cambridge|state|icse|igcse|international|ib|bse|telangana|skip|proceed)\b/i', $message_lower) &&
+            strlen(trim($message)) > 3 && 
+            !preg_match('/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/', $message) &&
+            !preg_match('/(\+?91|0)?[\s-]?[6-9]\d{9}/', $message) &&
+            !preg_match('/\b(\d{1,2})\s*(years?|yrs?)?\b/i', $message_lower) &&
+            !preg_match('/\b(no|none|first\s*time|new|never)\b/i', $message_lower)) {
+            
+            $school_name_input = trim($message);
+            
+            if ($session_id) {
+                $this->update_conversation_data($session_id, 'previous_school_name', $school_name_input);
+                $this->update_conversation_data($session_id, 'step', 'confirmation');
+            }
+            
+            return "✅ **Previous School: {$school_name_input}**\n\n" .
+                   "Thank you for providing the previous school details!\n\n" .
+                   "**All information collected successfully!** 🎉\n\n" .
+                   "Type **'CONFIRM'** to complete your admission enquiry and receive your unique enquiry number! ✨";
+        }
+        
+        // Handle confirmation and generate enquiry number
+        if (stripos($message_lower, 'confirm') !== false || 
+            stripos($message_lower, 'yes') !== false ||
+            stripos($message_lower, 'complete') !== false || 
+            stripos($message_lower, 'finish') !== false) {
+            
+            // Get session data for complete information
+            $session_data = $this->get_conversation_session($session_id);
+            $collected_data = $session_data ? $session_data['data'] : array();
+            
+            // Generate unique enquiry number
+            $enquiry_number = 'ENQ' . date('Y') . date('m') . strtoupper(substr(md5(uniqid()), 0, 6));
+            
+            // Save the enquiry with all collected data
+            $enquiry_data = array(
+                'enquiry_number' => $enquiry_number,
+                'date' => current_time('mysql'),
+                'status' => 'submitted',
+                'student_name' => $collected_data['student_name'] ?? 'Not provided',
+                'email' => $collected_data['email'] ?? 'Not provided',
+                'phone' => $collected_data['phone'] ?? 'Not provided',
+                'grade' => $collected_data['grade'] ?? 'Not provided',
+                'board' => $collected_data['board'] ?? 'Not provided',
+                'academic_year' => $collected_data['academic_year'] ?? 'Not specified',
+                'age' => $collected_data['age'] ?? 'Not provided',
+                'date_of_birth' => $collected_data['date_of_birth'] ?? 'Not provided',
+                'address' => $collected_data['address'] ?? 'Not provided',
+                'previous_school' => $collected_data['previous_school'] ?? 'Not provided',
+                'previous_school_name' => $collected_data['previous_school_name'] ?? 'Not applicable',
+                'message' => 'Admission enquiry submitted via chatbot'
+            );
+            
+            // Save to WordPress options for now (could be database in production)
+            $existing_enquiries = get_option('edubot_admission_enquiries', array());
+            $existing_enquiries[$enquiry_number] = $enquiry_data;
+            update_option('edubot_admission_enquiries', $existing_enquiries);
+            
+            // Send email confirmation to customer
+            $email_sent = false;
+            $customer_email = $collected_data['email'] ?? '';
+            
+            if (!empty($customer_email) && is_email($customer_email)) {
+                try {
+                    $subject = "Admission Enquiry Confirmation - {$school_name} (#{$enquiry_number})";
+                    
+                    // Create properly formatted HTML email
+                    $message_body = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>";
+                    $message_body .= "<div style='max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd;'>";
+                    $message_body .= "<h2 style='color: #2c5282; text-align: center;'>Admission Enquiry Confirmation</h2>";
+                    $message_body .= "<p>Dear Parent/Guardian,</p>";
+                    $message_body .= "<p>Thank you for your interest in <strong>{$school_name}</strong>.</p>";
+                    $message_body .= "<p>Your admission enquiry has been successfully submitted with the following details:</p>";
+                    
+                    $message_body .= "<table style='width: 100%; border-collapse: collapse; margin: 20px 0;'>";
+                    $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Enquiry Number</td><td style='padding: 10px; border: 1px solid #ddd;'>{$enquiry_number}</td></tr>";
+                    $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Student Name</td><td style='padding: 10px; border: 1px solid #ddd;'>" . ($collected_data['student_name'] ?? 'Not provided') . "</td></tr>";
+                    $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Grade</td><td style='padding: 10px; border: 1px solid #ddd;'>" . ($collected_data['grade'] ?? 'Not provided') . "</td></tr>";
+                    $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Board</td><td style='padding: 10px; border: 1px solid #ddd;'>" . ($collected_data['board'] ?? 'Not provided') . "</td></tr>";
+                    
+                    if (!empty($collected_data['academic_year'])) {
+                        $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Academic Year</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['academic_year'] . "</td></tr>";
+                    }
+                    
+                    // Handle age properly - only show if it's reasonable for the grade
+                    $age_display = '';
+                    if (!empty($collected_data['age'])) {
+                        $age = (int)$collected_data['age'];
+                        $grade = $collected_data['grade'] ?? '';
+                        
+                        // Validate age against grade
+                        if (stripos($grade, 'nursery') !== false && ($age < 2 || $age > 6)) {
+                            $age_display = 'Age needs verification';
+                        } elseif ($age > 0 && $age < 25) {
+                            $age_display = $age . ' years';
+                        } else {
+                            $age_display = 'Age needs verification';
+                        }
+                        $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Age</td><td style='padding: 10px; border: 1px solid #ddd;'>{$age_display}</td></tr>";
+                    }
+                    
+                    if (!empty($collected_data['date_of_birth'])) {
+                        $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Date of Birth</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['date_of_birth'] . "</td></tr>";
+                    }
+                    
+                    $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Phone</td><td style='padding: 10px; border: 1px solid #ddd;'>" . ($collected_data['phone'] ?? 'Not provided') . "</td></tr>";
+                    
+                    // Handle address
+                    $address = $collected_data['address'] ?? 'Not provided';
+                    $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Address</td><td style='padding: 10px; border: 1px solid #ddd;'>" . ucwords($address) . "</td></tr>";
+                    
+                    // Add parent information if provided
+                    $has_parent_info = !empty($collected_data['father_name']) || !empty($collected_data['mother_name']) || 
+                                      !empty($collected_data['mother_email']) || !empty($collected_data['mother_phone']);
+                    
+                    if ($has_parent_info) {
+                        if (!empty($collected_data['father_name'])) {
+                            $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Father's Name</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['father_name'] . "</td></tr>";
+                        }
+                        if (!empty($collected_data['mother_name'])) {
+                            $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Mother's Name</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['mother_name'] . "</td></tr>";
+                        }
+                        if (!empty($collected_data['mother_email'])) {
+                            $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Mother's Email</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['mother_email'] . "</td></tr>";
+                        }
+                        if (!empty($collected_data['mother_phone'])) {
+                            $message_body .= "<tr style='background-color: #f8f9fa;'><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Mother's Phone</td><td style='padding: 10px; border: 1px solid #ddd;'>" . $collected_data['mother_phone'] . "</td></tr>";
+                        }
+                    }
+                    
+                    $message_body .= "<tr><td style='padding: 10px; border: 1px solid #ddd; font-weight: bold;'>Date Submitted</td><td style='padding: 10px; border: 1px solid #ddd;'>" . current_time('F j, Y g:i A') . "</td></tr>";
+                    $message_body .= "</table>";
+                    
+                    $message_body .= "<h3 style='color: #2c5282;'>Next Steps</h3>";
+                    $message_body .= "<p>Our admission team will contact you within <strong>24 hours</strong> to schedule a campus visit and guide you through the next steps.</p>";
+                    $message_body .= "<p><strong>Please save this enquiry number for your records: {$enquiry_number}</strong></p>";
+                    
+                    $message_body .= "<h3 style='color: #2c5282;'>Contact Information</h3>";
+                    $message_body .= "<p><strong>Phone:</strong> " . ($settings['phone'] ?? '+91-80-12345678') . "<br>";
+                    $message_body .= "<strong>Email:</strong> " . ($settings['email'] ?? 'admissions@school.edu') . "</p>";
+                    
+                    $message_body .= "<p style='margin-top: 30px;'>Best regards,<br><strong>{$school_name} Admissions Team</strong></p>";
+                    $message_body .= "</div></body></html>";
+                    
+                    // Set headers for HTML email
+                    $headers = array(
+                        'Content-Type: text/html; charset=UTF-8',
+                        'From: ' . ($settings['email'] ?? 'admissions@school.edu')
+                    );
+                    
+                    $email_sent = wp_mail($customer_email, $subject, $message_body, $headers);
+                    
+                    if ($email_sent) {
+                        error_log('EduBot: Email confirmation sent successfully to ' . $customer_email . ' for enquiry ' . $enquiry_number);
+                    } else {
+                        error_log('EduBot: Failed to send email confirmation to ' . $customer_email . ' for enquiry ' . $enquiry_number);
+                    }
+                    
+                } catch (Exception $e) {
+                    error_log('EduBot Email Error: ' . $e->getMessage());
+                }
+            }
+            
+            // Clear session data after successful completion
+            if ($session_id) {
+                $sessions = get_option('edubot_conversation_sessions', array());
+                unset($sessions[$session_id]);
+                update_option('edubot_conversation_sessions', $sessions);
+            }
+            
+            $email_confirmation_text = $email_sent ? 
+                "📧 **Email Confirmation:** A detailed confirmation email has been sent to {$customer_email}.\n\n" :
+                "📧 **Email Confirmation:** We'll send you a confirmation email shortly.\n\n";
+            
+            return "🎉 **Admission Enquiry Completed Successfully!**\n\n" .
+                   "✅ Your enquiry has been submitted and recorded.\n\n" .
+                   "📋 **Your Enquiry Number:** `{$enquiry_number}`\n\n" .
+                   "**Important:** Please save this enquiry number for future reference!\n\n" .
+                   $email_confirmation_text .
+                   "**What happens next?**\n" .
+                   "1. 📞 Our admission team will call you within 24 hours\n" .
+                   "2. 🏫 We'll schedule a convenient campus visit\n" .
+                   "3. 👨‍🏫 Meet with our academic coordinators\n" .
+                   "4. 📄 Document verification process\n" .
+                   "5. ✅ Final admission confirmation\n\n" .
+                   "**Contact Information:**\n" .
+                   "📞 Phone: " . ($settings['phone'] ?? '+91-80-12345678') . "\n" .
+                   "📧 Email: " . ($settings['email'] ?? 'admissions@school.edu') . "\n\n" .
+                   "**Required Documents for Visit:**\n" .
+                   "• Birth certificate\n" .
+                   "• Previous school records (if any)\n" .
+                   "• Passport size photos\n" .
+                   "• Address proof\n\n" .
+                   "Thank you for choosing {$school_name}! 🏫✨\n\n" .
+                   "Is there anything else I can help you with?";
+        }
         
         // Handle fee-related queries
         if (strpos($message_lower, 'fee') !== false || 
@@ -3318,7 +2912,8 @@ class EduBot_Shortcode {
             strpos($message_lower, 'tour') !== false || 
             strpos($message_lower, 'contact') !== false ||
             strpos($message_lower, 'phone') !== false ||
-            strpos($message_lower, 'address') !== false) {
+            strpos($message_lower, 'address') !== false ||
+            $action_type === 'school_visit') {
             
             return "📍 **Contact & Visit Information**\n\n" .
                    "We'd love to welcome you to {$school_name}!\n\n" .
@@ -3378,7 +2973,8 @@ class EduBot_Shortcode {
             strpos($message_lower, 'about') !== false || 
             strpos($message_lower, 'information') !== false ||
             strpos($message_lower, 'facility') !== false ||
-            strpos($message_lower, 'program') !== false) {
+            strpos($message_lower, 'program') !== false ||
+            $action_type === 'other_info') {
             
             return "🏫 **About {$school_name}**\n\n" .
                    "Excellence in education since our establishment, nurturing young minds for a bright future!\n\n" .
@@ -3974,620 +3570,6 @@ class EduBot_Shortcode {
         }
         
         return 'Selected Board';
-    }
-    
-    /**
-     * Ensure enquiry table exists
-     */
-    private function ensure_enquiry_table_exists() {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'edubot_enquiries';
-        
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            enquiry_number varchar(50) NOT NULL,
-            student_name varchar(100) NOT NULL,
-            date_of_birth date NULL,
-            grade varchar(50) NULL,
-            board varchar(50) NULL,
-            academic_year varchar(20) NULL,
-            parent_name varchar(100) NULL,
-            email varchar(100) NULL,
-            phone varchar(20) NULL,
-            address text NULL,
-            gender varchar(10) NULL,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            status varchar(20) DEFAULT 'pending',
-            source varchar(50) DEFAULT 'chatbot',
-            PRIMARY KEY (id),
-            UNIQUE KEY enquiry_number (enquiry_number)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        error_log("EduBot: Ensured enquiry table exists");
-    }
-
-    /**
-     * Build HTML email content for parent confirmation
-     */
-    private function build_parent_confirmation_html($collected_data, $enquiry_number, $school_name) {
-        // Get branding colors and logo from school settings
-        $primary_color = get_option('edubot_primary_color', '#4facfe');
-        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
-        $school_logo = get_option('edubot_school_logo', '');
-        
-        $html = '<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admission Enquiry Confirmation</title>
-    <style>
-        @media only screen and (max-width: 600px) {
-            .container { width: 100% !important; padding: 10px !important; }
-            .header-logo { font-size: 24px !important; }
-            .content-section { padding: 15px !important; }
-            .details-table { font-size: 14px !important; }
-            .details-table td { padding: 8px !important; }
-            .logo-img { max-width: 120px !important; max-height: 50px !important; }
-        }
-    </style>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f7fa;">
-    <div class="container" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, ' . esc_attr($primary_color) . ' 0%, ' . esc_attr($secondary_color) . ' 100%); color: white; text-align: center; padding: 30px 20px;">';
-        
-        if (!empty($school_logo)) {
-            $html .= '<div style="margin-bottom: 15px;">
-                <img src="' . esc_url($school_logo) . '" alt="' . esc_attr($school_name) . '" class="logo-img" style="max-width: 150px; max-height: 60px; display: block; margin: 0 auto;" />
-            </div>';
-        }
-        
-        $html .= '<div class="header-logo" style="font-size: 28px; font-weight: bold; margin-bottom: 10px;">' . esc_html($school_name) . '</div>
-            <div style="font-size: 16px; opacity: 0.9;">Admission Enquiry Confirmation</div>
-        </div>
-        
-        <!-- Success Message -->
-        <div class="content-section" style="padding: 30px 25px; text-align: center; background-color: #f8fafc;">
-            <div style="background-color: #dcfce7; color: #166534; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
-                <div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">✅ Enquiry Successfully Submitted!</div>
-                <div style="font-size: 14px;">Your enquiry number: <strong>' . esc_html($enquiry_number) . '</strong></div>
-            </div>
-            
-            <p style="color: #475569; font-size: 16px; margin: 0;">Dear Parent/Guardian,</p>
-            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 15px 0 0 0;">
-                Thank you for your interest in ' . esc_html($school_name) . '. We have received your admission enquiry and are excited to help you through the admission process.
-            </p>
-        </div>
-        
-        <!-- Enquiry Details -->
-        <div class="content-section" style="padding: 0 25px 20px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">📋 Enquiry Details</h3>
-            
-            <table class="details-table" style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151; width: 40%;">Enquiry Number</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($enquiry_number) . '</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Student Name</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['student_name'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Grade/Class</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['grade'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Board Preference</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['board'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Academic Year</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['academic_year'] ?? '2026-27') . '</td>
-                </tr>';
-        
-        if (!empty($collected_data['date_of_birth'])) {
-            $html .= '<tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Date of Birth</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['date_of_birth']) . '</td>
-                </tr>';
-        }
-        
-        $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Contact Email</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['email'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Phone Number</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['phone'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Submission Date</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . date('F j, Y g:i A') . '</td>
-                </tr>
-            </table>
-        </div>
-        
-        <!-- Next Steps -->
-        <div class="content-section" style="padding: 0 25px 25px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">🚀 What Happens Next?</h3>
-            
-            <div style="background-color: #f0f9ff; border-left: 4px solid ' . esc_attr($primary_color) . '; padding: 20px; border-radius: 6px;">
-                <ul style="margin: 0; padding-left: 20px; color: #374151; line-height: 1.8;">
-                    <li><strong>Within 24 hours:</strong> Our admission counselor will contact you</li>
-                    <li><strong>Information sharing:</strong> You\'ll receive detailed program information</li>
-                    <li><strong>Campus visit:</strong> We\'ll schedule a convenient time for your visit</li>
-                    <li><strong>Admission kit:</strong> Complete fee structure and documentation</li>
-                    <li><strong>Personal guidance:</strong> Step-by-step admission process support</li>
-                </ul>
-            </div>
-        </div>
-        
-        <!-- Contact Information -->
-        <div class="content-section" style="padding: 0 25px 30px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">📞 Need Immediate Assistance?</h3>
-            
-            <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px;">
-                <div style="color: #92400e; font-size: 15px; line-height: 1.6;">
-                    <p style="margin: 0 0 10px 0;"><strong>📱 Phone:</strong> 7702800800 / 9248111448</p>
-                    <p style="margin: 0 0 10px 0;"><strong>📧 Email:</strong> admissions@epistemo.in</p>
-                    <p style="margin: 0;"><strong>🕒 Office Hours:</strong> Monday to Saturday, 9:00 AM - 6:00 PM</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Important Note -->
-        <div style="background-color: #dc2626; color: white; padding: 20px 25px; text-align: center;">
-            <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">📌 Please Save Your Enquiry Number</div>
-            <div style="font-size: 24px; font-weight: bold; background-color: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 6px; display: inline-block;">' . esc_html($enquiry_number) . '</div>
-            <div style="font-size: 14px; margin-top: 8px; opacity: 0.9;">You\'ll need this number for all future communications</div>
-        </div>
-        
-        <!-- Footer -->
-        <div style="background-color: #f8fafc; padding: 25px; text-align: center; border-top: 1px solid #e5e7eb;">
-            <p style="color: #6b7280; margin: 0 0 10px 0; font-size: 16px;">We look forward to welcoming your child to the <strong>' . esc_html($school_name) . '</strong> family!</p>
-            <p style="color: #6b7280; margin: 0; font-size: 14px;">
-                Warm regards,<br>
-                <strong>' . esc_html($school_name) . ' Admissions Team</strong>
-            </p>
-            <hr style="margin: 20px 0; border: none; height: 1px; background-color: #e5e7eb;">
-            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-                This is an automated confirmation email from our admission enquiry system.<br>
-                Please do not reply to this email.
-            </p>
-        </div>
-        
-    </div>
-</body>
-</html>';
-        
-        return $html;
-    }
-
-    /**
-     * Build HTML email content for school notification
-     */
-    private function build_school_notification_html($collected_data, $enquiry_number, $school_name) {
-        // Get branding colors and logo from school settings
-        $primary_color = get_option('edubot_primary_color', '#4facfe');
-        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
-        $school_logo = get_option('edubot_school_logo', '');
-        
-        // Calculate age if DOB is provided
-        $age_info = '';
-        if (!empty($collected_data['date_of_birth'])) {
-            try {
-                $birth_date = new DateTime($collected_data['date_of_birth']);
-                $current_date = new DateTime();
-                $age = $current_date->diff($birth_date)->y;
-                $age_info = ' (Age: ' . $age . ' years)';
-            } catch (Exception $e) {
-                $age_info = '';
-            }
-        }
-
-        $html = '<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Admission Enquiry - Action Required</title>
-    <style>
-        @media only screen and (max-width: 600px) {
-            .container { width: 100% !important; padding: 10px !important; }
-            .header-logo { font-size: 22px !important; }
-            .content-section { padding: 15px !important; }
-            .details-table { font-size: 13px !important; }
-            .details-table td { padding: 8px !important; }
-            .logo-img { max-width: 120px !important; max-height: 50px !important; }
-        }
-    </style>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f7fa;">
-    <div class="container" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; text-align: center; padding: 25px 20px;">';
-        
-        if (!empty($school_logo)) {
-            $html .= '<div style="margin-bottom: 15px;">
-                <img src="' . esc_url($school_logo) . '" alt="' . esc_attr($school_name) . '" class="logo-img" style="max-width: 150px; max-height: 60px; display: block; margin: 0 auto;" />
-            </div>';
-        }
-        
-        $html .= '<div class="header-logo" style="font-size: 26px; font-weight: bold; margin-bottom: 8px;">🔔 New Admission Enquiry</div>
-            <div style="font-size: 15px; opacity: 0.9;">' . esc_html($school_name) . ' - Action Required</div>
-        </div>
-        
-        <!-- Alert Banner -->
-        <div class="content-section" style="padding: 20px 25px; text-align: center; background-color: #fef2f2;">
-            <div style="background-color: #fecaca; color: #991b1b; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626;">
-                <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;">⚡ Priority: Contact within 24 hours</div>
-                <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . date('F j, Y g:i A') . '</div>
-            </div>
-        </div>
-        
-        <!-- Student Information -->
-        <div class="content-section" style="padding: 0 25px 20px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">👨‍🎓 Student Information</h3>
-            
-            <table class="details-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151; width: 35%;">Student Name</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937; font-weight: 600;">' . esc_html($collected_data['student_name'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Grade/Class Seeking</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['grade'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Board Preference</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['board'] ?? 'Not provided') . '</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Academic Year</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['academic_year'] ?? '2026-27') . '</td>
-                </tr>';
-        
-        if (!empty($collected_data['date_of_birth'])) {
-            $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Date of Birth</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['date_of_birth']) . $age_info . '</td>
-                </tr>';
-        }
-        
-        if (!empty($collected_data['gender'])) {
-            $html .= '<tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Gender</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['gender']) . '</td>
-                </tr>';
-        }
-        
-        $html .= '</table>
-        </div>
-        
-        <!-- Parent/Guardian Information -->
-        <div class="content-section" style="padding: 0 25px 20px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">👨‍👩‍👧‍👦 Parent/Guardian Contact Details</h3>
-            
-            <table class="details-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                <tr style="background-color: #fef3c7;">
-                    <td style="padding: 12px; border: 1px solid #f59e0b; font-weight: bold; color: #92400e; width: 35%;">📧 Email</td>
-                    <td style="padding: 12px; border: 1px solid #f59e0b; color: #92400e; font-weight: 600;"><a href="mailto:' . esc_attr($collected_data['email'] ?? '') . '" style="color: #92400e; text-decoration: none;">' . esc_html($collected_data['email'] ?? 'Not provided') . '</a></td>
-                </tr>
-                <tr style="background-color: #fef3c7;">
-                    <td style="padding: 12px; border: 1px solid #f59e0b; font-weight: bold; color: #92400e;">📱 Phone</td>
-                    <td style="padding: 12px; border: 1px solid #f59e0b; color: #92400e; font-weight: 600;"><a href="tel:' . esc_attr($collected_data['phone'] ?? '') . '" style="color: #92400e; text-decoration: none;">' . esc_html($collected_data['phone'] ?? 'Not provided') . '</a></td>
-                </tr>';
-        
-        if (!empty($collected_data['parent_name'])) {
-            $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Parent Name</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['parent_name']) . '</td>
-                </tr>';
-        }
-        
-        if (!empty($collected_data['address'])) {
-            $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Address</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['address']) . '</td>
-                </tr>';
-        }
-        
-        $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Enquiry Source</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">Website Chatbot</td>
-                </tr>
-            </table>
-        </div>
-        
-        <!-- Action Items -->
-        <div class="content-section" style="padding: 0 25px 25px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">✅ Required Actions</h3>
-            
-            <div style="background-color: #f0f9ff; border: 1px solid ' . esc_attr($primary_color) . '; padding: 20px; border-radius: 8px;">
-                <div style="color: ' . esc_attr($primary_color) . '; font-size: 15px; line-height: 1.8;">
-                    <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="background-color: ' . esc_attr($primary_color) . '; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px;">1</span>
-                        <span><strong>Contact parent within 24 hours</strong> via phone or email</span>
-                    </div>
-                    <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="background-color: ' . esc_attr($primary_color) . '; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px;">2</span>
-                        <span>Schedule campus visit and provide school tour</span>
-                    </div>
-                    <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="background-color: ' . esc_attr($primary_color) . '; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px;">3</span>
-                        <span>Send detailed admission kit with fee structure</span>
-                    </div>
-                    <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="background-color: ' . esc_attr($primary_color) . '; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px;">4</span>
-                        <span>Provide information about curriculum and programs</span>
-                    </div>
-                    <div style="display: flex; align-items: center;">
-                        <span style="background-color: ' . esc_attr($primary_color) . '; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px;">5</span>
-                        <span>Update enquiry status in the system</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Parent Notification Status -->
-        <div style="background-color: #dcfce7; border: 1px solid #16a34a; padding: 20px 25px; margin: 0;">
-            <h4 style="color: #166534; margin: 0 0 10px 0; font-size: 16px;">📧 Parent Notification Status</h4>
-            <p style="color: #166534; margin: 0; font-size: 14px;">
-                ✅ The parent has already received an automated confirmation email with enquiry number: <strong>' . esc_html($enquiry_number) . '</strong><br>
-                📍 This enquiry has been automatically stored in the database for your reference.
-            </p>
-        </div>
-        
-        <!-- Footer -->
-        <div style="background-color: #374151; color: white; padding: 25px; text-align: center;">
-            <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">' . esc_html($school_name) . '</p>
-            <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.8;">Automated Enquiry Management System</p>
-            <div style="background-color: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px;">
-                <p style="margin: 0; font-size: 12px; opacity: 0.7;">
-                    This enquiry was generated automatically by the EduBot Pro chatbot system.<br>
-                    Please ensure prompt follow-up to maintain excellent customer service standards.
-                </p>
-            </div>
-        </div>
-        
-    </div>
-</body>
-</html>';
-        
-        return $html;
-    }
-
-    /**
-     * Send WhatsApp confirmation to parent
-     */
-    private function send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name) {
-        try {
-            // Enhanced debug logging to specific file
-            $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
-            $timestamp = date('Y-m-d H:i:s');
-            
-            $debug_msg = "\n=== EDUBOT WHATSAPP DEBUG [$timestamp] ===\n";
-            $debug_msg .= "Function: send_parent_whatsapp_confirmation\n";
-            $debug_msg .= "Enquiry Number: $enquiry_number\n";
-            $debug_msg .= "School Name: $school_name\n";
-            $debug_msg .= "Collected Data: " . json_encode($collected_data) . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            error_log("EduBot: Starting WhatsApp confirmation for enquiry {$enquiry_number}");
-            
-            // Check if WhatsApp notifications are enabled
-            $whatsapp_enabled = get_option('edubot_whatsapp_notifications', 0);
-            $debug_msg = "1. WhatsApp Notifications Enabled: " . ($whatsapp_enabled ? 'YES' : 'NO') . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            error_log("EduBot: WhatsApp notifications enabled: " . ($whatsapp_enabled ? 'YES' : 'NO'));
-            if (!$whatsapp_enabled) {
-                $debug_msg = "❌ STOPPED: WhatsApp notifications are disabled in settings\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log('EduBot: WhatsApp notifications are disabled in settings');
-                return false;
-            }
-            
-            // Check if WhatsApp API is configured
-            $whatsapp_token = get_option('edubot_whatsapp_token', '');
-            $whatsapp_provider = get_option('edubot_whatsapp_provider', '');
-            $whatsapp_phone_id = get_option('edubot_whatsapp_phone_id', ''); // Fixed: correct option name
-            
-            $debug_msg = "2. WhatsApp API Configuration:\n";
-            $debug_msg .= "   - Provider: " . ($whatsapp_provider ?: 'NOT SET') . "\n";
-            $debug_msg .= "   - Token: " . (empty($whatsapp_token) ? 'NOT SET' : 'CONFIGURED (' . substr($whatsapp_token, 0, 10) . '...)') . "\n";
-            $debug_msg .= "   - Phone Number ID: " . ($whatsapp_phone_id ?: 'NOT SET') . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            error_log("EduBot: WhatsApp provider: " . ($whatsapp_provider ?: 'NOT SET'));
-            error_log("EduBot: WhatsApp token: " . (empty($whatsapp_token) ? 'NOT SET' : 'CONFIGURED'));
-            
-            // Check for required configuration
-            if (empty($whatsapp_token) || empty($whatsapp_provider)) {
-                $debug_msg = "❌ STOPPED: WhatsApp API not configured (missing token or provider)\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log('EduBot: WhatsApp API not configured (missing token or provider)');
-                return false;
-            }
-            
-            // For Meta provider, Phone Number ID is required
-            if ($whatsapp_provider === 'meta' && empty($whatsapp_phone_id)) {
-                $debug_msg = "❌ STOPPED: Meta WhatsApp API requires Phone Number ID but it's missing\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log('EduBot: Meta WhatsApp API requires Phone Number ID but it\'s not configured');
-                return false;
-            }
-            
-            $phone = $collected_data['phone'] ?? '';
-            $debug_msg = "3. Phone Number Processing:\n";
-            $debug_msg .= "   - Original Phone: " . ($phone ?: 'NOT PROVIDED') . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            error_log("EduBot: Phone number from form: " . ($phone ?: 'NOT PROVIDED'));
-            if (empty($phone)) {
-                $debug_msg = "❌ STOPPED: No phone number provided for WhatsApp confirmation\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log('EduBot: No phone number provided for WhatsApp confirmation');
-                return false;
-            }
-            
-            // Clean and validate phone number
-            $original_phone = $phone;
-            $phone = preg_replace('/[^0-9+]/', '', $phone);
-            
-            $debug_msg = "   - Cleaned Phone: $phone\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            if (empty($phone)) {
-                $debug_msg = "❌ STOPPED: Invalid phone number format for WhatsApp: $original_phone\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log('EduBot: Invalid phone number format for WhatsApp: ' . $collected_data['phone']);
-                return false;
-            }
-            
-            // Ensure phone number has country code (Meta API expects without + prefix)
-            if (preg_match('/^\+/', $phone)) {
-                $phone = ltrim($phone, '+'); // Remove + prefix for Meta API
-            } else {
-                // Add India country code if not present
-                if (preg_match('/^[6-9]\d{9}$/', $phone)) {
-                    $phone = '91' . $phone;
-                } elseif (!preg_match('/^91[6-9]\d{9}$/', $phone)) {
-                    $debug_msg = "❌ STOPPED: Unable to format phone number for WhatsApp: $phone\n";
-                    file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                    error_log('EduBot: Unable to format phone number for WhatsApp: ' . $phone);
-                    return false;
-                }
-            }
-            
-            $debug_msg = "   - Final Formatted Phone: $phone\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            // Get WhatsApp message template from settings
-            $template = get_option('edubot_whatsapp_template', "Admission Enquiry Confirmation
-Dear {parent_name},
-
-Thank you for your enquiry at {school_name}. Your enquiry number is {enquiry_number} for Grade {grade}.
-
-We have received your application on {submission_date} and will contact you within 24-48 hours with the next steps.
-
-Best regards,
-Admissions Team
-Reply STOP to unsubscribe");
-            $template_type = get_option('edubot_whatsapp_template_type', 'freeform');
-            $template_name = get_option('edubot_whatsapp_template_name', 'admission_confirmation');
-            $template_language = get_option('edubot_whatsapp_template_language', 'en');
-            
-            // Prepare message data based on template type
-            $debug_msg = "4. Template Configuration:\n";
-            $debug_msg .= "   - Template Type: $template_type\n";
-            $debug_msg .= "   - Template Name: $template_name\n";
-            $debug_msg .= "   - Template Language: $template_language\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            if ($template_type === 'business_template') {
-                // For Meta WhatsApp Business API templates - use simplified format for our send_meta_whatsapp method
-                $template_params = [
-                    $collected_data['parent_name'] ?? $collected_data['student_name'] ?? 'Parent', // {{1}}
-                    $enquiry_number, // {{2}}
-                    $school_name, // {{3}}
-                    $collected_data['grade'] ?? '', // {{4}}
-                    date('d/m/Y H:i:s') // {{5}}
-                ];
-                
-                $debug_msg = "5. Business Template Parameters:\n";
-                $debug_msg .= "   - {{1}} Parent Name: " . $template_params[0] . "\n";
-                $debug_msg .= "   - {{2}} Enquiry Number: " . $template_params[1] . "\n";
-                $debug_msg .= "   - {{3}} School Name: " . $template_params[2] . "\n";
-                $debug_msg .= "   - {{4}} Grade: " . $template_params[3] . "\n";
-                $debug_msg .= "   - {{5}} Date: " . $template_params[4] . "\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                
-                $message_data = [
-                    'phone' => $phone,
-                    'template_name' => $template_name,
-                    'template_language' => $template_language,
-                    'template_params' => $template_params
-                ];
-                
-                $message = $message_data;
-            } else {
-                // For free-form messages, replace placeholders in template
-                $placeholders = [
-                    '{school_name}' => $school_name,
-                    '{parent_name}' => $collected_data['parent_name'] ?? $collected_data['student_name'] ?? 'Parent',
-                    '{student_name}' => $collected_data['student_name'] ?? '',
-                    '{enquiry_number}' => $enquiry_number,
-                    '{grade}' => $collected_data['grade'] ?? '',
-                    '{board}' => $collected_data['board'] ?? '',
-                    '{academic_year}' => $collected_data['academic_year'] ?? '2026-27',
-                    '{submission_date}' => date('d/m/Y'),
-                    '{phone}' => $collected_data['phone'] ?? '',
-                    '{email}' => $collected_data['email'] ?? ''
-                ];
-                
-                $message = str_replace(array_keys($placeholders), array_values($placeholders), $template);
-            }
-            
-            // Send WhatsApp message using API integrations
-            $debug_msg = "6. Sending WhatsApp Message:\n";
-            $debug_msg .= "   - Method: " . ($template_type === 'business_template' ? 'send_meta_whatsapp (Business Template)' : 'send_whatsapp (Freeform)') . "\n";
-            $debug_msg .= "   - Phone: $phone\n";
-            $debug_msg .= "   - Message Data: " . json_encode($message) . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            if (!class_exists('EduBot_API_Integrations')) {
-                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
-            }
-            
-            $api_integrations = new EduBot_API_Integrations();
-            
-            // Use the correct API method based on template type
-            if ($template_type === 'business_template') {
-                $result = $api_integrations->send_meta_whatsapp($message_data);
-            } else {
-                $result = $api_integrations->send_whatsapp($phone, $message);
-            }
-            
-            $debug_msg = "7. API Response: " . json_encode($result) . "\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            if ($result && !is_wp_error($result)) {
-                if (isset($result['success']) && $result['success']) {
-                    $debug_msg = "✅ SUCCESS: WhatsApp message sent successfully to $phone\n";
-                    if (isset($result['message_id'])) {
-                        $debug_msg .= "   - Message ID: {$result['message_id']}\n";
-                    }
-                    file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                    error_log("EduBot: WhatsApp confirmation sent successfully to {$phone}");
-                    return true;
-                } else {
-                    $debug_msg = "❌ FAILED: API returned unsuccessful response\n";
-                    file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                    error_log("EduBot: WhatsApp API returned unsuccessful response: " . json_encode($result));
-                    return false;
-                }
-            } else {
-                $error_msg = is_wp_error($result) ? $result->get_error_message() : 'Unknown error';
-                $debug_msg = "❌ FAILED: Error sending WhatsApp message: $error_msg\n";
-                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-                error_log("EduBot: Failed to send WhatsApp confirmation to {$phone}: {$error_msg}");
-                return false;
-            }
-            
-        } catch (Exception $e) {
-            error_log('EduBot: WhatsApp confirmation error: ' . $e->getMessage());
-            return false;
-        }
     }
 }
 

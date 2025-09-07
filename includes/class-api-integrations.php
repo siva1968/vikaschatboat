@@ -44,15 +44,9 @@ class EduBot_API_Integrations {
             return new WP_Error('rate_limit_exceeded', 'Too many AI requests. Please try again later.');
         }
 
-        try {
-            $api_keys = $this->school_config->get_api_keys();
-        } catch (Exception $e) {
-            error_log('EduBot: Error getting API keys: ' . $e->getMessage());
-            return new WP_Error('config_error', 'Failed to retrieve API configuration');
-        }
+        $api_keys = $this->school_config->get_api_keys();
         
         if (empty($api_keys['openai_key'])) {
-            error_log('EduBot: OpenAI API key not configured in settings');
             return new WP_Error('missing_api_key', 'OpenAI API key not configured');
         }
 
@@ -145,10 +139,10 @@ class EduBot_API_Integrations {
     private function make_openai_request($data, $api_key) {
         $url = 'https://api.openai.com/v1/chat/completions';
         
-        // Validate API key format (compatible with all OpenAI key formats)
-        if (!preg_match('/^sk-[a-zA-Z0-9_\-\.]{20,}$/', $api_key) || strlen($api_key) < 25) {
+        // Validate API key format (more flexible for modern OpenAI keys)
+        if (!preg_match('/^sk-[a-zA-Z0-9_\-\.]{32,}$/', $api_key)) {
             error_log('EduBot: Invalid OpenAI API key format: ' . substr($api_key, 0, 10) . '...' . substr($api_key, -5));
-            return new WP_Error('invalid_api_key', 'Invalid API key format. Key should start with "sk-" and be at least 25 characters long.');
+            return new WP_Error('invalid_api_key', 'Invalid API key format. Key should start with "sk-" and be at least 35 characters long.');
         }
         
         $headers = array(
@@ -739,40 +733,67 @@ class EduBot_API_Integrations {
     }
 
     /**
-     * Send WhatsApp message - TEMPORARILY DISABLED
+     * Send WhatsApp message
      */
     public function send_whatsapp($phone, $message) {
-        // TEMPORARY FIX: Disable WhatsApp messaging to isolate issues
-        error_log('EduBot: WhatsApp messaging temporarily disabled - would send to: ' . $phone);
-        error_log('EduBot: WhatsApp message content: ' . substr($message, 0, 100));
+        $api_keys = $this->school_config->get_api_keys();
         
-        // Return success response to prevent errors in calling code
-        return array(
-            'success' => true,
-            'message_id' => 'whatsapp_disabled_' . time(),
-            'status' => 'WhatsApp messaging temporarily disabled'
-        );
+        if (empty($api_keys['whatsapp_provider']) || empty($api_keys['whatsapp_token'])) {
+            return false;
+        }
+
+        switch ($api_keys['whatsapp_provider']) {
+            case 'meta':
+                return $this->send_meta_whatsapp($phone, $message, $api_keys);
+                
+            case 'twilio':
+                return $this->send_twilio_whatsapp($phone, $message, $api_keys);
+                
+            default:
+                return $this->send_generic_whatsapp($phone, $message, $api_keys);
+        }
     }
 
     /**
      * Send Meta WhatsApp Business message
      */
-    private function send_meta_whatsapp($phone, $message, $api_keys) {
-        $phone_id = $api_keys['whatsapp_phone_id'];
-        $url = "https://graph.facebook.com/v17.0/{$phone_id}/messages";
+    public function send_meta_whatsapp($phone, $message, $api_keys) {
+        $phone_id = $api_keys['whatsapp_phone_id'] ?? get_option('edubot_whatsapp_phone_id', '');
+        $access_token = $api_keys['whatsapp_token'] ?? get_option('edubot_whatsapp_token', '');
         
-        $data = array(
-            'messaging_product' => 'whatsapp',
-            'to' => $phone,
-            'type' => 'text',
-            'text' => array(
-                'body' => $message
-            )
-        );
+        if (empty($phone_id) || empty($access_token)) {
+            error_log('EduBot WhatsApp Error: Missing phone ID or access token');
+            return false;
+        }
+        
+        $url = "https://graph.facebook.com/v21.0/{$phone_id}/messages";
+        
+        // Handle both template messages and text messages
+        if (is_array($message) && isset($message['type']) && $message['type'] === 'template') {
+            // Business API template message
+            $data = array(
+                'messaging_product' => 'whatsapp',
+                'to' => $phone,
+                'type' => 'template',
+                'template' => $message['template']
+            );
+            error_log('EduBot WhatsApp: Sending template message: ' . wp_json_encode($data));
+        } else {
+            // Free-form text message
+            $data = array(
+                'messaging_product' => 'whatsapp',
+                'to' => $phone,
+                'type' => 'text',
+                'text' => array(
+                    'body' => is_string($message) ? $message : (string) $message
+                )
+            );
+            error_log('EduBot WhatsApp: Sending text message to ' . $phone);
+        }
 
         $response = wp_remote_post($url, array(
             'headers' => array(
-                'Authorization' => 'Bearer ' . $api_keys['whatsapp_token'],
+                'Authorization' => 'Bearer ' . $access_token,
                 'Content-Type' => 'application/json'
             ),
             'body' => wp_json_encode($data),
@@ -785,7 +806,21 @@ class EduBot_API_Integrations {
         }
 
         $status_code = wp_remote_retrieve_response_code($response);
-        return $status_code === 200;
+        $response_body = wp_remote_retrieve_body($response);
+        
+        error_log("EduBot WhatsApp Response: Status {$status_code}, Body: {$response_body}");
+        
+        if ($status_code === 200) {
+            $result = json_decode($response_body, true);
+            if (isset($result['messages'][0]['id'])) {
+                error_log('EduBot WhatsApp: Message sent successfully, ID: ' . $result['messages'][0]['id']);
+                return $result;
+            }
+        }
+        
+        // Log error response for debugging
+        error_log("EduBot WhatsApp Error: HTTP {$status_code} - {$response_body}");
+        return false;
     }
 
     /**
@@ -801,11 +836,23 @@ class EduBot_API_Integrations {
         
         $url = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}/Messages.json";
         
-        $data = array(
-            'From' => 'whatsapp:' . $api_keys['whatsapp_phone_id'],
-            'To' => 'whatsapp:' . $phone,
-            'Body' => $message
-        );
+        // Handle both template messages and text messages
+        if (is_array($message) && isset($message['type']) && $message['type'] === 'template') {
+            // Twilio template message (Content SID)
+            $data = array(
+                'From' => 'whatsapp:' . $api_keys['whatsapp_phone_id'],
+                'To' => 'whatsapp:' . $phone,
+                'ContentSid' => $message['template']['name'], // Template SID for Twilio
+                'ContentVariables' => json_encode($message['template']['variables'] ?? array())
+            );
+        } else {
+            // Free-form text message
+            $data = array(
+                'From' => 'whatsapp:' . $api_keys['whatsapp_phone_id'],
+                'To' => 'whatsapp:' . $phone,
+                'Body' => is_string($message) ? $message : (string) $message
+            );
+        }
 
         $response = wp_remote_post($url, array(
             'headers' => array(

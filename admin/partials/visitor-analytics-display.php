@@ -182,20 +182,122 @@ $traditional_analytics = $db_manager->get_analytics_data($date_range);
         </div>
     </div>
 
+    <!-- Enhanced Conversion Attribution -->
+    <?php
+    // Get recent conversions with attribution
+    $recent_conversions = $wpdb->get_results($wpdb->prepare(
+        "SELECT va.event_data, va.timestamp, v.visitor_id, v.phone, v.email
+         FROM {$visitor_analytics->table_name} va
+         LEFT JOIN {$visitor_analytics->visitor_table} v ON va.visitor_id = v.visitor_id
+         WHERE va.site_id = %d 
+         AND va.event_type = 'application_converted'
+         AND va.timestamp >= %s
+         ORDER BY va.timestamp DESC
+         LIMIT 10",
+        get_current_blog_id(), date('Y-m-d', strtotime("-{$date_range} days"))
+    ));
+    ?>
+    
+    <div class="edubot-analytics-section" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px;">
+        <h2 style="margin-top: 0;">🎯 Recent Conversions with Attribution</h2>
+        
+        <?php if (!empty($recent_conversions)): ?>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Date</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Application</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Student</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Contact</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">First Source</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Last Source</th>
+                            <th style="padding: 12px 8px; border: 1px solid #dee2e6; text-align: left;">Convert Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recent_conversions as $conversion): ?>
+                            <?php 
+                            $data = json_decode($conversion->event_data, true);
+                            $first_source = $data['first_touch_source'] ?? 'direct';
+                            $last_source = $data['last_touch_source'] ?? 'direct';
+                            $convert_time = isset($data['conversion_time_minutes']) ? round($data['conversion_time_minutes']) : 'N/A';
+                            ?>
+                            <tr>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <?php echo date('M j, g:i A', strtotime($conversion->timestamp)); ?>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <strong><?php echo esc_html($data['application_number'] ?? 'N/A'); ?></strong>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <?php echo esc_html($data['student_name'] ?? 'N/A'); ?><br>
+                                    <small style="color: #666;"><?php echo esc_html($data['grade'] ?? 'N/A'); ?></small>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <?php if (!empty($conversion->phone)): ?>
+                                        📱 <?php echo esc_html($conversion->phone); ?><br>
+                                    <?php endif; ?>
+                                    <?php if (!empty($conversion->email)): ?>
+                                        📧 <?php echo esc_html($conversion->email); ?>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <span class="source-tag" style="background: #e3f2fd; color: #1976d2; padding: 3px 8px; border-radius: 12px; font-size: 12px;">
+                                        <?php echo esc_html(ucfirst($first_source)); ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <span class="source-tag" style="background: #f3e5f5; color: #7b1fa2; padding: 3px 8px; border-radius: 12px; font-size: 12px;">
+                                        <?php echo esc_html(ucfirst($last_source)); ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 10px 8px; border: 1px solid #dee2e6;">
+                                    <?php if ($convert_time !== 'N/A'): ?>
+                                        <strong><?php echo $convert_time; ?> min</strong>
+                                    <?php else: ?>
+                                        N/A
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
+            <div style="text-align: center; padding: 30px; color: #666;">
+                <p style="font-size: 16px; margin-bottom: 10px;">📊 No conversions recorded yet</p>
+                <p>When visitors submit applications, you'll see their complete marketing attribution journey here.</p>
+            </div>
+        <?php endif; ?>
+    </div>
+
     <!-- Visitor Analytics Settings -->
     <div class="edubot-analytics-section" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <h2 style="margin-top: 0;">Analytics Configuration</h2>
+        <h2 style="margin-top: 0;">🚀 Enhanced Attribution System</h2>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
             <div>
-                <h3>Tracking Features</h3>
+                <h3>🎯 Enhanced Attribution Features</h3>
                 <ul style="list-style: none; padding: 0;">
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> Visitor identification and return tracking</li>
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> Marketing parameter capture (UTM codes)</li>
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> Device and browser detection</li>
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> Page view and interaction tracking</li>
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> Conversion funnel analysis</li>
-                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> 30-day data retention</li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Multi-Method User Identification</strong><br>
+                        <small style="color: #666; margin-left: 20px;">Cookie tracking (2-year), browser fingerprinting, IP tracking</small>
+                    </li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Comprehensive Parameter Capture</strong><br>
+                        <small style="color: #666; margin-left: 20px;">UTM codes, Google/Facebook/TikTok/LinkedIn click IDs, custom parameters</small>
+                    </li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Attribution Journey Tracking</strong><br>
+                        <small style="color: #666; margin-left: 20px;">First-touch, last-touch, and multi-touch attribution models</small>
+                    </li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Business Contact Integration</strong><br>
+                        <small style="color: #666; margin-left: 20px;">Links marketing attribution to phone/email when provided</small>
+                    </li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Advanced Conversion Tracking</strong><br>
+                        <small style="color: #666; margin-left: 20px;">Application conversions with complete attribution source analysis</small>
+                    </li>
+                    <li style="padding: 5px 0;"><span class="dashicons dashicons-yes" style="color: #28a745;"></span> <strong>Real-Time Analytics</strong><br>
+                        <small style="color: #666; margin-left: 20px;">Live conversion tracking with immediate attribution linking</small>
+                    </li>
                 </ul>
             </div>
             
