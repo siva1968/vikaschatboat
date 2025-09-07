@@ -279,9 +279,6 @@ class EduBot_Database_Manager {
         if ($wpdb->get_var("SHOW TABLES LIKE '$enquiries_table'") == $enquiries_table) {
             $all_applications = $this->get_from_enquiries_table(0, $filters);
         }
-        
-        // TEMPORARY: Force empty for debugging - REMOVE THIS WHEN FIXED
-        $all_applications = array();
 
         // Sort by created_at descending
         usort($all_applications, function($a, $b) {
@@ -344,10 +341,6 @@ class EduBot_Database_Manager {
         } else {
             $enquiries = $wpdb->get_results($wpdb->prepare($query, $where_values), ARRAY_A);
         }
-
-        // Debug logging
-        error_log("EduBot Debug: Query executed: $query");
-        error_log("EduBot Debug: Enquiries found: " . count($enquiries));
 
         // Convert to standard format
         $formatted_applications = array();
