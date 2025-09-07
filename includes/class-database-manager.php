@@ -702,13 +702,29 @@ class EduBot_Database_Manager {
             return false;
         }
 
-        return $wpdb->update(
-            $table,
-            array($field_map[$notification_type] => $status),
-            array('id' => $id, 'site_id' => $site_id),
-            array('%d'),
-            array('%d', '%d')
-        );
+        // Check if site_id column exists in the table
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM {$table}");
+        $has_site_id = in_array('site_id', $columns);
+        
+        if ($has_site_id) {
+            // Use site_id if it exists (for legacy applications table)
+            return $wpdb->update(
+                $table,
+                array($field_map[$notification_type] => $status),
+                array('id' => $id, 'site_id' => $site_id),
+                array('%d'),
+                array('%d', '%d')
+            );
+        } else {
+            // Use only id for enquiries table (no site_id)
+            return $wpdb->update(
+                $table,
+                array($field_map[$notification_type] => $status),
+                array('id' => $id),
+                array('%d'),
+                array('%d')
+            );
+        }
     }
 
     /**

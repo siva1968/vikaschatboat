@@ -2436,22 +2436,35 @@ class EduBot_Shortcode {
                 throw new Exception('Database insert failed: ' . $wpdb->last_error);
             }
             
-            error_log("EduBot: Successfully saved enquiry {$enquiry_number} to database");
+            // Get the inserted enquiry ID for status tracking
+            $enquiry_id = $wpdb->insert_id;
+            error_log("EduBot: Successfully saved enquiry {$enquiry_number} to database with ID {$enquiry_id}");
             
             // Also save to applications table for unified admin interface
             $this->save_to_applications_table($collected_data, $enquiry_number);
             
+            // Initialize database manager for status updates
+            $database_manager = new EduBot_Database_Manager();
+            
             // Send confirmation email to parent
-            $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
+            $email_sent = $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
+            if ($email_sent && $enquiry_id) {
+                $database_manager->update_notification_status($enquiry_id, 'email', 1, 'enquiries');
+                error_log("EduBot: Updated email_sent status to 1 for enquiry ID {$enquiry_id}");
+            }
             
             // Send WhatsApp confirmation to parent if enabled
             $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
             $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . $this->get_indian_time('Y-m-d H:i:s') . " IST\n";
             file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
             
-            $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
+            $whatsapp_sent = $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
+            if ($whatsapp_sent && $enquiry_id) {
+                $database_manager->update_notification_status($enquiry_id, 'whatsapp', 1, 'enquiries');
+                error_log("EduBot: Updated whatsapp_sent status to 1 for enquiry ID {$enquiry_id}");
+            }
             
-            // Send enquiry notification to school
+            // Send enquiry notification to school (this is for admin, not tracked in parent notification status)
             $this->send_school_enquiry_notification($collected_data, $enquiry_number, $school_name);
             
             // Clear session
