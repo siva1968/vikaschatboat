@@ -2670,12 +2670,14 @@ class EduBot_Shortcode {
                 return false;
             }
             
-            // Get school phone number
+            // Get school phone number from Contact Phone setting
             $school_phone = get_option('edubot_school_phone', '');
             if (empty($school_phone)) {
-                error_log('EduBot: School phone number not configured for WhatsApp notifications');
+                error_log('EduBot: School Contact Phone not configured in School Settings - please set Contact Phone for admission team notifications');
                 return false;
             }
+            
+            error_log("EduBot: Using school Contact Phone for admission team notification: {$school_phone}");
             
             // Normalize phone number
             $school_phone = preg_replace('/[^0-9+]/', '', $school_phone);

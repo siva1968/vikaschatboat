@@ -50,7 +50,8 @@ if (!defined('ABSPATH')) {
                     <tr>
                         <th scope="row">Contact Phone</th>
                         <td>
-                            <input type="tel" name="edubot_school_phone" value="<?php echo esc_attr(get_option('edubot_school_phone', '')); ?>" class="regular-text" />
+                            <input type="tel" name="edubot_school_phone" value="<?php echo esc_attr(get_option('edubot_school_phone', '')); ?>" class="regular-text" placeholder="919866133566" />
+                            <p class="description">School contact phone number. This number will also be used for admission team WhatsApp notifications.</p>
                         </td>
                     </tr>
                     <tr>
