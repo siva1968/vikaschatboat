@@ -146,17 +146,57 @@ class EduBot_Database_Manager {
     }
 
     /**
-     * Get application by ID
+     * Get application by ID (checks both applications and enquiries tables)
      */
     public function get_application($application_id) {
         global $wpdb;
-        $table = $wpdb->prefix . 'edubot_applications';
-        $site_id = get_current_blog_id();
+        
+        // Check if it's an enquiry ID (prefixed with 'enq_')
+        if (strpos($application_id, 'enq_') === 0) {
+            $actual_id = str_replace('enq_', '', $application_id);
+            $table = $wpdb->prefix . 'edubot_enquiries';
+            
+            $enquiry = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table WHERE id = %d",
+                $actual_id
+            ), ARRAY_A);
+            
+            if ($enquiry) {
+                // Convert enquiry to application format
+                return array(
+                    'id' => $application_id,
+                    'application_number' => $enquiry['enquiry_number'],
+                    'student_data' => json_encode(array(
+                        'student_name' => $enquiry['student_name'],
+                        'date_of_birth' => $enquiry['date_of_birth'],
+                        'grade' => $enquiry['grade'],
+                        'educational_board' => $enquiry['board'],
+                        'academic_year' => $enquiry['academic_year'],
+                        'parent_name' => $enquiry['parent_name'],
+                        'email' => $enquiry['email'],
+                        'phone' => $enquiry['phone'],
+                        'address' => $enquiry['address'],
+                        'gender' => $enquiry['gender']
+                    )),
+                    'status' => $enquiry['status'],
+                    'source' => 'chatbot',
+                    'created_at' => $enquiry['created_at'],
+                    'ip_address' => null,
+                    'user_agent' => null
+                );
+            }
+        } else {
+            // Regular application ID - check applications table
+            $table = $wpdb->prefix . 'edubot_applications';
+            $site_id = get_current_blog_id();
 
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE id = %d AND site_id = %d",
-            $application_id, $site_id
-        ), ARRAY_A);
+            return $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table WHERE id = %d AND site_id = %d",
+                $application_id, $site_id
+            ), ARRAY_A);
+        }
+        
+        return null;
     }
 
     /**
@@ -174,34 +214,137 @@ class EduBot_Database_Manager {
     }
 
     /**
-     * Update application status
+     * Update application status (handles both applications and enquiries tables)
      */
     public function update_application_status($application_id, $status) {
         global $wpdb;
-        $table = $wpdb->prefix . 'edubot_applications';
-        $site_id = get_current_blog_id();
 
-        return $wpdb->update(
-            $table,
-            array('status' => $status),
-            array('id' => $application_id, 'site_id' => $site_id),
-            array('%s'),
-            array('%d', '%d')
+        // Check if it's an enquiry ID (prefixed with 'enq_')
+        if (strpos($application_id, 'enq_') === 0) {
+            $actual_id = str_replace('enq_', '', $application_id);
+            $table = $wpdb->prefix . 'edubot_enquiries';
+            
+            return $wpdb->update(
+                $table,
+                array('status' => $status),
+                array('id' => $actual_id),
+                array('%s'),
+                array('%d')
+            );
+            
+        } else {
+            // Regular application ID - update in applications table
+            $table = $wpdb->prefix . 'edubot_applications';
+            $site_id = get_current_blog_id();
+
+            return $wpdb->update(
+                $table,
+                array('status' => $status),
+                array('id' => $application_id, 'site_id' => $site_id),
+                array('%s'),
+                array('%d', '%d')
+            );
+        }
+    }
+
+    /**
+     * Delete application from database (handles both applications and enquiries tables)
+     */
+    public function delete_application($application_id) {
+        global $wpdb;
+
+        // Log the deletion for audit purposes
+        error_log("EduBot: Deleting application ID {$application_id}");
+
+        // Check if it's an enquiry ID (prefixed with 'enq_')
+        if (strpos($application_id, 'enq_') === 0) {
+            $actual_id = str_replace('enq_', '', $application_id);
+            $table = $wpdb->prefix . 'edubot_enquiries';
+            
+            $result = $wpdb->delete(
+                $table,
+                array('id' => $actual_id),
+                array('%d')
+            );
+            
+        } else {
+            // Regular application ID - delete from applications table
+            $table = $wpdb->prefix . 'edubot_applications';
+            $site_id = get_current_blog_id();
+
+            $result = $wpdb->delete(
+                $table,
+                array(
+                    'id' => $application_id,
+                    'site_id' => $site_id
+                ),
+                array('%d', '%d')
+            );
+        }
+
+        if ($result !== false) {
+            error_log("EduBot: Successfully deleted application ID {$application_id}");
+        } else {
+            error_log("EduBot: Failed to delete application ID {$application_id}: " . $wpdb->last_error);
+        }
+
+        return $result !== false;
+    }
+
+    /**
+     * Get applications with pagination (checks both applications and enquiries tables)
+     */
+    public function get_applications($page = 1, $per_page = 20, $filters = array()) {
+        global $wpdb;
+        
+        // Check both applications and enquiries tables
+        $applications_table = $wpdb->prefix . 'edubot_applications';
+        $enquiries_table = $wpdb->prefix . 'edubot_enquiries';
+        
+        $site_id = get_current_blog_id();
+        $all_applications = array();
+
+        // First get from applications table (if exists)
+        if ($wpdb->get_var("SHOW TABLES LIKE '$applications_table'") == $applications_table) {
+            $apps = $this->get_from_applications_table($site_id, $filters);
+            $all_applications = array_merge($all_applications, $apps);
+        }
+
+        // Then get from enquiries table (if exists) - this is where chatbot saves
+        if ($wpdb->get_var("SHOW TABLES LIKE '$enquiries_table'") == $enquiries_table) {
+            $enquiries = $this->get_from_enquiries_table($site_id, $filters);
+            $all_applications = array_merge($all_applications, $enquiries);
+        }
+
+        // Sort by created_at descending
+        usort($all_applications, function($a, $b) {
+            return strtotime($b['created_at']) - strtotime($a['created_at']);
+        });
+
+        // Apply pagination
+        $total_records = count($all_applications);
+        $offset = ($page - 1) * $per_page;
+        $paginated_applications = array_slice($all_applications, $offset, $per_page);
+
+        return array(
+            'applications' => $paginated_applications,
+            'total_records' => $total_records,
+            'total_pages' => ceil($total_records / $per_page),
+            'current_page' => $page
         );
     }
 
     /**
-     * Get applications with pagination
+     * Get applications from applications table
      */
-    public function get_applications($page = 1, $per_page = 20, $filters = array()) {
+    private function get_from_applications_table($site_id, $filters = array()) {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_applications';
-        $site_id = get_current_blog_id();
 
         $where_clause = "WHERE site_id = %d";
         $where_values = array($site_id);
 
-        // Add filters
+        // Add filters for applications table
         if (!empty($filters['status'])) {
             $where_clause .= " AND status = %s";
             $where_values[] = $filters['status'];
@@ -224,24 +367,94 @@ class EduBot_Database_Manager {
             $where_values[] = $search_term;
         }
 
-        // Count total records
-        $count_query = "SELECT COUNT(*) FROM $table $where_clause";
-        $total_records = $wpdb->get_var($wpdb->prepare($count_query, $where_values));
-
-        // Get paginated results
-        $offset = ($page - 1) * $per_page;
-        $query = "SELECT * FROM $table $where_clause ORDER BY created_at DESC LIMIT %d OFFSET %d";
-        $where_values[] = $per_page;
-        $where_values[] = $offset;
-
+        $query = "SELECT * FROM $table $where_clause ORDER BY created_at DESC";
         $applications = $wpdb->get_results($wpdb->prepare($query, $where_values), ARRAY_A);
 
-        return array(
-            'applications' => $applications,
-            'total_records' => $total_records,
-            'total_pages' => ceil($total_records / $per_page),
-            'current_page' => $page
-        );
+        // Convert to standard format
+        $formatted_applications = array();
+        foreach ($applications as $app) {
+            $student_data = json_decode($app['student_data'], true);
+            $formatted_applications[] = array(
+                'id' => $app['id'],
+                'application_number' => $app['application_number'],
+                'student_name' => isset($student_data['student_name']) ? $student_data['student_name'] : 'N/A',
+                'parent_name' => isset($student_data['parent_name']) ? $student_data['parent_name'] : 'N/A',
+                'grade' => isset($student_data['grade']) ? $student_data['grade'] : 'N/A',
+                'educational_board' => isset($student_data['educational_board']) ? $student_data['educational_board'] : 'N/A',
+                'academic_year' => isset($student_data['academic_year']) ? $student_data['academic_year'] : 'N/A',
+                'email' => isset($student_data['email']) ? $student_data['email'] : 'N/A',
+                'phone' => isset($student_data['phone']) ? $student_data['phone'] : 'N/A',
+                'created_at' => $app['created_at'],
+                'status' => $app['status'],
+                'source' => $app['source'] ?? 'form'
+            );
+        }
+
+        return $formatted_applications;
+    }
+
+    /**
+     * Get applications from enquiries table (where chatbot saves)
+     */
+    private function get_from_enquiries_table($site_id, $filters = array()) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_enquiries';
+
+        $where_clause = "WHERE 1=1"; // No site_id in enquiries table
+        $where_values = array();
+
+        // Add filters for enquiries table
+        if (!empty($filters['status'])) {
+            $where_clause .= " AND status = %s";
+            $where_values[] = $filters['status'];
+        }
+
+        if (!empty($filters['date_from'])) {
+            $where_clause .= " AND created_at >= %s";
+            $where_values[] = $filters['date_from'];
+        }
+
+        if (!empty($filters['date_to'])) {
+            $where_clause .= " AND created_at <= %s";
+            $where_values[] = $filters['date_to'];
+        }
+
+        if (!empty($filters['search'])) {
+            $where_clause .= " AND (enquiry_number LIKE %s OR student_name LIKE %s OR parent_name LIKE %s OR email LIKE %s)";
+            $search_term = '%' . $wpdb->esc_like($filters['search']) . '%';
+            $where_values[] = $search_term;
+            $where_values[] = $search_term;
+            $where_values[] = $search_term;
+            $where_values[] = $search_term;
+        }
+
+        $query = "SELECT * FROM $table $where_clause ORDER BY created_at DESC";
+        if (empty($where_values)) {
+            $enquiries = $wpdb->get_results($query, ARRAY_A);
+        } else {
+            $enquiries = $wpdb->get_results($wpdb->prepare($query, $where_values), ARRAY_A);
+        }
+
+        // Convert to standard format
+        $formatted_applications = array();
+        foreach ($enquiries as $enquiry) {
+            $formatted_applications[] = array(
+                'id' => 'enq_' . $enquiry['id'], // Prefix to avoid ID conflicts
+                'application_number' => $enquiry['enquiry_number'],
+                'student_name' => $enquiry['student_name'] ?? 'N/A',
+                'parent_name' => $enquiry['parent_name'] ?? 'N/A', 
+                'grade' => $enquiry['grade'] ?? 'N/A',
+                'educational_board' => $enquiry['board'] ?? 'N/A',
+                'academic_year' => $enquiry['academic_year'] ?? 'N/A',
+                'email' => $enquiry['email'] ?? 'N/A',
+                'phone' => $enquiry['phone'] ?? 'N/A',
+                'created_at' => $enquiry['created_at'],
+                'status' => $enquiry['status'],
+                'source' => 'chatbot'
+            );
+        }
+
+        return $formatted_applications;
     }
 
     /**

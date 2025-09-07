@@ -2400,6 +2400,9 @@ class EduBot_Shortcode {
             
             error_log("EduBot: Successfully saved enquiry {$enquiry_number} to database");
             
+            // Also save to applications table for unified admin interface
+            $this->save_to_applications_table($collected_data, $enquiry_number);
+            
             // Send confirmation email to parent
             $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
             
@@ -4547,6 +4550,49 @@ class EduBot_Shortcode {
         dbDelta($sql);
         
         error_log("EduBot: Ensured enquiry table exists");
+    }
+
+    /**
+     * Save to applications table for unified admin interface
+     */
+    private function save_to_applications_table($collected_data, $enquiry_number) {
+        try {
+            $database_manager = new EduBot_Database_Manager();
+            
+            // Prepare student data in the format expected by applications table
+            $student_data = array(
+                'student_name' => $collected_data['student_name'] ?? '',
+                'date_of_birth' => $collected_data['date_of_birth'] ?? '',
+                'grade' => $collected_data['grade'] ?? '',
+                'educational_board' => $collected_data['board'] ?? '',
+                'academic_year' => $collected_data['academic_year'] ?? '2026-27',
+                'parent_name' => $collected_data['parent_name'] ?? '',
+                'email' => $collected_data['email'] ?? '',
+                'phone' => $collected_data['phone'] ?? '',
+                'address' => $collected_data['address'] ?? '',
+                'gender' => $collected_data['gender'] ?? ''
+            );
+
+            $application_data = array(
+                'application_number' => $enquiry_number,
+                'student_data' => $student_data,
+                'conversation_log' => array(),
+                'status' => 'pending',
+                'source' => 'chatbot'
+            );
+
+            $result = $database_manager->save_application($application_data);
+            
+            if (is_wp_error($result)) {
+                error_log('EduBot: Failed to save to applications table: ' . $result->get_error_message());
+            } else {
+                error_log("EduBot: Successfully saved {$enquiry_number} to applications table as well");
+            }
+
+        } catch (Exception $e) {
+            error_log('EduBot: Error saving to applications table: ' . $e->getMessage());
+            // Don't throw exception as enquiry was already saved successfully
+        }
     }
 
     /**

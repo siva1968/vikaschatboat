@@ -14,13 +14,14 @@ if (!defined('ABSPATH')) {
         <?php if (isset($applications) && !empty($applications)): ?>
             <div class="tablenav top">
                 <div class="alignleft actions">
-                    <select name="bulk_action">
+                    <select name="bulk_action" id="bulk-action-selector">
                         <option value="">Bulk Actions</option>
                         <option value="approve">Approve</option>
                         <option value="reject">Reject</option>
                         <option value="pending">Mark as Pending</option>
+                        <option value="delete">Delete</option>
                     </select>
-                    <button type="button" class="button action">Apply</button>
+                    <button type="button" class="button action" id="bulk-action-btn" style="display:none;">Apply</button>
                 </div>
                 <div class="alignright">
                     <button type="button" class="button button-primary" id="export-applications">Export CSV</button>
@@ -50,7 +51,7 @@ if (!defined('ABSPATH')) {
                     <?php foreach ($applications as $app): ?>
                         <tr>
                             <td class="check-column">
-                                <input type="checkbox" name="application[]" value="<?php echo esc_attr($app['id']); ?>" />
+                                <input type="checkbox" name="application_ids[]" value="<?php echo esc_attr($app['id']); ?>" />
                             </td>
                             <td><?php echo esc_html($app['application_number']); ?></td>
                             <td><strong><?php echo esc_html($app['student_name'] ?? 'N/A'); ?></strong></td>
@@ -92,11 +93,7 @@ if (!defined('ABSPATH')) {
                             </td>
                             <td>
                                 <a href="#" class="button button-small view-application" data-id="<?php echo esc_attr($app['id']); ?>">View</a>
-                                <select class="status-changer" data-id="<?php echo esc_attr($app['id']); ?>">
-                                    <option value="pending" <?php selected($app['status'], 'pending'); ?>>Pending</option>
-                                    <option value="approved" <?php selected($app['status'], 'approved'); ?>>Approved</option>
-                                    <option value="rejected" <?php selected($app['status'], 'rejected'); ?>>Rejected</option>
-                                </select>
+                                <a href="#" class="button button-small button-link-delete delete-application" data-id="<?php echo esc_attr($app['id']); ?>" onclick="return confirm('Are you sure you want to delete this application?');">Delete</a>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -174,9 +171,13 @@ if (!defined('ABSPATH')) {
     background: #f8d7da;
     color: #721c24;
 }
-.status-changer {
-    font-size: 0.8em;
-    margin-left: 5px;
+.button-link-delete {
+    color: #a00 !important;
+    border-color: #a00 !important;
+}
+.button-link-delete:hover {
+    background: #a00 !important;
+    color: #fff !important;
 }
 .getting-started {
     background: #f8f9fa;
@@ -230,17 +231,152 @@ if (!defined('ABSPATH')) {
 .modal-body {
     padding: 20px;
 }
+
+/* Application Details Styles */
+.application-details {
+    font-family: Arial, sans-serif;
+}
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+.detail-header h3 {
+    margin: 0;
+    color: #333;
+}
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.detail-section {
+    margin-bottom: 20px;
+}
+.detail-section h4 {
+    margin: 0 0 10px 0;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+.detail-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.detail-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: top;
+}
+.detail-table td:first-child {
+    width: 140px;
+    font-weight: 500;
+    color: #666;
+}
 </style>
 
 <script>
 jQuery(document).ready(function($) {
-    // Status changer functionality
-    $('.status-changer').on('change', function() {
-        var applicationId = $(this).data('id');
-        var newStatus = $(this).val();
+    // Bulk action selector
+    $('#bulk-action-selector').on('change', function() {
+        var action = $(this).val();
+        if (action) {
+            $('#bulk-action-btn').show();
+        } else {
+            $('#bulk-action-btn').hide();
+        }
+    });
+
+    // Bulk action button
+    $('#bulk-action-btn').on('click', function(e) {
+        e.preventDefault();
         
-        // AJAX call to update status would go here
-        console.log('Updating application ' + applicationId + ' to status: ' + newStatus);
+        var action = $('#bulk-action-selector').val();
+        var selectedIds = [];
+        
+        $('input[name="application_ids[]"]:checked').each(function() {
+            selectedIds.push($(this).val());
+        });
+        
+        if (selectedIds.length === 0) {
+            alert('Please select at least one application');
+            return;
+        }
+        
+        var actionText = action === 'delete' ? 'delete' : (action === 'approve' ? 'approve' : (action === 'reject' ? 'reject' : 'update'));
+        
+        if (!confirm('Are you sure you want to ' + actionText + ' ' + selectedIds.length + ' application(s)?')) {
+            return;
+        }
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'edubot_bulk_action',
+                bulk_action: action,
+                application_ids: selectedIds,
+                nonce: '<?php echo wp_create_nonce('edubot_admin_nonce'); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.data.message);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                }
+            },
+            error: function() {
+                alert('Network error. Please try again.');
+            }
+        });
+    });
+
+    // Select all checkbox
+    $('#cb-select-all').on('change', function() {
+        var isChecked = $(this).is(':checked');
+        $('input[name="application_ids[]"]').prop('checked', isChecked);
+    });
+
+    // Individual delete buttons
+    $('.delete-application').on('click', function(e) {
+        e.preventDefault();
+        
+        if (!confirm('Are you sure you want to delete this application?')) {
+            return false;
+        }
+        
+        var applicationId = $(this).data('id');
+        var $row = $(this).closest('tr');
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'edubot_delete_application',
+                application_id: applicationId,
+                nonce: '<?php echo wp_create_nonce('edubot_admin_nonce'); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    $row.fadeOut(function() {
+                        $(this).remove();
+                    });
+                } else {
+                    alert('Error: ' + response.data);
+                }
+            },
+            error: function() {
+                alert('Network error. Please try again.');
+            }
+        });
+        
+        return false;
     });
 
     // View application modal
@@ -248,9 +384,28 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var applicationId = $(this).data('id');
         
-        // AJAX call to get application details would go here
-        $('#application-details').html('<p>Loading application details...</p>');
+        $('#application-details').html('<p style="text-align: center; padding: 20px;"><span class="spinner is-active"></span> Loading application details...</p>');
         $('#application-modal').show();
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'edubot_view_application',
+                application_id: applicationId,
+                nonce: '<?php echo wp_create_nonce('edubot_admin_nonce'); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#application-details').html(response.data.html);
+                } else {
+                    $('#application-details').html('<p style="color: red;">Error: ' + response.data + '</p>');
+                }
+            },
+            error: function() {
+                $('#application-details').html('<p style="color: red;">Network error. Please try again.</p>');
+            }
+        });
     });
 
     // Close modal

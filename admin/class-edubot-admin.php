@@ -39,6 +39,11 @@ class EduBot_Admin {
         
         // Handle debug log download
         add_action('admin_init', array($this, 'handle_debug_log_download'));
+        
+        // Application management AJAX handlers
+        add_action('wp_ajax_edubot_bulk_action', array($this, 'handle_bulk_action_ajax'));
+        add_action('wp_ajax_edubot_delete_application', array($this, 'handle_delete_application_ajax'));
+        add_action('wp_ajax_edubot_view_application', array($this, 'handle_view_application_ajax'));
     }
 
     /**
@@ -3060,6 +3065,223 @@ class EduBot_Admin {
         } catch (Exception $e) {
             wp_send_json_error('Failed to clear error logs: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Handle bulk actions for applications
+     */
+    public function handle_bulk_action_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $bulk_action = sanitize_text_field($_POST['bulk_action'] ?? '');
+        $application_ids = array_map('absint', $_POST['application_ids'] ?? array());
+
+        if (empty($bulk_action) || empty($application_ids)) {
+            wp_send_json_error('Invalid request parameters');
+            return;
+        }
+
+        try {
+            $database_manager = new EduBot_Database_Manager();
+            $processed_count = 0;
+
+            foreach ($application_ids as $app_id) {
+                if ($bulk_action === 'delete') {
+                    if ($this->delete_application($app_id)) {
+                        $processed_count++;
+                    }
+                } else {
+                    // Status updates (approve, reject, pending)
+                    if ($database_manager->update_application_status($app_id, $bulk_action)) {
+                        $processed_count++;
+                    }
+                }
+            }
+
+            $action_label = ($bulk_action === 'delete') ? 'deleted' : 'updated';
+            wp_send_json_success(array(
+                'message' => "Successfully {$action_label} {$processed_count} application(s)"
+            ));
+
+        } catch (Exception $e) {
+            error_log('EduBot: Bulk action error: ' . $e->getMessage());
+            wp_send_json_error('Failed to process bulk action');
+        }
+    }
+
+    /**
+     * Handle single application deletion
+     */
+    public function handle_delete_application_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $application_id = absint($_POST['application_id'] ?? 0);
+
+        if (!$application_id) {
+            wp_send_json_error('Invalid application ID');
+            return;
+        }
+
+        try {
+            if ($this->delete_application($application_id)) {
+                wp_send_json_success(array(
+                    'message' => 'Application deleted successfully'
+                ));
+            } else {
+                wp_send_json_error('Failed to delete application');
+            }
+        } catch (Exception $e) {
+            error_log('EduBot: Delete application error: ' . $e->getMessage());
+            wp_send_json_error('Failed to delete application');
+        }
+    }
+
+    /**
+     * Handle view application details
+     */
+    public function handle_view_application_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $application_id = absint($_POST['application_id'] ?? 0);
+
+        if (!$application_id) {
+            wp_send_json_error('Invalid application ID');
+            return;
+        }
+
+        try {
+            $database_manager = new EduBot_Database_Manager();
+            $application = $database_manager->get_application($application_id);
+
+            if (!$application) {
+                wp_send_json_error('Application not found');
+                return;
+            }
+
+            // Parse student data
+            $student_data = json_decode($application['student_data'], true);
+            if (!$student_data) {
+                $student_data = array();
+            }
+
+            // Format the application details
+            $details_html = $this->format_application_details($application, $student_data);
+
+            wp_send_json_success(array(
+                'html' => $details_html
+            ));
+
+        } catch (Exception $e) {
+            error_log('EduBot: View application error: ' . $e->getMessage());
+            wp_send_json_error('Failed to load application details');
+        }
+    }
+
+    /**
+     * Delete application from database
+     */
+    private function delete_application($application_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_applications';
+        $site_id = get_current_blog_id();
+
+        $result = $wpdb->delete(
+            $table,
+            array(
+                'id' => $application_id,
+                'site_id' => $site_id
+            ),
+            array('%d', '%d')
+        );
+
+        return $result !== false;
+    }
+
+    /**
+     * Format application details for modal display
+     */
+    private function format_application_details($application, $student_data) {
+        $html = '<div class="application-details">';
+        
+        // Header
+        $html .= '<div class="detail-header">';
+        $html .= '<h3>Application #' . esc_html($application['application_number']) . '</h3>';
+        $html .= '<p class="status-badge status-' . esc_attr($application['status']) . '">' . esc_html(ucfirst($application['status'])) . '</p>';
+        $html .= '</div>';
+
+        // Student Information
+        $html .= '<div class="detail-section">';
+        $html .= '<h4>Student Information</h4>';
+        $html .= '<table class="detail-table">';
+        $html .= '<tr><td><strong>Name:</strong></td><td>' . esc_html($student_data['student_name'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Date of Birth:</strong></td><td>' . esc_html($student_data['date_of_birth'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Grade:</strong></td><td>' . esc_html($student_data['grade'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Board:</strong></td><td>' . esc_html($student_data['educational_board'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Academic Year:</strong></td><td>' . esc_html($student_data['academic_year'] ?? 'N/A') . '</td></tr>';
+        if (!empty($student_data['gender'])) {
+            $html .= '<tr><td><strong>Gender:</strong></td><td>' . esc_html($student_data['gender']) . '</td></tr>';
+        }
+        $html .= '</table>';
+        $html .= '</div>';
+
+        // Parent Information
+        $html .= '<div class="detail-section">';
+        $html .= '<h4>Parent/Guardian Information</h4>';
+        $html .= '<table class="detail-table">';
+        $html .= '<tr><td><strong>Name:</strong></td><td>' . esc_html($student_data['parent_name'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Email:</strong></td><td>' . esc_html($student_data['email'] ?? 'N/A') . '</td></tr>';
+        $html .= '<tr><td><strong>Phone:</strong></td><td>' . esc_html($student_data['phone'] ?? 'N/A') . '</td></tr>';
+        if (!empty($student_data['address'])) {
+            $html .= '<tr><td><strong>Address:</strong></td><td>' . esc_html($student_data['address']) . '</td></tr>';
+        }
+        $html .= '</table>';
+        $html .= '</div>';
+
+        // Application Details
+        $html .= '<div class="detail-section">';
+        $html .= '<h4>Application Details</h4>';
+        $html .= '<table class="detail-table">';
+        $html .= '<tr><td><strong>Source:</strong></td><td>' . esc_html(ucfirst($application['source'] ?? 'Chatbot')) . '</td></tr>';
+        $html .= '<tr><td><strong>Submitted:</strong></td><td>' . esc_html(date('F j, Y g:i A', strtotime($application['created_at']))) . '</td></tr>';
+        if (!empty($application['ip_address'])) {
+            $html .= '<tr><td><strong>IP Address:</strong></td><td>' . esc_html($application['ip_address']) . '</td></tr>';
+        }
+        $html .= '</table>';
+        $html .= '</div>';
+
+        $html .= '</div>';
+
+        return $html;
     }
 
     /**
