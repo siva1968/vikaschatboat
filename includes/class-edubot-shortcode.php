@@ -942,8 +942,8 @@ class EduBot_Shortcode {
         try {
             error_log("EduBot: Processing request - Message: '{$message}' | Action: '{$action_type}' | Session: '{$session_id}'");
             
-            // Use the restored AI-powered conversation handler
-            $response = $this->handle_admission_flow_safe($message, $action_type, $session_id);
+            // Use the main response handler that includes personal info detection
+            $response = $this->generate_response($message, $action_type, $session_id);
             
             // Ensure response is in the correct format expected by JavaScript
             if (is_array($response)) {
@@ -1584,11 +1584,17 @@ class EduBot_Shortcode {
             }
             
             $admission_result = $this->handle_admission_flow_safe($message, 'admission', $session_id);
-            return array(
-                'response' => $admission_result,
-                'action' => 'admission_started',
-                'session_data' => array('session_id' => $session_id, 'step' => 'personal_info_received')
-            );
+            
+            // Ensure we return the proper array format
+            if (is_array($admission_result)) {
+                return $admission_result;
+            } else {
+                return array(
+                    'response' => $admission_result,
+                    'action' => 'admission_started',
+                    'session_data' => array('session_id' => $session_id, 'step' => 'personal_info_received')
+                );
+            }
         }
         
         // Simple keyword-based responses
