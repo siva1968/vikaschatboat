@@ -279,6 +279,9 @@ class EduBot_Database_Manager {
         if ($wpdb->get_var("SHOW TABLES LIKE '$enquiries_table'") == $enquiries_table) {
             $all_applications = $this->get_from_enquiries_table(0, $filters);
         }
+        
+        // TEMPORARY: Force empty for debugging - REMOVE THIS WHEN FIXED
+        $all_applications = array();
 
         // Sort by created_at descending
         usort($all_applications, function($a, $b) {
