@@ -1105,6 +1105,36 @@ class EduBot_Shortcode {
             }
         }
         
+        // Check if this message contains personal information for admission enquiry
+        $personal_info = $this->parse_personal_info($message);
+        if (!empty($personal_info) && (
+            !empty($personal_info['name']) || 
+            !empty($personal_info['email']) || 
+            !empty($personal_info['phone'])
+        )) {
+            error_log('EduBot: Message contains personal info, routing to admission flow');
+            
+            // If session is completed or doesn't exist, create a new session for new admission enquiry
+            if (empty($session_id) || $this->is_session_completed($session_id)) {
+                $session_id = 'sess_' . uniqid();  // Create fresh session
+                error_log('EduBot Debug: Created fresh session for new personal info: ' . $session_id);
+                // Initialize the session properly
+                $this->init_conversation_session($session_id, 'admission');
+            }
+            
+            $result = $this->handle_admission_flow_safe($message, 'admission', $session_id);
+            
+            // Ensure we return the proper array format expected by the caller
+            if (is_string($result)) {
+                return array(
+                    'response' => $result,
+                    'action' => 'personal_info_processed',
+                    'session_data' => array('session_id' => $session_id)
+                );
+            }
+            return $result;
+        }
+        
         // Process regular text messages with safe fallback
         error_log('EduBot: Processing regular message: ' . substr($message, 0, 30));
         return $this->process_user_message_safely($message, $session_id);
@@ -1535,6 +1565,31 @@ class EduBot_Shortcode {
     private function process_user_message_safely($message, $session_id) {
         $settings = get_option('edubot_pro_settings', array());
         $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        
+        // Check if this message contains personal information and redirect to admission flow
+        $personal_info = $this->parse_personal_info($message);
+        if (!empty($personal_info) && (
+            !empty($personal_info['name']) || 
+            !empty($personal_info['email']) || 
+            !empty($personal_info['phone'])
+        )) {
+            error_log('EduBot: Personal info detected in safe mode, redirecting to admission flow');
+            
+            // If session is completed or doesn't exist, create a new session for new admission enquiry  
+            if (empty($session_id) || $this->is_session_completed($session_id)) {
+                $session_id = 'sess_' . uniqid();  // Create fresh session
+                error_log('EduBot Debug: Created fresh session in safe mode for new personal info: ' . $session_id);
+                // Initialize the session properly
+                $this->init_conversation_session($session_id, 'admission');
+            }
+            
+            $admission_result = $this->handle_admission_flow_safe($message, 'admission', $session_id);
+            return array(
+                'response' => $admission_result,
+                'action' => 'admission_started',
+                'session_data' => array('session_id' => $session_id, 'step' => 'personal_info_received')
+            );
+        }
         
         // Simple keyword-based responses
         $message_lower = strtolower(trim($message));
@@ -3787,29 +3842,12 @@ class EduBot_Shortcode {
             $extracted_data['student_name'] = $student_name;
         }
         
-        // Extract grade/class information (handle typos like "nursary")
-        $grade_patterns = array(
-            '/\b(nursery|nursary|pre-?kg|lkg|ukg)\b/i',
-            '/\b(?:grade|class)\s*(\d+)\b/i',
-            '/\b(\d+)(?:st|nd|rd|th)\s*(?:grade|class)?\b/i'
-        );
+        // Extract grade/class information with enhanced fuzzy matching
+        $normalized_message = $this->normalize_grade_input_v2($message);
+        $grade = $this->extract_fuzzy_grade_v2($normalized_message);
         
-        foreach ($grade_patterns as $pattern) {
-            if (preg_match($pattern, $message, $matches)) {
-                if (isset($matches[1])) {
-                    $grade = ucfirst(strtolower($matches[0]));
-                    // Normalize grade names (handle typos)
-                    if (stripos($grade, 'nursery') !== false || stripos($grade, 'nursary') !== false) $grade = 'Nursery';
-                    elseif (stripos($grade, 'pre') !== false) $grade = 'Pre-KG';
-                    elseif (stripos($grade, 'lkg') !== false) $grade = 'LKG';
-                    elseif (stripos($grade, 'ukg') !== false) $grade = 'UKG';
-                    elseif (preg_match('/(\d+)/', $grade, $num_match)) {
-                        $grade = 'Grade ' . $num_match[1];
-                    }
-                    $extracted_data['grade'] = $grade;
-                    break;
-                }
-            }
+        if ($grade) {
+            $extracted_data['grade'] = $grade;
         }
         
         // Extract academic year
@@ -4215,7 +4253,7 @@ class EduBot_Shortcode {
         </div>
         
         <!-- Important Note -->
-        <div style="background-color: #dc2626; color: white; padding: 20px 25px; text-align: center;">
+        <div style="background-color: ' . esc_attr($primary_color) . '; color: white; padding: 20px 25px; text-align: center;">
             <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">📌 Please Save Your Enquiry Number</div>
             <div style="font-size: 24px; font-weight: bold; background-color: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 6px; display: inline-block;">' . esc_html($enquiry_number) . '</div>
             <div style="font-size: 14px; margin-top: 8px; opacity: 0.9;">You\'ll need this number for all future communications</div>
@@ -4285,7 +4323,7 @@ class EduBot_Shortcode {
     <div class="container" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
         
         <!-- Header -->
-        <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; text-align: center; padding: 25px 20px;">';
+        <div style="background: linear-gradient(135deg, ' . esc_attr($primary_color) . ' 0%, ' . esc_attr($secondary_color) . ' 100%); color: white; text-align: center; padding: 25px 20px;">';
         
         if (!empty($school_logo)) {
             $html .= '<div style="margin-bottom: 15px;">
@@ -4298,8 +4336,8 @@ class EduBot_Shortcode {
         </div>
         
         <!-- Alert Banner -->
-        <div class="content-section" style="padding: 20px 25px; text-align: center; background-color: #fef2f2;">
-            <div style="background-color: #fecaca; color: #991b1b; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626;">
+        <div class="content-section" style="padding: 20px 25px; text-align: center; background-color: #f0f9ff;">
+            <div style="background-color: #dbeafe; color: #1e40af; padding: 15px; border-radius: 8px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
                 <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;">⚡ Priority: Contact within 24 hours</div>
                 <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . date('F j, Y g:i A') . '</div>
             </div>
@@ -4688,6 +4726,96 @@ Reply STOP to unsubscribe");
             error_log('EduBot: WhatsApp confirmation error: ' . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Normalize grade input to handle common misspellings and typos (version 2)
+     */
+    private function normalize_grade_input_v2($message) {
+        // Remove extra spaces and normalize
+        $message = preg_replace('/\s+/', ' ', strtolower(trim($message)));
+        
+        // Handle common misspellings of "grade"
+        $grade_variations = array(
+            '/\bgrad\b/' => 'grade',
+            '/\bograde\b/' => 'grade', 
+            '/\bgrde\b/' => 'grade',
+            '/\bgrsd\b/' => 'grade',
+            '/\bgrd\b/' => 'grade'
+        );
+        
+        foreach ($grade_variations as $pattern => $replacement) {
+            $message = preg_replace($pattern, $replacement, $message);
+        }
+        
+        // Handle common misspellings of "class"
+        $class_variations = array(
+            '/\bclas\b/' => 'class',
+            '/\bclss\b/' => 'class',
+            '/\bcalss\b/' => 'class'
+        );
+        
+        foreach ($class_variations as $pattern => $replacement) {
+            $message = preg_replace($pattern, $replacement, $message);
+        }
+        
+        return $message;
+    }
+
+    /**
+     * Extract grade with enhanced fuzzy matching (version 2)
+     */
+    private function extract_fuzzy_grade_v2($message) {
+        // Handle nursery and pre-school grades first
+        if (strpos($message, 'nursery') !== false || strpos($message, 'nursary') !== false) {
+            return 'Nursery';
+        }
+        if (strpos($message, 'pre-kg') !== false || strpos($message, 'prekg') !== false) {
+            return 'Pre-KG';
+        }
+        if (strpos($message, 'lkg') !== false) {
+            return 'LKG';
+        }
+        if (strpos($message, 'ukg') !== false) {
+            return 'UKG';
+        }
+        
+        // Enhanced pattern matching for grades with numbers
+        $patterns = array(
+            // Grade 10, grad10, ograde10, etc.
+            '/(?:grade|grad|ograde|grde|grd)\s*(\d{1,2})/i',
+            // Class 10, clas10, etc.
+            '/(?:class|clas|clss|calss)\s*(\d{1,2})/i',
+            // 10th, 10st (common typo)
+            '/(\d{1,2})(?:th|st|nd|rd)\s*(?:grade|class|grad|clas)?/i',
+            // Direct number patterns like "grade10", "class10"
+            '/(?:grade|grad|class|clas)(\d{1,2})/',
+            // Numbers with space variations like "grade 1 0" -> "grade 10"
+            '/(?:grade|grad|class|clas)\s*(\d)\s*(\d)/'
+        );
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $message, $matches)) {
+                // Handle the case where we have two digit captures (like "grade 1 0")
+                if (isset($matches[2]) && is_numeric($matches[2])) {
+                    $grade_number = $matches[1] . $matches[2];
+                } else {
+                    $grade_number = $matches[1];
+                }
+                
+                // Validate grade number is reasonable (1-12)
+                if (is_numeric($grade_number) && $grade_number >= 1 && $grade_number <= 12) {
+                    // Determine if it should be "Grade" or "Class" based on original input
+                    if (preg_match('/class/i', $message)) {
+                        return 'Class ' . $grade_number;
+                    } else {
+                        return 'Grade ' . $grade_number;
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 }
 

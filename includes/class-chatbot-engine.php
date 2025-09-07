@@ -368,6 +368,7 @@ class EduBot_Chatbot_Engine {
             'class_12' => 'Class 12'
         );
 
+        // First try exact mapping
         if (isset($grade_mapping[$message])) {
             $session['admission_data']['grade'] = $grade_mapping[$message];
             $session['admission_step'] = 'student_name';
@@ -377,13 +378,26 @@ class EduBot_Chatbot_Engine {
                 'message' => "Great! {$grade_mapping[$message]} is a wonderful choice.\n\n📝 Please provide the student's full name:",
                 'session_data' => $session
             );
-        } else {
+        }
+        
+        // Try fuzzy matching for misspelled grade inputs
+        $fuzzy_grade = $this->extract_fuzzy_grade_chatbot($message);
+        if ($fuzzy_grade) {
+            $session['admission_data']['grade'] = $fuzzy_grade;
+            $session['admission_step'] = 'student_name';
+            
             return array(
                 'success' => true,
-                'message' => "Please select a valid grade from the options provided above.",
+                'message' => "Great! I understood you meant {$fuzzy_grade}. That's a wonderful choice.\n\n📝 Please provide the student's full name:",
                 'session_data' => $session
             );
         }
+        
+        return array(
+            'success' => true,
+            'message' => "Please select a valid grade from the options provided above. You can type something like 'Grade 10', 'Class 5', or '10th grade'.",
+            'session_data' => $session
+        );
     }
 
     /**
@@ -1047,21 +1061,6 @@ class EduBot_Chatbot_Engine {
         ));
 
         if ($application_id) {
-            // Track enhanced conversion with full marketing attribution
-            if (class_exists('EduBot_Visitor_Analytics')) {
-                $visitor_analytics = new EduBot_Visitor_Analytics();
-                $conversion_data = array(
-                    'application_id' => $application_id,
-                    'application_number' => $application_number,
-                    'student_name' => $session['user_data']['student_name'] ?? '',
-                    'grade' => $session['user_data']['grade'] ?? '',
-                    'phone' => $session['user_data']['phone'] ?? '',
-                    'email' => $session['user_data']['email'] ?? '',
-                    'source' => 'chatbot_conversation'
-                );
-                $visitor_analytics->track_enhanced_application_conversion($conversion_data);
-            }
-            
             // Send notifications
             $notification_manager->send_application_notifications($application_id, $session['user_data']);
             
@@ -1317,5 +1316,86 @@ class EduBot_Chatbot_Engine {
                 array('text' => __('Back to Main Menu', 'edubot-pro'), 'value' => 'main_menu')
             )
         );
+    }
+
+    /**
+     * Extract grade with fuzzy matching for chatbot engine
+     */
+    private function extract_fuzzy_grade_chatbot($message) {
+        $message_lower = strtolower(trim($message));
+        
+        // Normalize common misspellings
+        $grade_variations = array(
+            '/\bgrad\b/' => 'grade',
+            '/\bograde\b/' => 'grade', 
+            '/\bgrde\b/' => 'grade',
+            '/\bgrsd\b/' => 'grade',
+            '/\bgrd\b/' => 'grade'
+        );
+        
+        foreach ($grade_variations as $pattern => $replacement) {
+            $message_lower = preg_replace($pattern, $replacement, $message_lower);
+        }
+        
+        $class_variations = array(
+            '/\bclas\b/' => 'class',
+            '/\bclss\b/' => 'class',
+            '/\bcalss\b/' => 'class'
+        );
+        
+        foreach ($class_variations as $pattern => $replacement) {
+            $message_lower = preg_replace($pattern, $replacement, $message_lower);
+        }
+        
+        // Handle nursery and pre-school grades
+        if (strpos($message_lower, 'nursery') !== false) {
+            return 'Nursery';
+        }
+        if (strpos($message_lower, 'pre-kg') !== false || strpos($message_lower, 'prekg') !== false) {
+            return 'Pre-KG';
+        }
+        if (strpos($message_lower, 'lkg') !== false) {
+            return 'LKG';
+        }
+        if (strpos($message_lower, 'ukg') !== false) {
+            return 'UKG';
+        }
+        
+        // Enhanced pattern matching for grades with numbers
+        $patterns = array(
+            // Grade 10, grad10, ograde10, etc.
+            '/(?:grade|grad)\s*(\d{1,2})/',
+            // Class 10, clas10, etc.
+            '/(?:class|clas|clss|calss)\s*(\d{1,2})/',
+            // 10th, 10st (common typo)
+            '/(\d{1,2})(?:th|st|nd|rd)\s*(?:grade|class)?/',
+            // Direct number patterns like "grade10", "class10"
+            '/(?:grade|grad|class|clas)(\d{1,2})/',
+            // Numbers with space variations like "grade 1 0" -> "grade 10"
+            '/(?:grade|grad|class|clas)\s*(\d)\s*(\d)/'
+        );
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $message_lower, $matches)) {
+                // Handle the case where we have two digit captures (like "grade 1 0")
+                if (isset($matches[2]) && is_numeric($matches[2])) {
+                    $grade_number = $matches[1] . $matches[2];
+                } else {
+                    $grade_number = $matches[1];
+                }
+                
+                // Validate grade number is reasonable (1-12)
+                if (is_numeric($grade_number) && $grade_number >= 1 && $grade_number <= 12) {
+                    // Determine if it should be "Grade" or "Class" based on original input
+                    if (preg_match('/class/i', $message_lower)) {
+                        return 'Class ' . $grade_number;
+                    } else {
+                        return 'Grade ' . $grade_number;
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 }

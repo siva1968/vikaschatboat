@@ -3456,6 +3456,9 @@ class EduBot_Shortcode {
     private function extract_grade_from_message($message) {
         $message_lower = strtolower($message);
         
+        // Normalize and clean the input to handle common misspellings and typos
+        $normalized_message = $this->normalize_grade_input($message_lower);
+        
         // Try to get grades from backend configuration first
         try {
             if (class_exists('Edubot_Academic_Config')) {
@@ -3474,21 +3477,21 @@ class EduBot_Shortcode {
                     $grade_key_lower = strtolower($grade_key);
                     
                     // Check for exact matches first, then word boundary matches
-                    if ($message_lower === $grade_name_lower || $message_lower === $grade_key_lower) {
+                    if ($normalized_message === $grade_name_lower || $normalized_message === $grade_key_lower) {
                         return $grade_name;
                     }
                     
                     // Check for word boundary matches to prevent partial matching
-                    if (preg_match('/\b' . preg_quote($grade_name_lower, '/') . '\b/', $message_lower) ||
-                        preg_match('/\b' . preg_quote($grade_key_lower, '/') . '\b/', $message_lower)) {
+                    if (preg_match('/\b' . preg_quote($grade_name_lower, '/') . '\b/', $normalized_message) ||
+                        preg_match('/\b' . preg_quote($grade_key_lower, '/') . '\b/', $normalized_message)) {
                         return $grade_name;
                     }
                     
                     // Special handling for common variations
-                    if ($grade_key_lower === 'pp1' && (stripos($message_lower, 'pp1') !== false || stripos($message_lower, 'pp 1') !== false)) {
+                    if ($grade_key_lower === 'pp1' && (stripos($normalized_message, 'pp1') !== false || stripos($normalized_message, 'pp 1') !== false)) {
                         return $grade_name;
                     }
-                    if ($grade_key_lower === 'pp2' && (stripos($message_lower, 'pp2') !== false || stripos($message_lower, 'pp 2') !== false)) {
+                    if ($grade_key_lower === 'pp2' && (stripos($normalized_message, 'pp2') !== false || stripos($normalized_message, 'pp 2') !== false)) {
                         return $grade_name;
                     }
                 }
@@ -3500,47 +3503,131 @@ class EduBot_Shortcode {
         // Fallback to hardcoded patterns if backend config fails
         
         // Check for Grade 11 with streams first (more specific matches)
-        if (preg_match('/grade\s*11\s*science/i', $message_lower)) {
+        if (preg_match('/grade\s*11\s*science/i', $normalized_message)) {
             return 'Grade 11 Science';
         }
-        if (preg_match('/grade\s*11\s*commerce/i', $message_lower)) {
+        if (preg_match('/grade\s*11\s*commerce/i', $normalized_message)) {
             return 'Grade 11 Commerce';
         }
-        if (preg_match('/grade\s*11\s*humanities/i', $message_lower)) {
+        if (preg_match('/grade\s*11\s*humanities/i', $normalized_message)) {
             return 'Grade 11 Humanities';
         }
         
-        if (stripos($message_lower, 'nursery') !== false) {
+        if (stripos($normalized_message, 'nursery') !== false) {
             return 'Nursery';
         }
-        if (stripos($message_lower, 'pp1') !== false) {
+        if (stripos($normalized_message, 'pp1') !== false) {
             return 'PP1';
         }
-        if (stripos($message_lower, 'pp2') !== false) {
+        if (stripos($normalized_message, 'pp2') !== false) {
             return 'PP2';
         }
-        if (stripos($message_lower, 'pre-kg') !== false || stripos($message_lower, 'prekg') !== false) {
+        if (stripos($normalized_message, 'pre-kg') !== false || stripos($normalized_message, 'prekg') !== false) {
             return 'Pre-KG';
         }
-        if (stripos($message_lower, 'lkg') !== false) {
+        if (stripos($normalized_message, 'lkg') !== false) {
             return 'LKG';
         }
-        if (stripos($message_lower, 'ukg') !== false) {
+        if (stripos($normalized_message, 'ukg') !== false) {
             return 'UKG';
         }
         
+        // Enhanced grade number extraction with fuzzy matching
+        $extracted_grade = $this->extract_fuzzy_grade_number($normalized_message);
+        if ($extracted_grade) {
+            return $extracted_grade;
+        }
+        
         // Extract grade numbers (but check Grade 11 without streams separately)
-        if (preg_match('/grade\s*(\d+)/i', $message, $matches)) {
+        if (preg_match('/grade\s*(\d+)/i', $normalized_message, $matches)) {
             return 'Grade ' . $matches[1];
         }
-        if (preg_match('/class\s*(\d+)/i', $message, $matches)) {
+        if (preg_match('/class\s*(\d+)/i', $normalized_message, $matches)) {
             return 'Class ' . $matches[1];
         }
-        if (preg_match('/(\d+)(th|st|nd|rd)/i', $message, $matches)) {
+        if (preg_match('/(\d+)(th|st|nd|rd)/i', $normalized_message, $matches)) {
             return 'Grade ' . $matches[1];
         }
         
         return 'Selected Grade';
+    }
+
+    /**
+     * Normalize grade input to handle common misspellings and typos
+     */
+    private function normalize_grade_input($message) {
+        // Remove extra spaces and normalize
+        $message = preg_replace('/\s+/', ' ', trim($message));
+        
+        // Handle common misspellings of "grade"
+        $grade_variations = array(
+            '/\bgrad\b/i' => 'grade',
+            '/\bograde\b/i' => 'grade', 
+            '/\bgrde\b/i' => 'grade',
+            '/\bgrade\b/i' => 'grade',
+            '/\bgrsd\b/i' => 'grade',
+            '/\bgrd\b/i' => 'grade'
+        );
+        
+        foreach ($grade_variations as $pattern => $replacement) {
+            $message = preg_replace($pattern, $replacement, $message);
+        }
+        
+        // Handle common misspellings of "class"
+        $class_variations = array(
+            '/\bclas\b/i' => 'class',
+            '/\bclss\b/i' => 'class',
+            '/\bcalss\b/i' => 'class',
+            '/\bclass\b/i' => 'class'
+        );
+        
+        foreach ($class_variations as $pattern => $replacement) {
+            $message = preg_replace($pattern, $replacement, $message);
+        }
+        
+        return $message;
+    }
+
+    /**
+     * Extract grade numbers with fuzzy matching for common patterns
+     */
+    private function extract_fuzzy_grade_number($message) {
+        // Pattern to match various grade formats including misspellings
+        $patterns = array(
+            // Grade 10, grad10, ograde10, etc.
+            '/(?:grade|grad|ograde|grde|grd)\s*(\d{1,2})/i',
+            // Class 10, clas10, etc.
+            '/(?:class|clas|clss|calss)\s*(\d{1,2})/i',
+            // 10th, 10st (common typo)
+            '/(\d{1,2})(?:th|st|nd|rd)\s*(?:grade|class|grad|clas)?/i',
+            // Direct number patterns like "grade10", "class10"
+            '/(?:grade|grad|class|clas)(\d{1,2})/i',
+            // Numbers with space variations like "grade 1 0" -> "grade 10"
+            '/(?:grade|grad|class|clas)\s*(\d)\s*(\d)/i'
+        );
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $message, $matches)) {
+                // Handle the case where we have two digit captures (like "grade 1 0")
+                if (isset($matches[2]) && is_numeric($matches[2])) {
+                    $grade_number = $matches[1] . $matches[2];
+                } else {
+                    $grade_number = $matches[1];
+                }
+                
+                // Validate grade number is reasonable (1-12)
+                if (is_numeric($grade_number) && $grade_number >= 1 && $grade_number <= 12) {
+                    // Determine if it should be "Grade" or "Class" based on original input
+                    if (preg_match('/class/i', $message)) {
+                        return 'Class ' . $grade_number;
+                    } else {
+                        return 'Grade ' . $grade_number;
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
     
     private function extract_board_from_message($message) {
