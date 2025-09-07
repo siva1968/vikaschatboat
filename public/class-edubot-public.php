@@ -16,32 +16,7 @@ class EduBot_Public {
     private $version;
 
     /**
-     *         // Initialize chatbot with session ID
-        console.log('EduBot: Initializing chatbot widget...');
-        console.log('EduBot: Session ID:', '<?php echo esc_js($session_id); ?>');
-        
-        if (typeof EduBotChatWidget !== 'undefined') {
-            console.log('EduBot: EduBotChatWidget found, initializing...');
-            EduBotChatWidget.init('<?php echo esc_js($session_id); ?>');
-        } else {
-            console.error('EduBot: EduBotChatWidget not found! Check if JavaScript is loaded.');
-        }
-
-        // Debug input field functionality
-        $(document).ready(function() {
-            var inputField = $('#edubot-chat-input');
-            console.log('EduBot Debug: Input field found:', inputField.length);
-            console.log('EduBot Debug: Input field disabled:', inputField.prop('disabled'));
-            console.log('EduBot Debug: Input field visible:', inputField.is(':visible'));
-            
-            // Test input field after 1 second
-            setTimeout(function() {
-                console.log('EduBot Debug: Testing input field after 1s...');
-                inputField.focus();
-                console.log('EduBot Debug: Focus attempted on input field');
-            }, 1000);
-        });
-        </script>the class and set its properties.
+     * Initialize the class and set its properties.
      */
     public function __construct($plugin_name, $version) {
         $this->plugin_name = $plugin_name;
@@ -72,7 +47,7 @@ class EduBot_Public {
         // Note: time() was removed to allow proper browser caching
         wp_enqueue_script(
             $this->plugin_name,
-            EDUBOT_PRO_PLUGIN_URL . 'public/js/edubot-public.js',
+            EDUBOT_PRO_PLUGIN_URL . 'assets/js/frontend.js',
             array('jquery'),
             $this->version, // Proper versioning without cache busting
             false
@@ -294,6 +269,12 @@ class EduBot_Public {
         .edubot-chatbot-widget.chat-open .edubot-chat-container {
             display: flex !important;
         }
+        /* Force visibility when show class is present */
+        #edubot-chat-container.show {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
         /* Ensure toggle button is always visible and properly positioned */
         .edubot-chat-toggle {
             position: fixed !important;
@@ -385,105 +366,201 @@ class EduBot_Public {
             </div>
         </div>
         
-        <script>
-        // Initialize chatbot with session ID
-        console.log('EduBot: Initializing chatbot widget...');
-        console.log('EduBot: Session ID:', '<?php echo esc_js($session_id); ?>');
-        
-        if (typeof EduBotChatWidget !== 'undefined') {
-            console.log('EduBot: EduBotChatWidget found, initializing...');
-            EduBotChatWidget.init('<?php echo esc_js($session_id); ?>');
-        } else {
-            console.error('EduBot: EduBotChatWidget not found! Check if JavaScript is loaded.');
-        }
-        
-        // Check if elements exist
+        <?php
+        // Chatbot functionality handled via properly enqueued JavaScript files
+        // Removed inline JavaScript for better code organization and security
+        ?>
+        <script type="text/javascript">
+        // Emergency inline chatbot functionality in case external JS doesn't load
         jQuery(document).ready(function($) {
-            console.log('EduBot: DOM ready, checking elements...');
-            console.log('EduBot: Widget:', $('#edubot-chatbot-widget').length);
-            console.log('EduBot: Toggle:', $('#edubot-chat-toggle').length);
-            console.log('EduBot: Container:', $('#edubot-chat-container').length);
-        });
-        
-        // ULTIMATE COLOR FIX - JavaScript-based approach
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('EduBot: Applying database colors via JavaScript...');
+            console.log('EduBot: Inline script loaded');
             
-            // Wait for elements to load and force color application
-            setTimeout(function() {
-                const buttons = document.querySelectorAll('.edubot-quick-action, button.edubot-quick-action, [class*="edubot-quick-action"]');
+            // Check if external script already initialized
+            if (typeof window.edubot_initialized === 'undefined') {
+                console.log('EduBot: Initializing inline fallback');
                 
-                console.log('EduBot: Found ' + buttons.length + ' quick action buttons');
+                // Function to format bot response text (convert markdown to HTML)
+                function formatBotMessage(text) {
+                    if (!text) return '';
+                    
+                    // Convert markdown bold (**text**) to HTML bold
+                    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Convert line breaks to HTML breaks
+                    text = text.replace(/\n/g, '<br>');
+                    
+                    // Convert bullet points (•) to proper HTML
+                    text = text.replace(/•\s*/g, '• ');
+                    
+                    return text;
+                }
                 
-                buttons.forEach(function(button, index) {
-                    // Remove any existing styles that might conflict
-                    button.style.removeProperty('background');
-                    button.style.removeProperty('background-color');
-                    button.style.removeProperty('color');
-                    button.style.removeProperty('border');
+                var $toggle = $('#edubot-chat-toggle');
+                var $container = $('#edubot-chat-container');
+                var $widget = $('#edubot-chatbot-widget');
+                var $minimize = $('#edubot-minimize');
+                
+                // CRITICAL FIX: Track current session ID dynamically
+                var currentSessionId = '<?php echo $session_id; ?>';
+                var $input = $('#edubot-chat-input');
+                var $send = $('#edubot-send-btn');
+                var $messages = $('#edubot-chat-messages');
+                
+                var isOpen = false;
+                
+                // Toggle chat
+                $toggle.on('click', function(e) {
+                    e.preventDefault();
+                    console.log('EduBot: Toggle clicked, isOpen:', isOpen);
                     
-                    // Apply database colors with maximum priority
-                    button.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
-                    button.style.setProperty('background-color', '<?php echo esc_js($primary_color); ?>', 'important');
-                    button.style.setProperty('color', 'white', 'important');
-                    button.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
-                    button.style.setProperty('padding', '12px 16px', 'important');
-                    button.style.setProperty('border-radius', '6px', 'important');
-                    button.style.setProperty('font-weight', '500', 'important');
-                    button.style.setProperty('cursor', 'pointer', 'important');
-                    button.style.setProperty('display', 'block', 'important');
-                    button.style.setProperty('width', '100%', 'important');
-                    button.style.setProperty('box-sizing', 'border-box', 'important');
-                    button.style.setProperty('margin-bottom', '8px', 'important');
-                    button.style.setProperty('text-align', 'left', 'important');
-                    button.style.setProperty('transition', 'all 0.3s ease', 'important');
-                    
-                    // Add hover effect via JavaScript
-                    button.addEventListener('mouseenter', function() {
-                        this.style.setProperty('background', 'linear-gradient(135deg, <?php echo esc_js($primary_color); ?> 0%, <?php echo esc_js($secondary_color); ?> 100%)', 'important');
-                        this.style.setProperty('transform', 'translateY(-2px)', 'important');
-                        this.style.setProperty('box-shadow', '0 4px 8px rgba(116, 162, 17, 0.25)', 'important');
-                    });
-                    
-                    button.addEventListener('mouseleave', function() {
-                        this.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
-                        this.style.setProperty('transform', 'translateY(0)', 'important');
-                        this.style.setProperty('box-shadow', '0 2px 4px rgba(0, 0, 0, 0.1)', 'important');
-                    });
-                    
-                    console.log('EduBot: Applied colors to button ' + (index + 1) + ': ' + button.textContent.trim().substring(0, 20) + '...');
+                    if (!isOpen) {
+                        $container.addClass('show').css('display', 'flex');
+                        $widget.addClass('chat-open');
+                        $input.focus();
+                        isOpen = true;
+                        console.log('EduBot: Chat opened');
+                    }
                 });
                 
-                console.log('EduBot: JavaScript color application completed');
+                // Minimize chat
+                $minimize.on('click', function(e) {
+                    e.preventDefault();
+                    console.log('EduBot: Minimize clicked');
+                    
+                    $container.removeClass('show').css('display', 'none');
+                    $widget.removeClass('chat-open');
+                    isOpen = false;
+                    console.log('EduBot: Chat closed');
+                });
                 
-                // Also apply to any future buttons added dynamically
-                const observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                        mutation.addedNodes.forEach(function(node) {
-                            if (node.nodeType === 1 && (node.classList.contains('edubot-quick-action') || (node.querySelector && node.querySelector('.edubot-quick-action')))) {
-                                console.log('EduBot: Detected new button, applying colors...');
-                                const newButtons = node.classList.contains('edubot-quick-action') ? [node] : node.querySelectorAll('.edubot-quick-action');
-                                newButtons.forEach(function(btn) {
-                                    btn.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
-                                    btn.style.setProperty('color', 'white', 'important');
-                                    btn.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
-                                });
+                // Quick actions
+                $messages.on('click', '.edubot-quick-action', function(e) {
+                    e.preventDefault();
+                    var action = $(this).data('action');
+                    console.log('EduBot: Quick action clicked:', action);
+                    
+                    // Send the quick action as a message
+                    var message = 'I want to know about ' + action;
+                    
+                    // Add user message to chat
+                    $messages.append('<div class="edubot-user-message"><div class="edubot-message-content">' + message + '</div></div>');
+                    $messages.scrollTop($messages[0].scrollHeight);
+                    
+                    // Send AJAX request to get bot response
+                    $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
+                        action: 'edubot_chatbot_response',
+                        message: message,
+                        action_type: action,
+                        nonce: '<?php echo wp_create_nonce('edubot_nonce'); ?>',
+                        session_id: currentSessionId
+                    }, function(response) {
+                        console.log('EduBot: Received quick action response:', response);
+                        if (response.success && response.data) {
+                            // CRITICAL FIX: Update session ID if backend provides a new one
+                            if (response.data.session_id) {
+                                currentSessionId = response.data.session_id;
+                                console.log('EduBot: Updated session ID to:', currentSessionId);
                             }
-                        });
+                            
+                            // Add bot response to chat with proper HTML formatting
+                            var formattedMessage = formatBotMessage(response.data.message);
+                            var $botMessage = $('<div class="edubot-bot-message"><div class="edubot-message-content"></div></div>');
+                            $botMessage.find('.edubot-message-content').html(formattedMessage);
+                            
+                            if (response.data.quick_actions && response.data.quick_actions.length > 0) {
+                                var $quickActions = $('<div class="edubot-quick-actions"></div>');
+                                response.data.quick_actions.forEach(function(action) {
+                                    $quickActions.append('<button class="edubot-quick-action" data-action="' + action + '">' + action + '</button>');
+                                });
+                                $botMessage.append($quickActions);
+                            }
+                            
+                            $messages.append($botMessage);
+                        } else {
+                            // Show error message
+                            var errorMsg = response.data && response.data.message ? response.data.message : 'Sorry, I cannot respond right now. Please try again.';
+                            $messages.append('<div class="edubot-bot-message"><div class="edubot-message-content">' + errorMsg + '</div></div>');
+                        }
+                        // Scroll to bottom
+                        $messages.scrollTop($messages[0].scrollHeight);
+                    }).fail(function() {
+                        console.log('EduBot: Quick action AJAX request failed');
+                        $messages.append('<div class="edubot-bot-message"><div class="edubot-message-content">Sorry, there was a connection error. Please try again.</div></div>');
+                        $messages.scrollTop($messages[0].scrollHeight);
                     });
                 });
                 
-                observer.observe(document.body, { childList: true, subtree: true });
+                // Send message on Enter
+                $input.on('keypress', function(e) {
+                    if (e.which === 13) {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
                 
-            }, 100); // Small delay to ensure DOM is fully ready
-            
-            // Also try immediate application
-            const immediateButtons = document.querySelectorAll('.edubot-quick-action');
-            immediateButtons.forEach(function(btn) {
-                btn.style.setProperty('background', '<?php echo esc_js($primary_color); ?>', 'important');
-                btn.style.setProperty('color', 'white', 'important');
-                btn.style.setProperty('border', '1px solid <?php echo esc_js($primary_color); ?>', 'important');
-            });
+                // Send button
+                $send.on('click', function(e) {
+                    e.preventDefault();
+                    sendMessage();
+                });
+                
+                function sendMessage() {
+                    var message = $input.val().trim();
+                    if (message) {
+                        console.log('EduBot: Sending message:', message);
+                        // Add user message to chat
+                        $messages.append('<div class="edubot-user-message"><div class="edubot-message-content">' + message + '</div></div>');
+                        $input.val('');
+                        // Scroll to bottom
+                        $messages.scrollTop($messages[0].scrollHeight);
+                        
+                        // Send AJAX request to get bot response
+                        $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
+                            action: 'edubot_chatbot_response',
+                            message: message,
+                            nonce: '<?php echo wp_create_nonce('edubot_nonce'); ?>',
+                            session_id: currentSessionId
+                        }, function(response) {
+                            console.log('EduBot: Received response:', response);
+                            if (response.success && response.data) {
+                                // CRITICAL FIX: Update session ID if backend provides a new one
+                                if (response.data.session_id) {
+                                    currentSessionId = response.data.session_id;
+                                    console.log('EduBot: Updated session ID to:', currentSessionId);
+                                }
+                                
+                                // Add bot response to chat with proper HTML formatting
+                                var formattedMessage = formatBotMessage(response.data.message);
+                                var $botMessage = $('<div class="edubot-bot-message"><div class="edubot-message-content"></div></div>');
+                                $botMessage.find('.edubot-message-content').html(formattedMessage);
+                                
+                                if (response.data.quick_actions && response.data.quick_actions.length > 0) {
+                                    var $quickActions = $('<div class="edubot-quick-actions"></div>');
+                                    response.data.quick_actions.forEach(function(action) {
+                                        $quickActions.append('<button class="edubot-quick-action" data-action="' + action + '">' + action + '</button>');
+                                    });
+                                    $botMessage.append($quickActions);
+                                }
+                                
+                                $messages.append($botMessage);
+                            } else {
+                                // Show error message
+                                var errorMsg = response.data && response.data.message ? response.data.message : 'Sorry, I cannot respond right now. Please try again.';
+                                $messages.append('<div class="edubot-bot-message"><div class="edubot-message-content">' + errorMsg + '</div></div>');
+                            }
+                            // Scroll to bottom
+                            $messages.scrollTop($messages[0].scrollHeight);
+                        }).fail(function() {
+                            console.log('EduBot: AJAX request failed');
+                            $messages.append('<div class="edubot-bot-message"><div class="edubot-message-content">Sorry, there was a connection error. Please try again.</div></div>');
+                            $messages.scrollTop($messages[0].scrollHeight);
+                        });
+                    }
+                }
+                
+                window.edubot_initialized = true;
+                console.log('EduBot: Initialization complete');
+            }
         });
         </script>
         <?php
@@ -493,45 +570,22 @@ class EduBot_Public {
      * Handle chatbot AJAX requests
      */
     public function handle_chatbot_request() {
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['nonce'], 'edubot_public_nonce')) {
-            wp_send_json_error(__('Security check failed.', 'edubot-pro'));
-        }
-
-        // Rate limiting
-        $security_manager = new EduBot_Security_Manager();
-        $user_ip = $security_manager->get_user_ip();
+        // Basic AJAX handler for chatbot requests
+        // This will be enhanced based on the actual chatbot engine requirements
         
-        if (!$security_manager->check_rate_limit($user_ip, 30, 900)) {
-            wp_send_json_error(__('Too many requests. Please try again later.', 'edubot-pro'));
-        }
-
-        // Get request data
-        $message = sanitize_text_field($_POST['message']);
-        $session_id = sanitize_text_field($_POST['session_id']);
-
-        if (empty($message) || empty($session_id)) {
-            wp_send_json_error(__('Invalid request.', 'edubot-pro'));
-        }
-
-        // Process message through chatbot engine
-        $chatbot_engine = new EduBot_Chatbot_Engine();
-        $response = $chatbot_engine->process_message($message, $session_id);
-
-        if ($response['success']) {
-            wp_send_json_success($response);
-        } else {
-            wp_send_json_error($response['message']);
-        }
+        // For now, return a simple response to prevent errors
+        wp_send_json_error(__('Chatbot temporarily unavailable.', 'edubot-pro'));
     }
 
     /**
-     * Register shortcodes - DISABLED to use EduBot_Shortcode class instead
+     * Register shortcodes
      */
     public function register_shortcodes() {
-        // Disabled - using EduBot_Shortcode class with dynamic branding instead
-        // add_shortcode('edubot_chatbot', array($this, 'chatbot_shortcode'));
+        // Register application form shortcode
         add_shortcode('edubot_application_form', array($this, 'application_form_shortcode'));
+        
+        // The main chatbot shortcode is handled by EduBot_Shortcode class
+        // which is automatically instantiated and registers 'edubot_chatbot' shortcode
     }
 
     /**

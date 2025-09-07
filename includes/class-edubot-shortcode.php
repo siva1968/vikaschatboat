@@ -13,19 +13,15 @@ if (!class_exists('Edubot_Academic_Config')) {
     require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-academic-config.php';
 }
 
-// Load the new flow manager
-if (!class_exists('EduBot_Flow_Manager')) {
-    require_once plugin_dir_path(__FILE__) . 'class-edubot-flow-manager.php';
-}
-
 class EduBot_Shortcode {
     
     private $debug_enabled = false; // Set to true for debugging
-    private $flow_manager = null;
     
     public function __construct() {
         $this->debug_enabled = defined('WP_DEBUG') && WP_DEBUG;
-        $this->flow_manager = EduBot_Flow_Manager_Instance::get_instance();
+        
+        // Set WordPress timezone to Indian Standard Time for the school
+        add_action('init', array($this, 'set_indian_timezone'));
         
         add_action('init', array($this, 'init_shortcode'), 15); // Higher priority to override public class
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_scripts'));
@@ -47,6 +43,40 @@ class EduBot_Shortcode {
     private function debug_log($message) {
         if ($this->debug_enabled) {
             error_log("EduBot Debug: " . $message);
+        }
+    }
+    
+    /**
+     * Get Indian Standard Time (IST) formatted date
+     * @param string $format PHP date format string (default: 'F j, Y g:i A')
+     * @return string Formatted date in IST
+     */
+    private function get_indian_time($format = 'F j, Y g:i A') {
+        // Set timezone to Indian Standard Time (IST)
+        $ist_timezone = new DateTimeZone('Asia/Kolkata');
+        $date = new DateTime('now', $ist_timezone);
+        return $date->format($format);
+    }
+    
+    /**
+     * Get user-friendly IST time for chatbot responses
+     * @return string Formatted time like "2:30 PM IST, September 7, 2025"
+     */
+    private function get_chatbot_friendly_time() {
+        return $this->get_indian_time('g:i A \I\S\T, F j, Y');
+    }
+    
+    /**
+     * Set WordPress timezone to Indian Standard Time
+     * This ensures all WordPress functions use IST
+     */
+    public function set_indian_timezone() {
+        // Set WordPress timezone to India (IST)
+        if (get_option('timezone_string') !== 'Asia/Kolkata') {
+            update_option('timezone_string', 'Asia/Kolkata');
+            
+            // Also set the GMT offset as backup
+            update_option('gmt_offset', 5.5); // IST is UTC+5:30
         }
     }
     
@@ -954,10 +984,21 @@ class EduBot_Shortcode {
         }
         
         try {
-            error_log("EduBot: Processing request - Message: '{$message}' | Action: '{$action_type}' | Session: '{$session_id}'");
+            error_log("EduBot AJAX: Processing request - Message: '{$message}' | Action: '{$action_type}' | Session: '{$session_id}'");
+            
+            // DEBUG: Test personal info parsing immediately
+            $debug_personal_info = $this->parse_personal_info($message);
+            error_log("EduBot DEBUG: Immediate personal info parse result: " . print_r($debug_personal_info, true));
             
             // Use the main response handler that includes personal info detection
             $response = $this->generate_response($message, $action_type, $session_id);
+            
+            error_log("EduBot AJAX: Generated response type: " . (is_array($response) ? 'array' : 'string'));
+            error_log("EduBot AJAX: Response content: " . (is_array($response) ? json_encode($response) : substr($response, 0, 200)));
+            
+            // DEBUG: Check session state after response generation
+            $debug_session = $this->get_conversation_session($session_id);
+            error_log("EduBot DEBUG: Session after generation: " . print_r($debug_session, true));
             
             // Ensure response is in the correct format expected by JavaScript
             if (is_array($response)) {
@@ -966,23 +1007,30 @@ class EduBot_Shortcode {
                     $response['message'] = $response['response'];
                     unset($response['response']);
                 }
-                wp_send_json_success(array(
+                $final_response = array(
                     'message' => $response['message'] ?? 'Thank you for your message!',
                     'action' => $response['action'] ?? 'info',
                     'session_data' => $response['session_data'] ?? array(),
-                    'session_id' => $session_id
-                ));
+                    'session_id' => $session_id,
+                    'quick_actions' => $response['quick_actions'] ?? array()
+                );
+                error_log("EduBot AJAX: Sending array response: " . json_encode($final_response));
+                wp_send_json_success($final_response);
             } else {
                 // Handle string responses
-                wp_send_json_success(array(
+                $final_response = array(
                     'message' => is_string($response) ? $response : 'Thank you for your message!',
                     'action' => 'info',
                     'session_data' => array(),
-                    'session_id' => $session_id
-                ));
+                    'session_id' => $session_id,
+                    'quick_actions' => array()  // Ensure quick_actions is always present
+                );
+                error_log("EduBot AJAX: Sending string response: " . json_encode($final_response));
+                wp_send_json_success($final_response);
             }
         } catch (Exception $e) {
-            error_log('EduBot Error: ' . $e->getMessage());
+            error_log('EduBot AJAX Error: ' . $e->getMessage());
+            error_log('EduBot AJAX Error Stack: ' . $e->getTraceAsString());
             wp_send_json_error(array('message' => 'Sorry, there was an error. Please try again.'));
         }
     }
@@ -1011,30 +1059,23 @@ class EduBot_Shortcode {
             
             switch ($action_type) {
                 case 'admission':
-                    // Initialize session for admission flow using new flow manager
-                    try {
-                        $flow_session = $this->flow_manager->init_flow('admission', $session_id);
-                        return array(
-                            'response' => $this->get_flow_welcome_message('admission'),
-                            'action' => 'flow_started',
-                            'session_data' => array(
-                                'session_id' => $session_id,
-                                'flow_type' => 'admission',
-                                'step' => $flow_session['step_name']
-                            )
-                        );
-                    } catch (Exception $e) {
-                        error_log('EduBot Flow Error: ' . $e->getMessage());
-                        // Fallback to legacy admission flow
-                    }
-                    // Legacy fallback - Initialize session for admission flow
+                    // Initialize session for admission flow - DIRECT APPROACH
                     $this->init_conversation_session($session_id, 'admission');
+                    error_log("EduBot: Initialized admission session {$session_id}");
                     return array(
-                        'response' => "🎓 **Welcome to {$school_name} Admission Process!**\n\n" .
-                                   "I'm here to help you with the admission enquiry process. Let me collect some basic information to get started.\n\n" .
-                                   "📝 **Please tell me your child's full name:**",
-                        'action' => 'collect_name',
-                        'session_data' => array('step' => 'collect_name', 'flow_type' => 'admission')
+                        'response' => "Hello! **Welcome to {$school_name}.**\n\n" .
+                                   "We are currently accepting applications for **AY 2026–27**.\n\n" .
+                                   "I'll help you with your admission enquiry. Please provide:\n\n" .
+                                   "👶 **Student Name**\n" .
+                                   "📱 **Mobile Number**\n" .
+                                   "📧 **Email Address**\n\n" .
+                                   "You can type them like:\n" .
+                                   "• Name: Sujay\n" .
+                                   "• Mobile: 9876543210\n" .
+                                   "• Email: parent@email.com\n\n" .
+                                   "Or just start with the student's name and I'll ask for the rest step by step.",
+                        'action' => 'admission_started',
+                        'session_data' => array('session_id' => $session_id, 'step' => 'start', 'flow_type' => 'admission')
                     );
                 
 
@@ -1147,11 +1188,18 @@ class EduBot_Shortcode {
                      ', Email: ' . ($personal_info['email'] ?? 'none') . 
                      ', Phone: ' . ($personal_info['phone'] ?? 'none'));
             
-            // Always use legacy handling for now to ensure stability
-            if (empty($session_id) || $this->is_session_completed($session_id)) {
-                $session_id = 'sess_' . uniqid();  // Create fresh session
-                error_log('EduBot Debug: Created fresh session for new personal info: ' . $session_id);
-                // Initialize the session properly
+            // CRITICAL FIX: Use existing session ID if provided, only create new if empty
+            if (empty($session_id)) {
+                $session_id = 'sess_' . uniqid();  // Create fresh session only if none provided
+                error_log('EduBot Debug: No session ID provided, created fresh session: ' . $session_id);
+            } else {
+                error_log('EduBot Debug: Using provided session ID: ' . $session_id);
+            }
+            
+            // Initialize or ensure session exists
+            $existing_session = $this->get_conversation_session($session_id);
+            if (!$existing_session || $this->is_session_completed($session_id)) {
+                error_log('EduBot Debug: Initializing session for personal info collection');
                 $this->init_conversation_session($session_id, 'admission');
             }
             
@@ -1295,14 +1343,21 @@ class EduBot_Shortcode {
         $user_identifier = sanitize_text_field($_POST['user_identifier'] ?? wp_get_current_user()->ID);
 
         try {
-            $flow_session = $this->flow_manager->init_flow($flow_type);
+            // Simple session initialization without flow manager
+            $session_id = $this->generate_session_id();
+            $this->save_session($session_id, array(
+                'session_id' => $session_id,
+                'flow_type' => $flow_type,
+                'started' => current_time('mysql'),
+                'step' => 'start',
+                'data' => array()
+            ));
             
             wp_send_json_success(array(
                 'message' => $this->get_flow_welcome_message($flow_type),
-                'session_id' => $flow_session['session_id'],
+                'session_id' => $session_id,
                 'flow_type' => $flow_type,
-                'step' => $flow_session['step_name'],
-                'available_flows' => $this->flow_manager->get_available_flows()
+                'step' => 'start'
             ));
         } catch (Exception $e) {
             wp_send_json_error(array('message' => 'Unable to start flow: ' . $e->getMessage()));
@@ -1321,13 +1376,11 @@ class EduBot_Shortcode {
         $user_identifier = sanitize_text_field($_POST['user_identifier'] ?? wp_get_current_user()->ID);
 
         try {
-            $active_flows = $this->flow_manager->get_user_active_flows($user_identifier);
-            $available_flows = $this->flow_manager->get_available_flows();
-
+            // Simple flow management without complex flow manager
             wp_send_json_success(array(
-                'active_flows' => $active_flows,
-                'available_flows' => $available_flows,
-                'can_start_multiple' => $this->flow_manager->can_start_multiple_flows($user_identifier)
+                'active_flows' => array(),
+                'available_flows' => array('admission', 'information', 'callback'),
+                'can_start_multiple' => false
             ));
         } catch (Exception $e) {
             wp_send_json_error(array('message' => 'Unable to retrieve flows: ' . $e->getMessage()));
@@ -1405,15 +1458,25 @@ class EduBot_Shortcode {
             }
         }
         
-        // Handle admission enquiry initiation (but only if no existing session with data)
+        // Handle admission enquiry initiation (but only if no existing session with data AND no personal info in current message)
         $session_data = $this->get_conversation_session($session_id);
         $collected_data = $session_data ? $session_data['data'] : array();
+        
+        // CRITICAL FIX: Don't show welcome message if current message contains personal info
+        $current_personal_info = $this->parse_personal_info($message);
+        $has_personal_info_now = !empty($current_personal_info) && (
+            !empty($current_personal_info['name']) || 
+            !empty($current_personal_info['email']) || 
+            !empty($current_personal_info['phone'])
+        );
         
         if ((strpos($message_lower, 'admission') !== false || 
             strpos($message_lower, 'apply') !== false || 
             strpos($message_lower, 'enroll') !== false ||
             strpos($message_lower, 'join') !== false ||
-            $action_type === 'admission') && empty($collected_data)) {
+            $action_type === 'admission') && 
+            empty($collected_data) && 
+            !$has_personal_info_now) {  // CRITICAL: Don't show welcome if personal info is provided
             
             // No specific information found, show generic admission welcome
             return "Hello! **Welcome to {$school_name}.**\n\n" .
@@ -2067,7 +2130,7 @@ class EduBot_Shortcode {
     }
     
     /**
-     * Parse multi-field input to extract name, email, phone
+     * Parse multi-field input to extract name, email, phone - ENHANCED
      */
     private function parse_personal_info($message) {
         $info = array();
@@ -2077,41 +2140,78 @@ class EduBot_Shortcode {
         // Try to extract email first
         if (preg_match('/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/', $message_clean, $email_matches)) {
             $info['email'] = $email_matches[0];
-            $message_clean = str_replace($email_matches[0], '', $message_clean);
+            $message_clean = str_replace($email_matches[0], ' ', $message_clean);
         }
         
-        // Try to extract phone number
-        if (preg_match('/(\+?91|0)?[\s-]?[6-9]\d{9}/', $message_clean, $phone_matches) || 
-            preg_match('/\b\d{10}\b/', $message_clean, $phone_matches) ||
-            preg_match('/\+\d{1,3}[\s-]?\d{6,14}/', $message_clean, $phone_matches)) {
-            $info['phone'] = preg_replace('/[^\d+]/', '', $phone_matches[0]);
-            $message_clean = preg_replace('/(\+?91|0)?[\s-]?[6-9]\d{9}/', '', $message_clean);
-            $message_clean = preg_replace('/\b\d{10}\b/', '', $message_clean);
-            $message_clean = preg_replace('/\+\d{1,3}[\s-]?\d{6,14}/', '', $message_clean);
+        // Try to extract phone number (enhanced patterns)
+        if (preg_match('/(\+?91[\s-]?[6-9]\d{9}|\+91\d{10}|\b[6-9]\d{9}\b)/', $message_clean, $phone_matches)) {
+            $phone_raw = preg_replace('/[^\d+]/', '', $phone_matches[0]);
+            // Normalize phone number
+            if (strlen($phone_raw) == 10 && preg_match('/^[6-9]/', $phone_raw)) {
+                $info['phone'] = '+91' . $phone_raw;
+            } elseif (strlen($phone_raw) == 12 && substr($phone_raw, 0, 2) == '91') {
+                $info['phone'] = '+' . $phone_raw;
+            } elseif (strlen($phone_raw) == 13 && substr($phone_raw, 0, 3) == '+91') {
+                $info['phone'] = $phone_raw;
+            }
+            // Remove phone number from message for name extraction
+            $message_clean = preg_replace('/(\+?91[\s-]?[6-9]\d{9}|\+91\d{10}|\b[6-9]\d{9}\b)/', ' ', $message_clean);
         }
         
-        // Try to extract name from structured input first (Student: Name format)
-        if (preg_match('/\b(?:student\s*:?\s*|name\s*:?\s*)\s*([a-zA-Z\s\.]+?)(?:\s+(?:grade|class|board|email|phone|dob)|$)/i', $original_message, $name_matches)) {
+        // Try to extract name from structured input first (Name: format)
+        if (preg_match('/\b(?:student\s*:?\s*|name\s*:?\s*)\s*([a-zA-Z\s\.]{2,30})(?:\s|$)/i', $original_message, $name_matches)) {
             $candidate_name = trim($name_matches[1]);
-            if (strlen($candidate_name) >= 2 && strlen($candidate_name) <= 50) {
+            if (strlen($candidate_name) >= 2 && strlen($candidate_name) <= 30) {
                 $info['name'] = ucwords(strtolower($candidate_name));
             }
         }
         
-        // If no structured name found, clean up the message for name extraction
+        // If no structured name found, try to extract from remaining text
         if (empty($info['name'])) {
-            $message_clean = preg_replace('/\s*(student\s*:?\s*|name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*|grade\s*:?\s*|class\s*:?\s*|board\s*:?\s*|dob\s*:?\s*)/i', ' ', $message_clean);
-            $message_clean = preg_replace('/\b(grade\s*\d+|class\s*\d+|cbse|caie|cambridge|icse|igcse|\d{4}-\d{2}-\d{2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})\b/i', ' ', $message_clean);
-            $message_clean = preg_replace('/[^\w\s\.]/', ' ', $message_clean);
-            $message_clean = preg_replace('/\s+/', ' ', $message_clean);
-            $message_clean = trim($message_clean);
+            // Clean the message: remove labels and non-name content
+            $name_clean = $message_clean;
+            $name_clean = preg_replace('/\s*(student\s*:?\s*|name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*|contact\s*:?\s*)/i', ' ', $name_clean);
+            $name_clean = preg_replace('/\b(grade\s*\d+|class\s*\d+|cbse|caie|cambridge|icse|igcse)\b/i', ' ', $name_clean);
+            $name_clean = preg_replace('/[^\w\s\.]/', ' ', $name_clean);
+            $name_clean = preg_replace('/\s+/', ' ', $name_clean);
+            $name_clean = trim($name_clean);
             
-            // Extract name - if the cleaned message is just a name
-            if (!empty($message_clean) && 
-                strlen($message_clean) >= 2 && 
-                strlen($message_clean) <= 50 &&
-                preg_match('/^[a-zA-Z\s\.]+$/', $message_clean)) {
-                $info['name'] = ucwords(strtolower(trim($message_clean)));
+            // If we have reasonable text left, treat as name
+            if (!empty($name_clean) && 
+                strlen($name_clean) >= 2 && 
+                strlen($name_clean) <= 30 &&
+                preg_match('/^[a-zA-Z\s\.]+$/', $name_clean) &&
+                !preg_match('/\b(email|phone|mobile|contact|gmail|yahoo|hotmail)\b/i', $name_clean)) {
+                $info['name'] = ucwords(strtolower($name_clean));
+            }
+        }
+        
+        // FALLBACK: For combined inputs like "Siva prasadmasina@gmail.com +91 9866133566"
+        // Extract name from the beginning if email/phone found but no name yet
+        if (empty($info['name']) && (!empty($info['email']) || !empty($info['phone']))) {
+            // Try to get name from start of original message before email/phone
+            $temp_message = $original_message;
+            
+            // Remove email and phone from original to isolate name
+            if (!empty($info['email'])) {
+                $temp_message = str_replace($info['email'], '', $temp_message);
+            }
+            if (!empty($info['phone'])) {
+                // Remove various phone formats
+                $temp_message = preg_replace('/(\+?91[\s-]?[6-9]\d{9}|\+91\d{10}|\b[6-9]\d{9}\b)/', '', $temp_message);
+            }
+            
+            // Clean and extract remaining text as name
+            $temp_message = trim($temp_message);
+            $temp_message = preg_replace('/[^\w\s\.]/', ' ', $temp_message);
+            $temp_message = preg_replace('/\s+/', ' ', $temp_message);
+            $temp_message = trim($temp_message);
+            
+            if (!empty($temp_message) && 
+                strlen($temp_message) >= 2 && 
+                strlen($temp_message) <= 30 &&
+                preg_match('/^[a-zA-Z\s\.]+$/', $temp_message)) {
+                $info['name'] = ucwords(strtolower($temp_message));
             }
         }
         
@@ -2165,10 +2265,11 @@ class EduBot_Shortcode {
             
             $dob = $year . '-' . $month . '-' . $day;
             
-            // Validate the date is real
+            // Validate the date is real using Indian timezone
             try {
-                $birth_date = new DateTime($dob);
-                $current_date = new DateTime();
+                $ist_timezone = new DateTimeZone('Asia/Kolkata');
+                $birth_date = new DateTime($dob, $ist_timezone);
+                $current_date = new DateTime('now', $ist_timezone);
                 $age = $current_date->diff($birth_date)->y;
                 
                 if ($age < 2 || $age > 18) {
@@ -2259,7 +2360,7 @@ class EduBot_Shortcode {
             error_log("EduBot: Starting final submission with data: " . print_r($collected_data, true));
             
             // Generate enquiry number
-            $enquiry_number = 'ENQ' . date('Y') . wp_rand(1000, 9999);
+            $enquiry_number = 'ENQ' . $this->get_indian_time('Y') . wp_rand(1000, 9999);
             
             // Get school name
             $settings = get_option('edubot_pro_settings', array());
@@ -2304,7 +2405,7 @@ class EduBot_Shortcode {
             
             // Send WhatsApp confirmation to parent if enabled
             $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
-            $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . date('Y-m-d H:i:s') . "\n";
+            $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . $this->get_indian_time('Y-m-d H:i:s') . " IST\n";
             file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
             
             $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
@@ -2497,7 +2598,7 @@ class EduBot_Shortcode {
      * Generate unique enquiry number
      */
     private function generate_enquiry_number() {
-        $prefix = 'ENQ' . date('Y');
+        $prefix = 'ENQ' . $this->get_indian_time('Y');
         $suffix = strtoupper(substr(uniqid(), -8));
         return $prefix . $suffix;
     }
@@ -2558,7 +2659,7 @@ class EduBot_Shortcode {
         
         $html .= '<tr><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Phone</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['phone'] ?? '') . '</td></tr>';
         $html .= '<tr style="background-color: #f8f9fa;"><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Address</td><td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($collected_data['address'] ?? '') . '</td></tr>';
-        $html .= '<tr><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Date Submitted</td><td style="padding: 10px; border: 1px solid #ddd;">' . date('F j, Y g:i A') . '</td></tr>';
+        $html .= '<tr><td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Date Submitted</td><td style="padding: 10px; border: 1px solid #ddd;">' . $this->get_indian_time('F j, Y g:i A') . ' (IST)</td></tr>';
         $html .= '</table>';
         
         // Next steps
@@ -2591,7 +2692,8 @@ class EduBot_Shortcode {
         $response .= "🏫 **School:** {$school_name}\n";
         $response .= "👶 **Student:** {$collected_data['student_name']}\n";
         $response .= "🎓 **Grade:** {$collected_data['grade']}\n";
-        $response .= "📚 **Board:** {$collected_data['board']}\n\n";
+        $response .= "📚 **Board:** {$collected_data['board']}\n";
+        $response .= "🕐 **Submitted:** {$this->get_chatbot_friendly_time()}\n\n";
         
         $response .= "📧 **Confirmation email sent to:** {$collected_data['email']}\n\n";
         
@@ -2859,8 +2961,10 @@ class EduBot_Shortcode {
             wp_send_json_error(array('message' => 'Please enter a valid date of birth.'));
         }
         
-        // Check age range (between 2 and 19 years old)
-        $age = (new DateTime())->diff($dob)->y;
+        // Check age range (between 2 and 19 years old) using Indian timezone
+        $ist_timezone = new DateTimeZone('Asia/Kolkata');
+        $current_date_ist = new DateTime('now', $ist_timezone);
+        $age = $current_date_ist->diff($dob)->y;
         if ($age < 2 || $age > 19) {
             wp_send_json_error(array('message' => 'Student age must be between 2 and 19 years.'));
         }
@@ -2995,7 +3099,7 @@ class EduBot_Shortcode {
      * Generate unique application number
      */
     private function generate_application_number() {
-        $prefix = 'APP-' . date('Y') . '-';
+        $prefix = 'APP-' . $this->get_indian_time('Y') . '-';
         $suffix = str_pad(wp_rand(1000, 9999), 4, '0', STR_PAD_LEFT);
         
         // Ensure uniqueness
@@ -4543,7 +4647,7 @@ class EduBot_Shortcode {
                 </tr>
                 <tr style="background-color: #f8fafc;">
                     <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Submission Date</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . date('F j, Y g:i A') . '</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . $this->get_indian_time('F j, Y g:i A') . ' (IST)</td>
                 </tr>
             </table>
         </div>
@@ -4663,7 +4767,7 @@ class EduBot_Shortcode {
         <div class="content-section" style="padding: 20px 25px; text-align: center; background-color: #f0f9ff;">
             <div style="background-color: #dbeafe; color: #1e40af; padding: 15px; border-radius: 8px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
                 <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;">⚡ Priority: Contact within 24 hours</div>
-                <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . date('F j, Y g:i A') . '</div>
+                <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . $this->get_indian_time('F j, Y g:i A') . ' (IST)</div>
             </div>
         </div>
         
@@ -4806,7 +4910,7 @@ class EduBot_Shortcode {
         try {
             // Enhanced debug logging to specific file
             $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
-            $timestamp = date('Y-m-d H:i:s');
+            $timestamp = $this->get_indian_time('Y-m-d H:i:s');
             
             $debug_msg = "\n=== EDUBOT WHATSAPP DEBUG [$timestamp] ===\n";
             $debug_msg .= "Function: send_parent_whatsapp_confirmation\n";
@@ -4934,7 +5038,7 @@ Reply STOP to unsubscribe");
                     $enquiry_number, // {{2}}
                     $school_name, // {{3}}
                     $collected_data['grade'] ?? '', // {{4}}
-                    date('d/m/Y H:i:s') // {{5}}
+                    $this->get_indian_time('d/m/Y H:i:s') . ' IST' // {{5}}
                 ];
                 
                 $debug_msg = "5. Business Template Parameters:\n";
@@ -4963,7 +5067,7 @@ Reply STOP to unsubscribe");
                     '{grade}' => $collected_data['grade'] ?? '',
                     '{board}' => $collected_data['board'] ?? '',
                     '{academic_year}' => $collected_data['academic_year'] ?? '2026-27',
-                    '{submission_date}' => date('d/m/Y'),
+                    '{submission_date}' => $this->get_indian_time('d/m/Y'),
                     '{phone}' => $collected_data['phone'] ?? '',
                     '{email}' => $collected_data['email'] ?? ''
                 ];

@@ -6,7 +6,7 @@ jQuery(document).ready(function($) {
     'use strict';
     
     // Initialize chatbot
-    if ($('#edubot-chatbot').length) {
+    if ($('#edubot-chatbot-widget').length) {
         initChatbot();
     }
     
@@ -19,13 +19,13 @@ jQuery(document).ready(function($) {
      * Initialize Chatbot Functionality
      */
     function initChatbot() {
-        const $chatbot = $('#edubot-chatbot');
-        const $chatButton = $chatbot.find('.edubot-chat-button');
-        const $chatWindow = $chatbot.find('.edubot-chat-window');
-        const $closeChat = $chatbot.find('.close-chat');
-        const $chatInput = $chatbot.find('#chat-input');
-        const $sendButton = $chatbot.find('#send-message');
-        const $messages = $chatbot.find('.chat-messages');
+        const $chatbot = $('#edubot-chatbot-widget');
+        const $chatButton = $('#edubot-chat-toggle');
+        const $chatWindow = $('#edubot-chat-container');
+        const $closeChat = $('#edubot-minimize');
+        const $chatInput = $('#edubot-chat-input');
+        const $sendButton = $('#edubot-send-btn');
+        const $messages = $('#edubot-chat-messages');
         const $typingIndicator = $chatbot.find('.typing-indicator');
         
         let isOpen = false;
@@ -34,7 +34,8 @@ jQuery(document).ready(function($) {
         // Toggle chat window
         $chatButton.on('click', function() {
             if (!isOpen) {
-                $chatWindow.show();
+                $chatWindow.addClass('show');
+                $chatbot.addClass('chat-open');
                 $chatInput.focus();
                 isOpen = true;
             }
@@ -42,7 +43,8 @@ jQuery(document).ready(function($) {
         
         // Close chat window
         $closeChat.on('click', function() {
-            $chatWindow.hide();
+            $chatWindow.removeClass('show');
+            $chatbot.removeClass('chat-open');
             isOpen = false;
         });
         
@@ -58,7 +60,7 @@ jQuery(document).ready(function($) {
         $sendButton.on('click', sendMessage);
         
         // Handle quick actions
-        $messages.on('click', '.quick-action', function() {
+        $messages.on('click', '.edubot-quick-action', function() {
             const action = $(this).data('action');
             sendMessage('', action);
         });
