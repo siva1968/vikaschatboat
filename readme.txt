@@ -4,7 +4,7 @@ Tags: chatbot, education, admissions, ai, school, application, student
 Requires at least: 5.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.3.2
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -92,6 +92,18 @@ Yes, you can export applications in CSV format from the admin panel.
 6. Mobile responsive design
 
 == Changelog ==
+
+= 1.3.2 =
+* Added school WhatsApp notification system for admission teams
+* Implemented conditional school notifications with admin toggle
+* Enhanced mobile chat positioning (bottom-left instead of fullscreen)
+* Added separate template configuration for school vs parent notifications
+* Improved Contact Phone integration for admission team notifications
+* Fixed school WhatsApp template name resolution
+* Enhanced error handling and logging for school notifications
+* Added proper fallback handling for missing enquiry data
+* Improved mobile user experience with compact chat window
+* Enhanced admin interface with clearer configuration options
 
 = 1.0.0 =
 * Initial release

@@ -137,9 +137,9 @@ if (empty($missing_columns)) {
 $db_version = get_option('edubot_enquiries_db_version', '1.0.0');
 echo "<div style='padding: 10px; border: 1px solid #ccc; margin: 10px 0; border-radius: 5px;'>";
 echo "<strong>Current Database Version:</strong> {$db_version}<br>";
-echo "<strong>Required Version:</strong> 1.3.1<br>";
+echo "<strong>Required Version:</strong> 1.3.2<br>";
 
-if (version_compare($db_version, '1.3.1', '>=')) {
+if (version_compare($db_version, '1.3.2', '>=')) {
     echo "<span style='color: green;'>✅ Database version is up to date</span>";
 } else {
     echo "<span style='color: red;'>❌ Database version needs update</span>";
