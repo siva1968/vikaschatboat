@@ -4957,7 +4957,7 @@ class EduBot_Shortcode {
                 </tr>
                 <tr>
                     <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Submission Time</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($this->get_indian_time('d/m/Y H:i:s')) . ' IST</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($this->get_indian_time('d-m-Y H:i:s')) . ' IST</td>
                 </tr>
             </table>
         </div>
@@ -5105,7 +5105,7 @@ class EduBot_Shortcode {
         <div class="content-section" style="padding: 20px 25px; text-align: center; background-color: #f0f9ff;">
             <div style="background-color: #dbeafe; color: #1e40af; padding: 15px; border-radius: 8px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
                 <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;">⚡ Priority: Contact within 24 hours</div>
-                <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . $this->get_indian_time('F j, Y g:i A') . ' (IST)</div>
+                <div style="font-size: 14px;">Enquiry Number: <strong>' . esc_html($enquiry_number) . '</strong> | Submitted: ' . $this->get_indian_time('d-m-Y H:i:s') . ' (IST)</div>
             </div>
         </div>
         
