@@ -4836,13 +4836,14 @@ class EduBot_Shortcode {
         $primary_color = get_option('edubot_primary_color', '#4facfe');
         $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
         $school_logo = get_option('edubot_school_logo', '');
+        $school_phone = get_option('edubot_school_phone', '7702800800 / 9248111448');
         
         $html = '<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admission Enquiry Confirmation</title>
+    <title>Admission Enquiry Confirmation - ' . esc_attr($enquiry_number) . '</title>
     <style>
         @media only screen and (max-width: 600px) {
             .container { width: 100% !important; padding: 10px !important; }
@@ -4851,6 +4852,7 @@ class EduBot_Shortcode {
             .details-table { font-size: 14px !important; }
             .details-table td { padding: 8px !important; }
             .logo-img { max-width: 120px !important; max-height: 50px !important; }
+            .enquiry-number-box { font-size: 28px !important; }
         }
     </style>
 </head>
@@ -4870,16 +4872,22 @@ class EduBot_Shortcode {
             <div style="font-size: 16px; opacity: 0.9;">Admission Enquiry Confirmation</div>
         </div>
         
+        <!-- Enquiry Number Highlight -->
+        <div style="background-color: #fef3c7; padding: 20px 25px; text-align: center; border-bottom: 3px solid ' . esc_attr($primary_color) . ';">
+            <div style="font-size: 13px; color: #92400e; margin-bottom: 8px; font-weight: bold;">YOUR ENQUIRY REFERENCE NUMBER</div>
+            <div class="enquiry-number-box" style="font-size: 36px; font-weight: bold; color: ' . esc_attr($primary_color) . '; letter-spacing: 2px; font-family: monospace;">' . esc_html($enquiry_number) . '</div>
+            <div style="font-size: 12px; color: #92400e; margin-top: 8px;">Save this number for your reference</div>
+        </div>
+        
         <!-- Success Message -->
         <div class="content-section" style="padding: 30px 25px; text-align: center; background-color: #f8fafc;">
-            <div style="background-color: #dcfce7; color: #166534; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
+            <div style="background-color: #dcfce7; color: #166534; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #22c55e;">
                 <div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">✅ Enquiry Successfully Submitted!</div>
-                <div style="font-size: 14px;">Your enquiry number: <strong>' . esc_html($enquiry_number) . '</strong></div>
             </div>
             
             <p style="color: #475569; font-size: 16px; margin: 0;">Dear Parent/Guardian,</p>
-            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 15px 0 0 0;">
-                Thank you for your interest in ' . esc_html($school_name) . '. We have received your admission enquiry and are excited to help you through the admission process.
+            <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 15px 0 0 0;">
+                Thank you for your interest in ' . esc_html($school_name) . '. We have received your admission enquiry for <strong>' . esc_html($collected_data['student_name'] ?? 'your ward') . '</strong> and are excited to help you through the admission process.
             </p>
         </div>
         
@@ -4888,9 +4896,9 @@ class EduBot_Shortcode {
             <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">📋 Enquiry Details</h3>
             
             <table class="details-table" style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151; width: 40%;">Enquiry Number</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($enquiry_number) . '</td>
+                <tr style="background-color: ' . esc_attr($primary_color) . '; color: white;">
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold;">Enquiry Reference</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold;">' . esc_html($enquiry_number) . '</td>
                 </tr>
                 <tr>
                     <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Student Name</td>
@@ -4901,56 +4909,76 @@ class EduBot_Shortcode {
                     <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['grade'] ?? 'Not provided') . '</td>
                 </tr>
                 <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Board Preference</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Board</td>
                     <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['board'] ?? 'Not provided') . '</td>
                 </tr>
                 <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Academic Year</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['academic_year'] ?? '2026-27') . '</td>
-                </tr>';
-        
-        if (!empty($collected_data['date_of_birth'])) {
-            $html .= '<tr>
                     <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Date of Birth</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['date_of_birth']) . '</td>
-                </tr>';
-        }
-        
-        $html .= '<tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Contact Email</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['email'] ?? 'Not provided') . '</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['date_of_birth'] ?? 'Not provided') . '</td>
                 </tr>
                 <tr>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Phone Number</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['phone'] ?? 'Not provided') . '</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Email</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['email'] ?? 'Not provided') . '</td>
                 </tr>
                 <tr style="background-color: #f8fafc;">
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Submission Date</td>
-                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . $this->get_indian_time('F j, Y g:i A') . ' (IST)</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Phone</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($collected_data['phone'] ?? 'Not provided') . '</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Submission Time</td>
+                    <td style="padding: 12px; border: 1px solid #e5e7eb; color: #1f2937;">' . esc_html($this->get_indian_time('d/m/Y H:i:s')) . ' IST</td>
                 </tr>
             </table>
         </div>
         
         <!-- Next Steps -->
-        <div class="content-section" style="padding: 0 25px 25px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">🚀 What Happens Next?</h3>
-            
-            <div style="background-color: #f0f9ff; border-left: 4px solid ' . esc_attr($primary_color) . '; padding: 20px; border-radius: 6px;">
-                <ul style="margin: 0; padding-left: 20px; color: #374151; line-height: 1.8;">
-                    <li><strong>Within 24 hours:</strong> Our admission counselor will contact you</li>
-                    <li><strong>Information sharing:</strong> You\'ll receive detailed program information</li>
-                    <li><strong>Campus visit:</strong> We\'ll schedule a convenient time for your visit</li>
-                    <li><strong>Admission kit:</strong> Complete fee structure and documentation</li>
-                    <li><strong>Personal guidance:</strong> Step-by-step admission process support</li>
-                </ul>
-            </div>
+        <div class="content-section" style="padding: 0 25px 20px;">
+            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">🔄 Next Steps</h3>
+            <ol style="color: #475569; font-size: 14px; line-height: 2; margin: 0; padding-left: 20px;">
+                <li>Our admission team will review your enquiry</li>
+                <li>We will contact you within 24 hours at ' . esc_html($collected_data['phone'] ?? 'the phone number provided') . '</li>
+                <li>Detailed information about the admission process will be shared</li>
+                <li>Campus visit will be scheduled as per your convenience</li>
+                <li>Complete application form will be provided for submission</li>
+            </ol>
         </div>
         
         <!-- Contact Information -->
-        <div class="content-section" style="padding: 0 25px 30px;">
-            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">📞 Need Immediate Assistance?</h3>
-            
-            <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px;">
+        <div class="content-section" style="padding: 0 25px 20px;">
+            <h3 style="color: ' . esc_attr($primary_color) . '; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid ' . esc_attr($primary_color) . '; padding-bottom: 8px;">📞 Contact Us</h3>
+            <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid ' . esc_attr($primary_color) . ';">
+                <p style="margin: 0 0 10px 0; color: #475569; font-size: 14px;">
+                    <strong>For immediate assistance or queries:</strong>
+                </p>
+                <p style="margin: 5px 0; color: #1f2937; font-size: 14px;">
+                    📞 Phone: ' . esc_html($school_phone) . '
+                </p>
+                <p style="margin: 5px 0; color: #1f2937; font-size: 14px;">
+                    📧 Email: ' . esc_html($settings['school_email'] ?? get_option('admin_email')) . '
+                </p>
+                <p style="margin: 5px 0; color: #1f2937; font-size: 14px;">
+                    🌐 Website: <a href="https://stage.epistemo.in" style="color: ' . esc_attr($primary_color) . '; text-decoration: none;">Visit Our Website</a>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f8fafc; padding: 20px 25px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 12px;">
+                This is an automated email. Please do not reply to this message.
+            </p>
+            <p style="margin: 0; color: #9ca3af; font-size: 11px;">
+                © 2025 ' . esc_html($school_name) . '. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>';
+        
+        return $html;
+    }
+    
+    /**
                 <div style="color: #92400e; font-size: 15px; line-height: 1.6;">
                     <p style="margin: 0 0 10px 0;"><strong>📱 Phone:</strong> 7702800800 / 9248111448</p>
                     <p style="margin: 0 0 10px 0;"><strong>📧 Email:</strong> admissions@epistemo.in</p>
