@@ -9,12 +9,134 @@ class EduBot_Activator {
      * Plugin activation
      */
     public static function activate() {
-        self::create_tables();
+        // Check if we need migration
+        $current_db_version = get_option('edubot_pro_db_version', '0');
+        
+        if (version_compare($current_db_version, EDUBOT_PRO_DB_VERSION, '<')) {
+            self::create_tables();
+            self::migrate_data($current_db_version);
+            update_option('edubot_pro_db_version', EDUBOT_PRO_DB_VERSION);
+        }
+        
         self::set_default_options();
         self::schedule_events();
         
         // Flush rewrite rules
         flush_rewrite_rules();
+        
+        // Log activation
+        error_log('EduBot Pro activated successfully. Version: ' . EDUBOT_PRO_VERSION);
+    }
+    
+    /**
+     * Handle data migration between versions
+     */
+    private static function migrate_data($from_version) {
+        global $wpdb;
+        
+        // Ensure enquiries table exists with all columns
+        self::ensure_enquiries_table_exists();
+        
+        // Migration from 1.0.x to 1.3.x
+        if (version_compare($from_version, '1.3.0', '<')) {
+            // Add new columns if they don't exist
+            $table_applications = $wpdb->prefix . 'edubot_applications';
+            
+            $columns_to_add = array(
+                'utm_data' => 'longtext',
+                'follow_up_scheduled' => 'datetime',
+                'assigned_to' => 'bigint(20)',
+                'priority' => "varchar(20) DEFAULT 'normal'"
+            );
+            
+            foreach ($columns_to_add as $column => $definition) {
+                $column_exists = $wpdb->get_results($wpdb->prepare(
+                    "SHOW COLUMNS FROM $table_applications LIKE %s",
+                    $column
+                ));
+                
+                if (empty($column_exists)) {
+                    $wpdb->query("ALTER TABLE $table_applications ADD COLUMN $column $definition");
+                }
+            }
+        }
+        
+        error_log("EduBot Pro: Database migrated from version $from_version to " . EDUBOT_PRO_DB_VERSION);
+    }
+    
+    /**
+     * Ensure enquiries table exists and has all required columns
+     */
+    private static function ensure_enquiries_table_exists() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'edubot_enquiries';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // First check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name;
+        
+        if (!$table_exists) {
+            // Create the table
+            $sql = "CREATE TABLE $table_name (
+                id mediumint(9) NOT NULL AUTO_INCREMENT,
+                enquiry_number varchar(50) NOT NULL,
+                student_name varchar(100) NOT NULL,
+                date_of_birth date NULL,
+                grade varchar(50) NULL,
+                board varchar(50) NULL,
+                academic_year varchar(20) NULL,
+                parent_name varchar(100) NULL,
+                email varchar(100) NULL,
+                phone varchar(20) NULL,
+                address text NULL,
+                gender varchar(10) NULL,
+                ip_address varchar(45) NULL,
+                user_agent text NULL,
+                utm_data longtext NULL,
+                gclid varchar(100) NULL,
+                fbclid varchar(100) NULL,
+                click_id_data longtext NULL,
+                whatsapp_sent tinyint(1) DEFAULT 0,
+                email_sent tinyint(1) DEFAULT 0,
+                sms_sent tinyint(1) DEFAULT 0,
+                created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                status varchar(20) DEFAULT 'pending',
+                source varchar(50) DEFAULT 'chatbot',
+                PRIMARY KEY (id),
+                UNIQUE KEY enquiry_number (enquiry_number)
+            ) $charset_collate;";
+            
+            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+            dbDelta($sql);
+            error_log("EduBot: Created enquiries table");
+        } else {
+            // Table exists, check if it's missing the source column and add if needed
+            $required_columns = array(
+                'source' => "varchar(50) DEFAULT 'chatbot'",
+                'ip_address' => 'varchar(45) NULL',
+                'user_agent' => 'text NULL',
+                'utm_data' => 'longtext NULL',
+                'gclid' => 'varchar(100) NULL',
+                'fbclid' => 'varchar(100) NULL',
+                'click_id_data' => 'longtext NULL',
+                'whatsapp_sent' => 'tinyint(1) DEFAULT 0',
+                'email_sent' => 'tinyint(1) DEFAULT 0',
+                'sms_sent' => 'tinyint(1) DEFAULT 0'
+            );
+            
+            foreach ($required_columns as $column_name => $column_definition) {
+                $column_exists = $wpdb->get_results($wpdb->prepare(
+                    "SHOW COLUMNS FROM $table_name LIKE %s",
+                    $column_name
+                ));
+                
+                if (empty($column_exists)) {
+                    $wpdb->query("ALTER TABLE $table_name ADD COLUMN $column_name $column_definition");
+                    error_log("EduBot: Added missing column '$column_name' to enquiries table");
+                }
+            }
+        }
     }
 
     /**
