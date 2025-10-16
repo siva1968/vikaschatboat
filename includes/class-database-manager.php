@@ -64,17 +64,16 @@ class EduBot_Database_Manager {
         if (isset($data['student_data'])) {
             $student_data = $data['student_data'];
             
-            // Sanitize and validate student data fields
-            $required_fields = array('student_name', 'grade', 'parent_name', 'email');
-            foreach ($required_fields as $field) {
-                if (empty($student_data[$field])) {
-                    $errors[] = "Student {$field} is required";
-                }
+            // Validate application number (critical)
+            if (empty($student_data['student_name'])) {
+                error_log('EduBot: Validation - student_name is empty, will use "Not Provided"');
             }
 
-            // Validate email format
-            if (isset($student_data['email']) && !is_email($student_data['email'])) {
-                $errors[] = 'Invalid email format';
+            // Validate email format (only if provided)
+            if (isset($student_data['email']) && !empty($student_data['email'])) {
+                if (!is_email($student_data['email'])) {
+                    $errors[] = 'Invalid email format: ' . $student_data['email'];
+                }
             }
 
             // Validate phone number format
@@ -106,7 +105,9 @@ class EduBot_Database_Manager {
         $data['source'] = isset($data['source']) ? $data['source'] : 'chatbot';
 
         if (!empty($errors)) {
-            return new WP_Error('validation_failed', implode(', ', $errors));
+            $error_message = implode(', ', $errors);
+            error_log('EduBot: Application validation failed: ' . $error_message);
+            return new WP_Error('validation_failed', $error_message);
         }
 
         return $data;

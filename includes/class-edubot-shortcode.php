@@ -2447,28 +2447,46 @@ class EduBot_Shortcode {
             $database_manager = new EduBot_Database_Manager();
             
             // Send confirmation email to parent
-            $email_sent = $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
+            try {
+                $email_sent = $this->send_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
+            } catch (Exception $email_error) {
+                error_log('EduBot: Exception during email sending: ' . $email_error->getMessage());
+                $email_sent = false;
+            }
             if ($email_sent && $enquiry_id) {
                 $database_manager->update_notification_status($enquiry_id, 'email', 1, 'enquiries');
                 error_log("EduBot: Updated email_sent status to 1 for enquiry ID {$enquiry_id}");
             }
             
             // Send WhatsApp confirmation to parent if enabled
-            $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
-            $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . $this->get_indian_time('Y-m-d H:i:s') . " IST\n";
-            file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
-            
-            $whatsapp_sent = $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
+            try {
+                $debug_file = '/home/epistemo-stage/htdocs/stage.epistemo.in/wp-content/edubot-debug.log';
+                $debug_msg = "\n>>> CALLING WhatsApp confirmation for enquiry $enquiry_number at " . $this->get_indian_time('Y-m-d H:i:s') . " IST\n";
+                file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
+                
+                $whatsapp_sent = $this->send_parent_whatsapp_confirmation($collected_data, $enquiry_number, $school_name);
+            } catch (Exception $wa_error) {
+                error_log('EduBot: Exception during WhatsApp confirmation: ' . $wa_error->getMessage());
+                $whatsapp_sent = false;
+            }
             if ($whatsapp_sent && $enquiry_id) {
                 $database_manager->update_notification_status($enquiry_id, 'whatsapp', 1, 'enquiries');
                 error_log("EduBot: Updated whatsapp_sent status to 1 for enquiry ID {$enquiry_id}");
             }
             
             // Send enquiry notification to school (this is for admin, not tracked in parent notification status)
-            $this->send_school_enquiry_notification($collected_data, $enquiry_number, $school_name);
+            try {
+                $this->send_school_enquiry_notification($collected_data, $enquiry_number, $school_name);
+            } catch (Exception $school_email_error) {
+                error_log('EduBot: Exception during school email notification: ' . $school_email_error->getMessage());
+            }
             
             // Send WhatsApp notification to school if enabled
-            $this->send_school_whatsapp_notification($collected_data, $enquiry_number, $school_name);
+            try {
+                $this->send_school_whatsapp_notification($collected_data, $enquiry_number, $school_name);
+            } catch (Exception $school_wa_error) {
+                error_log('EduBot: Exception during school WhatsApp notification: ' . $school_wa_error->getMessage());
+            }
             
             // Clear session
             $transient_key = 'edubot_session_' . $session_id;
@@ -2495,6 +2513,8 @@ class EduBot_Shortcode {
                    
         } catch (Exception $e) {
             error_log('EduBot: Error in final submission: ' . $e->getMessage());
+            error_log('EduBot: Stack trace: ' . $e->getTraceAsString());
+            error_log('EduBot: Error code: ' . $e->getCode());
             return "Thank you for providing your information! Our admission team will contact you soon at {$collected_data['phone']}. For immediate assistance, please call 7702800800.";
         }
     }
@@ -4790,21 +4810,28 @@ class EduBot_Shortcode {
      */
     private function save_to_applications_table($collected_data, $enquiry_number) {
         try {
+            error_log("EduBot: Attempting to save to applications table for enquiry {$enquiry_number}");
+            
+            // Log collected data for debugging
+            error_log('EduBot: Collected data: ' . wp_json_encode($collected_data));
+            
             $database_manager = new EduBot_Database_Manager();
             
             // Prepare student data in the format expected by applications table
             $student_data = array(
-                'student_name' => $collected_data['student_name'] ?? '',
-                'date_of_birth' => $collected_data['date_of_birth'] ?? '',
-                'grade' => $collected_data['grade'] ?? '',
-                'educational_board' => $collected_data['board'] ?? '',
-                'academic_year' => $collected_data['academic_year'] ?? '2026-27',
-                'parent_name' => $collected_data['parent_name'] ?? '',
-                'email' => $collected_data['email'] ?? '',
-                'phone' => $collected_data['phone'] ?? '',
-                'address' => $collected_data['address'] ?? '',
-                'gender' => $collected_data['gender'] ?? ''
+                'student_name' => !empty($collected_data['student_name']) ? $collected_data['student_name'] : 'Not Provided',
+                'date_of_birth' => !empty($collected_data['date_of_birth']) ? $collected_data['date_of_birth'] : '',
+                'grade' => !empty($collected_data['grade']) ? $collected_data['grade'] : 'Not Provided',
+                'educational_board' => !empty($collected_data['board']) ? $collected_data['board'] : 'Not Provided',
+                'academic_year' => !empty($collected_data['academic_year']) ? $collected_data['academic_year'] : '2026-27',
+                'parent_name' => !empty($collected_data['parent_name']) ? $collected_data['parent_name'] : 'Not Provided',
+                'email' => !empty($collected_data['email']) ? $collected_data['email'] : 'Not Provided',
+                'phone' => !empty($collected_data['phone']) ? $collected_data['phone'] : '',
+                'address' => !empty($collected_data['address']) ? $collected_data['address'] : '',
+                'gender' => !empty($collected_data['gender']) ? $collected_data['gender'] : ''
             );
+
+            error_log('EduBot: Student data prepared: ' . wp_json_encode($student_data));
 
             $application_data = array(
                 'application_number' => $enquiry_number,
@@ -4818,12 +4845,15 @@ class EduBot_Shortcode {
             
             if (is_wp_error($result)) {
                 error_log('EduBot: Failed to save to applications table: ' . $result->get_error_message());
+                error_log('EduBot: WP_Error code: ' . $result->get_error_code());
+                error_log('EduBot: WP_Error data: ' . wp_json_encode($result->get_error_data()));
             } else {
-                error_log("EduBot: Successfully saved {$enquiry_number} to applications table as well");
+                error_log("EduBot: Successfully saved {$enquiry_number} to applications table with ID: {$result}");
             }
 
         } catch (Exception $e) {
-            error_log('EduBot: Error saving to applications table: ' . $e->getMessage());
+            error_log('EduBot: Exception during applications table save: ' . $e->getMessage());
+            error_log('EduBot: Exception trace: ' . $e->getTraceAsString());
             // Don't throw exception as enquiry was already saved successfully
         }
     }
@@ -4837,6 +4867,7 @@ class EduBot_Shortcode {
         $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
         $school_logo = get_option('edubot_school_logo', '');
         $school_phone = get_option('edubot_school_phone', '7702800800 / 9248111448');
+        $school_email = get_option('edubot_school_email', get_option('admin_email'));
         
         $html = '<!DOCTYPE html>
 <html lang="en">
@@ -4954,7 +4985,7 @@ class EduBot_Shortcode {
                     📞 Phone: ' . esc_html($school_phone) . '
                 </p>
                 <p style="margin: 5px 0; color: #1f2937; font-size: 14px;">
-                    📧 Email: ' . esc_html($settings['school_email'] ?? get_option('admin_email')) . '
+                    📧 Email: ' . esc_html($school_email) . '
                 </p>
                 <p style="margin: 5px 0; color: #1f2937; font-size: 14px;">
                     🌐 Website: <a href="https://stage.epistemo.in" style="color: ' . esc_attr($primary_color) . '; text-decoration: none;">Visit Our Website</a>
