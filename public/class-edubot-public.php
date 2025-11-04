@@ -776,13 +776,6 @@ class EduBot_Public {
     }
 
     /**
-     * Generate unique session ID
-     */
-    private function generate_session_id() {
-        return 'edubot_' . uniqid() . '_' . time();
-    }
-
-    /**
      * Handle form submission
      */
     public function handle_form_submission() {

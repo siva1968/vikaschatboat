@@ -10,6 +10,9 @@ class EduBot_Activator {
      * Permanent fix - proper database initialization
      */
     public static function activate() {
+        // Create core tables first
+        self::create_tables();
+        
         // Initialize database with proper schema and dependency order
         $db_result = self::initialize_database();
         
