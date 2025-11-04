@@ -83,7 +83,11 @@ class EduBot_Core {
             'includes/class-attribution-models.php',
             'includes/class-conversion-api-manager.php',
             'includes/admin/class-admin-dashboard.php',
-            'includes/admin/class-admin-dashboard-page.php'
+            'includes/admin/class-admin-dashboard-page.php',
+            // Phase 4: Automated Reports
+            'includes/class-performance-reports.php',
+            'includes/class-cron-scheduler.php',
+            'includes/admin/class-reports-admin-page.php'
         );
 
         $missing_files = array();

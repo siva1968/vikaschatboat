@@ -161,29 +161,9 @@ class EduBot_Admin_Dashboard_Page {
             wp_die(__('You do not have sufficient permissions to access this page.'));
         }
         
-        ?>
-        <div class="wrap">
-            <h1>📋 Performance Reports</h1>
-            <div style="margin-top: 20px;">
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                    <h2>Automated Reports</h2>
-                    <p>Configure automated reports to be sent via email on a schedule.</p>
-                    
-                    <!-- Reports configuration will be added in Phase 4 -->
-                    <div style="margin-top: 20px; padding: 20px; background: white; border-radius: 8px; border-left: 4px solid #007cba;">
-                        <strong>Feature Status:</strong> Coming in Phase 4
-                        <br>This section will include:
-                        <ul style="margin: 10px 0 0 20px;">
-                            <li>Daily/Weekly/Monthly report scheduling</li>
-                            <li>Email templates customization</li>
-                            <li>Report recipient management</li>
-                            <li>Performance summaries</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
+        // Get reports admin page instance and render
+        $reports_page = EduBot_Reports_Admin_Page::get_instance();
+        $reports_page->render_page();
     }
     
     /**
