@@ -298,18 +298,6 @@ class EduBot_DB_Schema {
     }
 }
 
-// Execute initialization
-if (is_admin() && current_user_can('manage_options')) {
-    $results = EduBot_DB_Schema::init();
-    
-    if (!empty($results['errors'])) {
-        error_log('EduBot DB Init Errors: ' . json_encode($results['errors']));
-    }
-    
-    if (!empty($results['created'])) {
-        error_log('EduBot DB Init Success: ' . implode(', ', $results['created']));
-    }
-}
-
-// Return for direct calls
-return EduBot_DB_Schema::class;
+// NOTE: Database initialization is handled by EduBot_Activator during plugin activation
+// This class is loaded but NOT auto-executed to avoid conflicts
+// Tables are created in class-edubot-activator.php via initialize_database() and create_tables() methods
