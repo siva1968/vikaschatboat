@@ -203,11 +203,15 @@ class EduBot_Enquiries_Migration {
 
     /**
      * Initialize migration check on plugin load
+     * 
+     * DISABLED: Version options are now set during activation in class-edubot-activator.php
+     * Migrations should only run once during activation, not on every page load
      */
     public static function init() {
-        add_action('init', array(__CLASS__, 'check_and_migrate'));
+        // Migration check disabled - version options are set during activation
+        // This prevents the infinite migration loop that was causing FK constraint errors
     }
 }
 
-// Initialize migration check
-EduBot_Enquiries_Migration::init();
+// Do NOT initialize migration check - it's handled during activation
+// EduBot_Enquiries_Migration::init();
