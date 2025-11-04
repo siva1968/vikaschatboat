@@ -724,6 +724,13 @@ class EduBot_Activator {
             ),
             array('%d', '%s', '%s', '%s')
         );
+        
+        // CRITICAL: Set version options to prevent migrations from running on every page load
+        // If these are not set, migration checks will always return true and re-run migrations
+        // This causes dbDelta() to be called repeatedly, which strips UNSIGNED modifiers
+        update_option('edubot_db_version', EDUBOT_PRO_VERSION);
+        update_option('edubot_enquiries_db_version', '1.3.1');
+        update_option('edubot_analytics_db_version', '1.1.0');
     }
 
     /**
