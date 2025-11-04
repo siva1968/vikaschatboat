@@ -87,7 +87,10 @@ class EduBot_Core {
             // Phase 4: Automated Reports
             'includes/class-performance-reports.php',
             'includes/class-cron-scheduler.php',
-            'includes/admin/class-reports-admin-page.php'
+            'includes/admin/class-reports-admin-page.php',
+            // Phase 5: Admin Pages Refinement
+            'includes/admin/class-dashboard-widget.php',
+            'includes/admin/class-api-settings-page.php'
         );
 
         $missing_files = array();

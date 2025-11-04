@@ -123,6 +123,16 @@ class EduBot_Admin_Dashboard_Page {
             'edubot-analytics-settings',
             [$this, 'render_settings_page']
         );
+        
+        // Submenu: API Settings
+        add_submenu_page(
+            'edubot-dashboard',
+            'API Configuration',
+            'API Settings',
+            'manage_options',
+            'edubot-api-settings',
+            [$this, 'render_api_settings_page']
+        );
     }
     
     /**
@@ -419,6 +429,25 @@ class EduBot_Admin_Dashboard_Page {
             wp_send_json_error([
                 'message' => 'Error refreshing dashboard: ' . $e->getMessage()
             ]);
+        }
+    }
+    
+    /**
+     * Render API Settings page
+     * 
+     * @since 1.4.0
+     * @return void
+     */
+    public function render_api_settings_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        // Render API settings page
+        if (class_exists('EduBot_API_Settings_Page')) {
+            EduBot_API_Settings_Page::get_instance()->render_page();
+        } else {
+            echo '<div class="notice notice-error"><p>API Settings class not available.</p></div>';
         }
     }
 }
