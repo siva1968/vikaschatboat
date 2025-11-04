@@ -76,7 +76,14 @@ class EduBot_Core {
             'includes/class-visitor-analytics.php',
             'includes/class-rate-limiter.php',
             'includes/class-edubot-logger.php',
-            'includes/class-edubot-error-handler.php'
+            'includes/class-edubot-error-handler.php',
+            // Phase 3: Attribution and Analytics
+            'includes/database/migration-001-create-attribution-tables.php',
+            'includes/class-attribution-tracker.php',
+            'includes/class-attribution-models.php',
+            'includes/class-conversion-api-manager.php',
+            'includes/admin/class-admin-dashboard.php',
+            'includes/admin/class-admin-dashboard-page.php'
         );
 
         $missing_files = array();
