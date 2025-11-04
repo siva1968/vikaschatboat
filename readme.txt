@@ -4,7 +4,7 @@ Tags: chatbot, education, admissions, ai, school, application, student
 Requires at least: 5.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -92,6 +92,22 @@ Yes, you can export applications in CSV format from the admin panel.
 6. Mobile responsive design
 
 == Changelog ==
+
+= 1.3.3 =
+* Added comprehensive error handling and requirement checks
+* Implemented database migration system with version control
+* Enhanced security with rate limiting (100 requests/hour)
+* Added proper nonce verification for AJAX requests
+* Improved plugin activation/deactivation workflow
+* Fixed version consistency across all plugin files
+* Added missing utility classes (Rate Limiter, Error Handler)
+* Enhanced session management with better IP detection
+* Added plugin health check monitoring system
+* Improved JavaScript security with validation checks
+* Fixed constants file path references
+* Added proper PHP and WordPress version compatibility checks
+* Enhanced logging and debugging capabilities
+* Improved database structure validation
 
 = 1.3.2 =
 * Added school WhatsApp notification system for admission teams

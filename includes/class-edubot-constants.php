@@ -12,11 +12,11 @@ if (!defined('ABSPATH')) {
 
 // Core plugin constants (only define if not already defined)
 if (!defined('EDUBOT_PRO_VERSION')) {
-    define('EDUBOT_PRO_VERSION', '1.2.0');
+    define('EDUBOT_PRO_VERSION', '1.3.3');
 }
 
 if (!defined('EDUBOT_PRO_PLUGIN_FILE')) {
-    define('EDUBOT_PRO_PLUGIN_FILE', __FILE__);
+    define('EDUBOT_PRO_PLUGIN_FILE', dirname(__DIR__) . '/edubot-pro.php');
 }
 
 if (!defined('EDUBOT_PRO_PLUGIN_BASENAME')) {
@@ -37,7 +37,7 @@ if (!defined('EDUBOT_PRO_PLUGIN_DIR')) {
 
 // Database constants
 if (!defined('EDUBOT_PRO_DB_VERSION')) {
-    define('EDUBOT_PRO_DB_VERSION', '1.3.0');
+    define('EDUBOT_PRO_DB_VERSION', '1.3.3');
 }
 
 // Feature flags

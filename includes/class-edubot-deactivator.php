@@ -21,5 +21,6 @@ class EduBot_Deactivator {
     private static function clear_scheduled_events() {
         wp_clear_scheduled_hook('edubot_daily_cleanup');
         wp_clear_scheduled_hook('edubot_follow_up_check');
+        wp_clear_scheduled_hook('edubot_analytics_cleanup');
     }
 }

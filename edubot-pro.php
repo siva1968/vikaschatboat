@@ -16,7 +16,7 @@
  * Plugin Name:       EduBot Pro
  * Plugin URI:        https://example.com/edubot-pro
  * Description:       Advanced AI-powered educational chatbot for WordPress with enhanced conversational flow and multi-institutional support.
- * Version:           1.3.2
+ * Version:           1.3.3
  * Author:            Your Name
  * Author URI:        https://example.com
  * License:           GPL-2.0+
@@ -35,7 +35,7 @@ if (!defined('WPINC')) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define('EDUBOT_PRO_VERSION', '1.3.2');
+define('EDUBOT_PRO_VERSION', '1.3.3');
 
 /**
  * Plugin file and path constants
@@ -77,6 +77,50 @@ require plugin_dir_path(__FILE__) . 'includes/class-edubot-constants.php';
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-core.php';
 
 /**
+ * Check plugin requirements before activation
+ */
+function edubot_pro_check_requirements() {
+    // Check WordPress version
+    if (version_compare(get_bloginfo('version'), '5.0', '<')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die(
+            __('EduBot Pro requires WordPress 5.0 or higher. Please update WordPress.', 'edubot-pro'),
+            __('Plugin Activation Error', 'edubot-pro'),
+            array('back_link' => true)
+        );
+    }
+    
+    // Check PHP version
+    if (version_compare(PHP_VERSION, '7.4', '<')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die(
+            __('EduBot Pro requires PHP 7.4 or higher. Current version: ', 'edubot-pro') . PHP_VERSION,
+            __('Plugin Activation Error', 'edubot-pro'),
+            array('back_link' => true)
+        );
+    }
+    
+    // Check required PHP extensions
+    $required_extensions = array('json', 'mbstring');
+    $missing_extensions = array();
+    
+    foreach ($required_extensions as $extension) {
+        if (!extension_loaded($extension)) {
+            $missing_extensions[] = $extension;
+        }
+    }
+    
+    if (!empty($missing_extensions)) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die(
+            __('EduBot Pro requires the following PHP extensions: ', 'edubot-pro') . implode(', ', $missing_extensions),
+            __('Plugin Activation Error', 'edubot-pro'),
+            array('back_link' => true)
+        );
+    }
+}
+
+/**
  * Begins execution of the plugin.
  *
  * Since everything within the plugin is registered via hooks,
@@ -86,9 +130,28 @@ require plugin_dir_path(__FILE__) . 'includes/class-edubot-core.php';
  * @since    1.0.0
  */
 function run_edubot_pro() {
-
-    $plugin = new EduBot_Core();
-    $plugin->run();
-
+    try {
+        // Check requirements
+        edubot_pro_check_requirements();
+        
+        $plugin = new EduBot_Core();
+        $plugin->run();
+    } catch (Exception $e) {
+        // Log the error
+        error_log('EduBot Pro Fatal Error: ' . $e->getMessage());
+        
+        // Show admin notice
+        add_action('admin_notices', function() use ($e) {
+            if (current_user_can('activate_plugins')) {
+                echo '<div class="notice notice-error"><p><strong>' . esc_html__('EduBot Pro Error:', 'edubot-pro') . '</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+            }
+        });
+    }
 }
-run_edubot_pro();
+
+// Only run if not in admin and all dependencies are loaded
+if (!is_admin() || (is_admin() && !wp_doing_ajax())) {
+    add_action('plugins_loaded', 'run_edubot_pro');
+} else {
+    run_edubot_pro();
+}

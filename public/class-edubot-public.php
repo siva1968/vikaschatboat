@@ -60,6 +60,7 @@ class EduBot_Public {
             array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('edubot_nonce'),
+                'session_id' => $this->generate_session_id(),
                 'version' => $this->version . '.' . time(),
                 'strings' => array(
                     'connecting' => __('Connecting...', 'edubot-pro'),
@@ -819,5 +820,39 @@ class EduBot_Public {
         } else {
             wp_send_json_error(__('Error submitting application. Please try again.', 'edubot-pro'));
         }
+    }
+
+    /**
+     * Generate session ID for chatbot
+     */
+    private function generate_session_id() {
+        $user_ip = $this->get_client_ip();
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+        $timestamp = time();
+        
+        return 'edubot_' . md5($user_ip . $user_agent . $timestamp . wp_generate_password(16, false));
+    }
+
+    /**
+     * Get client IP address safely
+     */
+    private function get_client_ip() {
+        $ip_keys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
+        
+        foreach ($ip_keys as $key) {
+            if (array_key_exists($key, $_SERVER) && !empty($_SERVER[$key])) {
+                $ip = $_SERVER[$key];
+                
+                if (strpos($ip, ',') !== false) {
+                    $ip = trim(explode(',', $ip)[0]);
+                }
+                
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
+        
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '127.0.0.1';
     }
 }

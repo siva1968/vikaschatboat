@@ -36,9 +36,19 @@ class EduBot_Core {
         $this->plugin_name = 'edubot-pro';
 
         $this->load_dependencies();
+        $this->init_error_handler();
         $this->set_locale();
         $this->define_admin_hooks();
         $this->define_public_hooks();
+    }
+
+    /**
+     * Initialize error handler
+     */
+    private function init_error_handler() {
+        if (class_exists('EduBot_Error_Handler')) {
+            EduBot_Error_Handler::init();
+        }
     }
 
     /**
@@ -63,7 +73,10 @@ class EduBot_Core {
             'includes/class-edubot-health-check.php',
             'includes/class-edubot-autoloader.php',
             'includes/class-enquiries-migration.php',
-            'includes/class-visitor-analytics.php'
+            'includes/class-visitor-analytics.php',
+            'includes/class-rate-limiter.php',
+            'includes/class-edubot-logger.php',
+            'includes/class-edubot-error-handler.php'
         );
 
         $missing_files = array();

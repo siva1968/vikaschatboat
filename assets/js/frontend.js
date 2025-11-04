@@ -31,6 +31,13 @@ jQuery(document).ready(function($) {
         let isOpen = false;
         let sessionId = ''; // Store session ID for conversation continuity
         
+        // Security: Check if nonce is available
+        if (typeof edubot_ajax === 'undefined' || !edubot_ajax.nonce) {
+            console.error('EduBot: Security nonce not found. Chat functionality disabled.');
+            $chatButton.prop('disabled', true);
+            return;
+        }
+        
         // Toggle chat window
         $chatButton.on('click', function() {
             if (!isOpen) {
