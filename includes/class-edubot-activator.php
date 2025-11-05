@@ -157,6 +157,39 @@ class EduBot_Activator {
                 }
             }
 
+            // 10. School Configs (Stores school settings and configuration)
+            $school_configs = $wpdb->prefix . 'edubot_school_configs';
+            if (!self::table_exists($school_configs)) {
+                $sql = self::sql_school_configs();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "school_configs: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'school_configs';
+                }
+            }
+
+            // 11. Visitor Analytics (Tracks analytics events, UTM data, page views)
+            $visitor_analytics = $wpdb->prefix . 'edubot_visitor_analytics';
+            if (!self::table_exists($visitor_analytics)) {
+                $sql = self::sql_visitor_analytics();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "visitor_analytics: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'visitor_analytics';
+                }
+            }
+
+            // 12. Visitors (Tracks visitor IP, user agent, first/last visit)
+            $visitors = $wpdb->prefix . 'edubot_visitors';
+            if (!self::table_exists($visitors)) {
+                $sql = self::sql_visitors();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "visitors: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'visitors';
+                }
+            }
+
         } catch (Exception $e) {
             $errors[] = "Exception: " . $e->getMessage();
         }
@@ -807,5 +840,108 @@ class EduBot_Activator {
         
         // Hook the cleanup functions
         add_action('edubot_analytics_cleanup', array('EduBot_Visitor_Analytics', 'cleanup_old_analytics_static'));
+    }
+
+    /**
+     * SQL: School Configs table (Stores school configuration)
+     */
+    private static function sql_school_configs() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_school_configs';
+        $charset_collate = $wpdb->get_charset_collate();
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            school_name varchar(255) NOT NULL,
+            config_data longtext NOT NULL,
+            api_keys_encrypted longtext,
+            branding_settings longtext,
+            academic_structure longtext,
+            board_settings longtext,
+            academic_year_settings longtext,
+            status varchar(20) DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY site_id (site_id)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: Visitor Analytics table (Tracks analytics events, UTM data, page views)
+     */
+    private static function sql_visitor_analytics() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_visitor_analytics';
+        $charset_collate = $wpdb->get_charset_collate();
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            session_id varchar(100) NOT NULL,
+            site_id bigint(20) NOT NULL,
+            visitor_id varchar(100),
+            page_url varchar(500),
+            page_title varchar(255),
+            referrer_url varchar(500),
+            utm_source varchar(100),
+            utm_medium varchar(100),
+            utm_campaign varchar(100),
+            utm_content varchar(100),
+            utm_term varchar(100),
+            utm_id varchar(100),
+            utm_source_platform varchar(100),
+            click_id varchar(100),
+            fb_pixel_id varchar(100),
+            ga_client_id varchar(100),
+            event_type varchar(50),
+            event_data longtext,
+            timestamp datetime DEFAULT CURRENT_TIMESTAMP,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY session_id (session_id),
+            KEY site_id (site_id),
+            KEY visitor_id (visitor_id),
+            KEY timestamp (timestamp)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: Visitors table (Tracks visitor IP, user agent, first/last visit)
+     */
+    private static function sql_visitors() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_visitors';
+        $charset_collate = $wpdb->get_charset_collate();
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            ip_address varchar(45) NOT NULL,
+            user_agent text NOT NULL,
+            first_visit datetime DEFAULT CURRENT_TIMESTAMP,
+            last_visit datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            visit_count int(11) DEFAULT 1,
+            utm_source varchar(100),
+            utm_medium varchar(100),
+            utm_campaign varchar(100),
+            utm_content varchar(100),
+            utm_term varchar(100),
+            utm_id varchar(100),
+            utm_source_platform varchar(100),
+            referrer_url varchar(500),
+            landing_page varchar(500),
+            device_type varchar(50),
+            browser_name varchar(100),
+            browser_version varchar(50),
+            os_name varchar(100),
+            os_version varchar(50),
+            country varchar(100),
+            city varchar(100),
+            timezone varchar(50),
+            language varchar(10),
+            PRIMARY KEY (id),
+            UNIQUE KEY unique_visitor (site_id, ip_address, user_agent(100)),
+            KEY site_id (site_id),
+            KEY first_visit (first_visit),
+            KEY utm_source (utm_source)
+        ) $charset_collate;";
     }
 }
