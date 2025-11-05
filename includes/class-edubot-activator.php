@@ -190,6 +190,17 @@ class EduBot_Activator {
                 }
             }
 
+            // 13. API Integrations (WhatsApp, Email, SMS, OpenAI configurations)
+            $api_integrations = $wpdb->prefix . 'edubot_api_integrations';
+            if (!self::table_exists($api_integrations)) {
+                $sql = self::sql_api_integrations();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "api_integrations: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'api_integrations';
+                }
+            }
+
         } catch (Exception $e) {
             $errors[] = "Exception: " . $e->getMessage();
         }
@@ -944,4 +955,61 @@ class EduBot_Activator {
             KEY utm_source (utm_source)
         ) $charset_collate;";
     }
+
+    /**
+     * SQL: API Integrations table (Stores WhatsApp, Email, SMS, OpenAI configurations)
+     * This table stores all API provider settings including credentials (encrypted)
+     */
+    private static function sql_api_integrations() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_api_integrations';
+        $charset_collate = $wpdb->get_charset_collate();
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            
+            -- WhatsApp Configuration
+            whatsapp_provider varchar(50),
+            whatsapp_token longtext,
+            whatsapp_phone_id varchar(100),
+            whatsapp_business_account_id varchar(100),
+            whatsapp_template_type varchar(50),
+            whatsapp_template_name varchar(255),
+            
+            -- Email Configuration
+            email_provider varchar(50),
+            email_from_address varchar(255),
+            email_from_name varchar(255),
+            smtp_host varchar(255),
+            smtp_port int(5),
+            smtp_username varchar(255),
+            smtp_password longtext,
+            email_api_key longtext,
+            email_domain varchar(255),
+            
+            -- SMS Configuration
+            sms_provider varchar(50),
+            sms_api_key longtext,
+            sms_sender_id varchar(100),
+            
+            -- OpenAI Configuration
+            openai_api_key longtext,
+            openai_model varchar(50),
+            
+            -- Notification Settings (stored as JSON)
+            notification_settings longtext,
+            
+            -- Status
+            status varchar(20) DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            PRIMARY KEY (id),
+            UNIQUE KEY site_id (site_id),
+            KEY whatsapp_provider (whatsapp_provider),
+            KEY email_provider (email_provider),
+            KEY sms_provider (sms_provider)
+        ) $charset_collate;";
+    }
 }
+

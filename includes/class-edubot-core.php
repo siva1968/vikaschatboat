@@ -65,6 +65,7 @@ class EduBot_Core {
             'includes/class-school-config.php',
             'includes/class-database-manager.php',
             'includes/class-security-manager.php',
+            'includes/class-edubot-api-config-manager.php',
             'includes/class-chatbot-engine.php',
             'includes/class-api-integrations.php',
             'includes/class-notification-manager.php',
