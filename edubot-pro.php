@@ -16,7 +16,7 @@
  * Plugin Name:       EduBot Pro
  * Plugin URI:        https://example.com/edubot-pro
  * Description:       Advanced AI-powered educational chatbot for WordPress with enhanced conversational flow and multi-institutional support.
- * Version:           1.3.3
+ * Version:           1.4.2
  * Author:            Your Name
  * Author URI:        https://example.com
  * License:           GPL-2.0+
@@ -35,7 +35,48 @@ if (!defined('WPINC')) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define('EDUBOT_PRO_VERSION', '1.3.3');
+define('EDUBOT_PRO_VERSION', '1.4.2');
+
+/**
+ * CRITICAL: Capture UTM to cookies IMMEDIATELY in plugin bootstrap
+ * This runs BEFORE any hooks, ensuring setcookie() works
+ */
+if (!function_exists('edubot_capture_utm_immediately')) {
+    function edubot_capture_utm_immediately() {
+        // Only if GET has parameters
+        if (!empty($_GET)) {
+            $utm_params = array(
+                'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+                'gclid', 'fbclid', 'msclkid', 'ttclid', 'twclid', 
+                '_kenshoo_clickid', 'irclickid', 'li_fat_id', 'sc_click_id', 'yclid'
+            );
+            
+            $cookie_lifetime = time() + (30 * 24 * 60 * 60); // 30 days
+            $domain = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+            $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            
+            $cookies_set = 0;
+            
+            foreach ($utm_params as $param) {
+                if (isset($_GET[$param]) && !empty($_GET[$param])) {
+                    $value = sanitize_text_field($_GET[$param]);
+                    
+                    if (@setcookie("edubot_{$param}", $value, $cookie_lifetime, '/', $domain, $secure, true)) {
+                        $cookies_set++;
+                        error_log("EduBot Bootstrap: Set cookie edubot_{$param} = {$value}");
+                    }
+                }
+            }
+            
+            if ($cookies_set > 0) {
+                error_log("EduBot Bootstrap: Successfully set {$cookies_set} UTM cookies");
+            }
+        }
+    }
+    
+    // Call immediately - before WordPress does anything
+    edubot_capture_utm_immediately();
+}
 
 /**
  * Plugin file and path constants
@@ -75,6 +116,11 @@ require plugin_dir_path(__FILE__) . 'includes/class-edubot-constants.php';
  * admin-specific hooks, and public-facing site hooks.
  */
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-core.php';
+
+/**
+ * Load applications table fixer to ensure table exists
+ */
+require plugin_dir_path(__FILE__) . 'includes/class-applications-table-fixer.php';
 
 /**
  * Check plugin requirements before activation

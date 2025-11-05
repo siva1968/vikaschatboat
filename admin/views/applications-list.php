@@ -354,6 +354,9 @@ jQuery(document).ready(function($) {
         var applicationId = $(this).data('id');
         var $row = $(this).closest('tr');
         
+        console.log('Delete clicked for ID:', applicationId);
+        console.log('AJAX URL:', ajaxurl);
+        
         $.ajax({
             url: ajaxurl,
             type: 'POST',
@@ -363,16 +366,20 @@ jQuery(document).ready(function($) {
                 nonce: '<?php echo wp_create_nonce('edubot_admin_nonce'); ?>'
             },
             success: function(response) {
+                console.log('AJAX Success:', response);
                 if (response.success) {
                     $row.fadeOut(function() {
                         $(this).remove();
                     });
+                    alert('✅ Application deleted successfully!');
                 } else {
-                    alert('Error: ' + response.data);
+                    console.error('Delete failed:', response.data);
+                    alert('❌ Error: ' + response.data);
                 }
             },
-            error: function() {
-                alert('Network error. Please try again.');
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', error, xhr.responseText);
+                alert('❌ Network error. Please try again.\n\nStatus: ' + status);
             }
         });
         

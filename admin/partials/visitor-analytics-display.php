@@ -198,11 +198,17 @@ $traditional_analytics = $db_manager->get_analytics_data($date_range);
 
     <!-- Enhanced Conversion Attribution -->
     <?php
+    global $wpdb;
+    
+    // Get recent conversions with attribution using table prefix
+    $table_name = $wpdb->prefix . 'edubot_visitor_analytics';
+    $visitor_table = $wpdb->prefix . 'edubot_visitors';
+    
     // Get recent conversions with attribution
     $recent_conversions = $wpdb->get_results($wpdb->prepare(
         "SELECT va.event_data, va.timestamp, v.visitor_id, v.phone, v.email
-         FROM {$visitor_analytics->table_name} va
-         LEFT JOIN {$visitor_analytics->visitor_table} v ON va.visitor_id = v.visitor_id
+         FROM {$table_name} va
+         LEFT JOIN {$visitor_table} v ON va.visitor_id = v.visitor_id
          WHERE va.site_id = %d 
          AND va.event_type = 'application_converted'
          AND va.timestamp >= %s

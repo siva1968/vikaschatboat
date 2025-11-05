@@ -3200,31 +3200,43 @@ class EduBot_Admin {
      * Handle single application deletion
      */
     public function handle_delete_application_ajax() {
+        error_log('EduBot AJAX: Delete application handler called');
+        
         // Verify nonce
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
+        error_log("EduBot AJAX: Nonce received: " . substr($nonce, 0, 10) . "...");
+        
+        if (!wp_verify_nonce($nonce, 'edubot_admin_nonce')) {
+            error_log('EduBot AJAX: Nonce verification failed');
             wp_send_json_error('Security check failed');
             return;
         }
 
         // Check permissions
         if (!current_user_can('manage_options')) {
+            error_log('EduBot AJAX: User lacks manage_options permission');
             wp_send_json_error('Insufficient permissions');
             return;
         }
 
-        $application_id = sanitize_text_field($_POST['application_id'] ?? '');
+        $application_id = isset($_POST['application_id']) ? sanitize_text_field($_POST['application_id']) : '';
+        error_log("EduBot AJAX: Application ID: " . $application_id);
 
         if (empty($application_id)) {
+            error_log('EduBot AJAX: Empty application ID');
             wp_send_json_error('Invalid application ID');
             return;
         }
 
         try {
+            error_log("EduBot AJAX: Attempting to delete application {$application_id}");
             if ($this->delete_application($application_id)) {
+                error_log("EduBot AJAX: Successfully deleted application {$application_id}");
                 wp_send_json_success(array(
                     'message' => 'Application deleted successfully'
                 ));
             } else {
+                error_log("EduBot AJAX: delete_application returned false for ID {$application_id}");
                 wp_send_json_error('Failed to delete application');
             }
         } catch (Exception $e) {
@@ -3286,20 +3298,41 @@ class EduBot_Admin {
 
     /**
      * Delete application from database
+     * Note: Applications are stored in wp_edubot_enquiries table, not wp_edubot_applications
      */
     private function delete_application($application_id) {
         global $wpdb;
-        $table = $wpdb->prefix . 'edubot_applications';
-        $site_id = get_current_blog_id();
-
+        
+        error_log("EduBot delete_application: Starting delete for ID {$application_id}");
+        
+        // Remove 'enq_' prefix if present (the table stores just the numeric ID)
+        if (strpos($application_id, 'enq_') === 0) {
+            $numeric_id = str_replace('enq_', '', $application_id);
+            error_log("EduBot delete_application: Stripped prefix, using numeric ID: {$numeric_id}");
+        } else {
+            $numeric_id = $application_id;
+        }
+        
+        // Delete from enquiries table (where applications are actually stored)
+        $enquiries_table = $wpdb->prefix . 'edubot_enquiries';
+        
+        error_log("EduBot delete_application: Table = {$enquiries_table}");
+        
+        // Verify the record exists first
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$enquiries_table} WHERE id = %d", $numeric_id));
+        error_log("EduBot delete_application: Record exists? " . ($exists ? 'Yes' : 'No'));
+        
         $result = $wpdb->delete(
-            $table,
-            array(
-                'id' => $application_id,
-                'site_id' => $site_id
-            ),
-            array('%d', '%d')
+            $enquiries_table,
+            array('id' => $numeric_id),
+            array('%d')
         );
+
+        if ($result !== false) {
+            error_log("EduBot: Successfully deleted enquiry ID {$application_id} from enquiries table (rows affected: {$result})");
+        } else {
+            error_log("EduBot: Failed to delete enquiry ID {$application_id}: " . $wpdb->last_error);
+        }
 
         return $result !== false;
     }
