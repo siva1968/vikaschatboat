@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 
 // Core plugin constants (only define if not already defined)
 if (!defined('EDUBOT_PRO_VERSION')) {
-    define('EDUBOT_PRO_VERSION', '1.3.3');
+    define('EDUBOT_PRO_VERSION', '1.3.7');
 }
 
 if (!defined('EDUBOT_PRO_PLUGIN_FILE')) {
@@ -37,7 +37,7 @@ if (!defined('EDUBOT_PRO_PLUGIN_DIR')) {
 
 // Database constants
 if (!defined('EDUBOT_PRO_DB_VERSION')) {
-    define('EDUBOT_PRO_DB_VERSION', '1.3.3');
+    define('EDUBOT_PRO_DB_VERSION', '1.3.4');
 }
 
 // Feature flags

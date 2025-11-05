@@ -43,7 +43,11 @@ if (!defined('ABSPATH')) {
                                 <?php if ($logo_url): ?>
                                     <button type="button" class="button edubot-remove-logo-btn" style="margin-left: 10px;">Remove Logo</button>
                                 <?php endif; ?>
-                                <p class="description">Upload or select your school logo from the media library</p>
+                                <p class="description">
+                                    Upload or select your school logo from the media library. 
+                                    Accepted formats: JPG, PNG, SVG, GIF (Max 2MB). 
+                                    <br><small>Examples: /wp-content/uploads/school-logo.png or https://example.com/logo.png</small>
+                                </p>
                             </div>
                         </td>
                     </tr>
@@ -279,7 +283,7 @@ Reply STOP to unsubscribe";
                         <th scope="row">School WhatsApp Template Name</th>
                         <td>
                             <input type="text" name="edubot_school_whatsapp_template_name" value="<?php echo esc_attr(get_option('edubot_school_whatsapp_template_name', 'edubot_school_whatsapp_template_name_')); ?>" class="regular-text" />
-                            <p class="description">Template name for school notifications (only required for Business API Templates)</p>
+                            <p class="description">Template name for school notifications (use: edubot_school_whatsapp_template_name_)</p>
                         </td>
                     </tr>
                     <tr>

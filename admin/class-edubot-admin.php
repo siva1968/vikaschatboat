@@ -973,26 +973,45 @@ class EduBot_Admin {
         // Validate logo URL if provided
         $school_logo = '';
         if (!empty($_POST['edubot_school_logo'])) {
-            $school_logo = esc_url_raw($_POST['edubot_school_logo']);
+            $school_logo = trim($_POST['edubot_school_logo']);
             error_log('EduBot: Validating logo URL: ' . $school_logo);
             
-            if (!filter_var($school_logo, FILTER_VALIDATE_URL)) {
-                error_log('EduBot: Logo URL failed basic validation');
-                return $this->send_response(false, 'Invalid logo URL format.');
+            // Allow both absolute URLs (http/https) and relative URLs (starting with /)
+            $is_relative_url = strpos($school_logo, '/') === 0 && strpos($school_logo, '//') !== 0;
+            $is_absolute_url = filter_var($school_logo, FILTER_VALIDATE_URL);
+            
+            if (!$is_relative_url && !$is_absolute_url) {
+                error_log('EduBot: Logo URL failed format validation - must be absolute (http/https) or relative path (/)');
+                return $this->send_response(false, 'Invalid logo URL format. Please use absolute URL (http/https) or relative path (/wp-content/uploads/...).');
             }
             
-            // Check if is_safe_url method exists
+            // Security validation
             if (!method_exists($security_manager, 'is_safe_url')) {
                 error_log('EduBot: is_safe_url method not found in Security Manager - skipping security validation');
-                // Allow URL but log the issue
-                error_log('EduBot: Logo URL validation skipped due to missing method: ' . $school_logo);
+                error_log('EduBot: Logo URL accepted (method not found): ' . $school_logo);
             } else {
                 if (!$security_manager->is_safe_url($school_logo)) {
-                    error_log('EduBot: Logo URL failed security validation');
-                    return $this->send_response(false, 'Logo URL failed security validation. Please use a safe URL.');
+                    error_log('EduBot: Logo URL failed security validation - may contain malicious patterns');
+                    return $this->send_response(false, 'Logo URL failed security validation. Please use a safe URL without JavaScript or suspicious content.');
                 }
-                
-                error_log('EduBot: Logo URL validation passed');
+                error_log('EduBot: Logo URL validation passed: ' . $school_logo);
+            }
+            
+            // Additional validation for relative URLs
+            if ($is_relative_url) {
+                // Check if it's a valid WordPress media path
+                $allowed_paths = array('/wp-content/uploads/', '/wp-content/plugins/', '/wp-includes/');
+                $is_valid_path = false;
+                foreach ($allowed_paths as $path) {
+                    if (strpos($school_logo, $path) === 0) {
+                        $is_valid_path = true;
+                        break;
+                    }
+                }
+                if (!$is_valid_path && !file_exists($_SERVER['DOCUMENT_ROOT'] . $school_logo)) {
+                    error_log('EduBot: Logo relative URL points to non-existent file');
+                    return $this->send_response(false, 'Logo file not found. Please ensure the path is correct.');
+                }
             }
         }
         

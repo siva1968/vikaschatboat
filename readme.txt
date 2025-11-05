@@ -4,7 +4,7 @@ Tags: chatbot, education, admissions, ai, school, application, student
 Requires at least: 5.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.3.7
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -92,6 +92,16 @@ Yes, you can export applications in CSV format from the admin panel.
 6. Mobile responsive design
 
 == Changelog ==
+
+= 1.3.4 =
+* Fixed Email Integration REST API configuration
+* Enhanced ZeptoMail REST API support with proper field visibility
+* Improved email service provider detection (SMTP vs REST API)
+* Added provider-specific setup instructions for SendGrid, Mailgun, and ZeptoMail
+* Fixed JavaScript field visibility for different email providers
+* Updated admin interface with dynamic instruction display
+* Bumped version to force JavaScript cache refresh for latest changes
+* Enhanced user experience with conditional field rendering
 
 = 1.3.3 =
 * Added comprehensive error handling and requirement checks

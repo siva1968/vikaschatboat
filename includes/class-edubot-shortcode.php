@@ -20,6 +20,10 @@ class EduBot_Shortcode {
     public function __construct() {
         $this->debug_enabled = defined('WP_DEBUG') && WP_DEBUG;
         
+        // CRITICAL: Capture UTM parameters at the EARLIEST possible hook
+        // This must happen before any output is sent (before headers are sent)
+        add_action('plugins_loaded', array($this, 'capture_utm_to_cookies'), 1);
+        
         // Set WordPress timezone to Indian Standard Time for the school
         add_action('init', array($this, 'set_indian_timezone'));
         
@@ -80,6 +84,97 @@ class EduBot_Shortcode {
         }
     }
     
+    /**
+     * Capture UTM parameters to cookies at the earliest possible hook
+     * This must run before any output is sent to avoid "headers already sent" error
+     * Called on 'plugins_loaded' hook with priority 1 (earliest)
+     * 
+     * IMPORTANT: This captures UTM to 30-day cookies so even if user returns
+     * after 1 month, we can still retrieve their original campaign source
+     */
+    public function capture_utm_to_cookies() {
+        // Only process if there are URL parameters
+        if (empty($_GET)) {
+            error_log("EduBot capture_utm_to_cookies: No GET parameters, skipping");
+            return;
+        }
+        
+        error_log("EduBot capture_utm_to_cookies: Starting UTM capture");
+        
+        // Start session if needed
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+        
+        // UTM parameters and click IDs to capture
+        $utm_params_to_capture = array(
+            // Standard UTM parameters
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+            // Click IDs from major platforms
+            'gclid', 'fbclid', 'msclkid', 'ttclid', 'twclid', 
+            '_kenshoo_clickid', 'irclickid', 'li_fat_id', 'sc_click_id', 'yclid'
+        );
+        
+        // 30 days expiration
+        $cookie_lifetime = time() + (30 * 24 * 60 * 60);
+        $domain = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        
+        $utm_captured = false;
+        $cookies_set = 0;
+        
+        foreach ($utm_params_to_capture as $param) {
+            if (isset($_GET[$param]) && !empty($_GET[$param])) {
+                $param_value = sanitize_text_field($_GET[$param]);
+                
+                // Store in session (for immediate use)
+                $_SESSION['edubot_' . $param] = $param_value;
+                
+                // Store in cookie (for 30-day persistence)
+                // Try setcookie with error suppression
+                $cookie_set = @setcookie(
+                    'edubot_' . $param,           // Cookie name
+                    $param_value,                 // Cookie value
+                    $cookie_lifetime,             // Expires in 30 days
+                    '/',                          // Path: entire site
+                    $domain,                      // Domain
+                    $secure,                      // Secure (HTTPS only if applicable)
+                    true                          // HttpOnly (JavaScript can't access)
+                );
+                
+                if ($cookie_set) {
+                    $cookies_set++;
+                    error_log("EduBot: Successfully set cookie 'edubot_{$param}' = '{$param_value}'");
+                } else {
+                    error_log("EduBot: FAILED to set cookie 'edubot_{$param}' - headers may have already been sent");
+                }
+                
+                $utm_captured = true;
+            }
+        }
+        
+        error_log("EduBot capture_utm_to_cookies: Found {$utm_captured} UTM params, set {$cookies_set} cookies");
+        
+        // Store capture timestamp in both session and cookie
+        if ($utm_captured) {
+            $captured_at = current_time('mysql');
+            
+            $_SESSION['edubot_utm_captured_at'] = $captured_at;
+            
+            @setcookie(
+                'edubot_utm_captured_at',
+                $captured_at,
+                $cookie_lifetime,
+                '/',
+                $domain,
+                $secure,
+                true
+            );
+            
+            error_log("EduBot: UTM capture timestamp stored: {$captured_at}");
+        }
+    }
+    
     public function init_shortcode() {
         add_shortcode('edubot_chatbot', array($this, 'render_chatbot'));
         add_shortcode('edubot_application_form', array($this, 'render_application_form'));
@@ -132,6 +227,13 @@ class EduBot_Shortcode {
     }
     
     public function render_chatbot($atts) {
+        // UTM parameters are already captured to cookies in capture_utm_to_cookies()
+        // which runs on 'plugins_loaded' hook before any output
+        // We just ensure session is started for this request
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
         // Set the new welcome message format
         $new_welcome_message = "Hello! Welcome to Epistemo Vikas Leadership School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
         
@@ -2357,7 +2459,19 @@ class EduBot_Shortcode {
         global $wpdb;
         
         try {
-            error_log("EduBot: Starting final submission with data: " . print_r($collected_data, true));
+            error_log("EduBot: Starting final submission with data: " . json_encode($collected_data));
+            error_log("EduBot: Collected data keys: " . implode(', ', array_keys($collected_data)));
+            
+            // Verify required fields exist
+            if (empty($collected_data['student_name'])) {
+                error_log("EduBot ERROR: student_name is empty");
+            }
+            if (empty($collected_data['email'])) {
+                error_log("EduBot ERROR: email is empty");
+            }
+            if (empty($collected_data['phone'])) {
+                error_log("EduBot ERROR: phone is empty");
+            }
             
             // Generate enquiry number
             $enquiry_number = 'ENQ' . $this->get_indian_time('Y') . wp_rand(1000, 9999);
@@ -2380,6 +2494,16 @@ class EduBot_Shortcode {
             // Extract click IDs for separate storage
             $gclid = $utm_data['gclid'] ?? null;
             $fbclid = $utm_data['fbclid'] ?? null;
+            
+            // Determine source from UTM data or default to chatbot
+            $source = 'chatbot'; // Default source
+            if (!empty($utm_data['utm_source'])) {
+                // Use utm_source as the source (e.g., 'google', 'facebook', 'email', 'organic_search', 'direct')
+                $source = sanitize_text_field($utm_data['utm_source']);
+                error_log("EduBot: Source determined from UTM: " . $source);
+            } else {
+                error_log("EduBot: No UTM source found, using default: chatbot");
+            }
             
             // Prepare click ID data for comprehensive tracking
             $click_id_data = array();
@@ -2426,7 +2550,7 @@ class EduBot_Shortcode {
                     'gender' => $collected_data['gender'] ?? '',
                     'created_at' => current_time('mysql'),
                     'status' => 'pending',
-                    'source' => 'chatbot'
+                    'source' => $source
                 ),
                 array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s')
             );
@@ -2515,7 +2639,15 @@ class EduBot_Shortcode {
             error_log('EduBot: Error in final submission: ' . $e->getMessage());
             error_log('EduBot: Stack trace: ' . $e->getTraceAsString());
             error_log('EduBot: Error code: ' . $e->getCode());
-            return "Thank you for providing your information! Our admission team will contact you soon at {$collected_data['phone']}. For immediate assistance, please call 7702800800.";
+            error_log('EduBot: Collected data at error: ' . json_encode($collected_data));
+            
+            // Return an error message that indicates something went wrong
+            return "❌ **Error Submitting Your Enquiry**\n\n" .
+                   "We encountered a technical error while processing your information:\n" .
+                   "**Error:** " . $e->getMessage() . "\n\n" .
+                   "Your information was NOT saved. Please try again or contact:\n" .
+                   "📞 **7702800800** / **9248111448**\n\n" .
+                   "📧 **admissions@epistemo.in**";
         }
     }
     
@@ -2544,7 +2676,14 @@ class EduBot_Shortcode {
             
             $headers = array('Content-Type: text/html; charset=UTF-8');
             
-            $sent = wp_mail($to, $subject, $message, $headers);
+            // Use API integrations for email sending
+            if (!class_exists('EduBot_API_Integrations')) {
+                error_log('EduBot: API Integrations class not found');
+                return false;
+            }
+            
+            $api_integrations = new EduBot_API_Integrations();
+            $sent = $api_integrations->send_email($to, $subject, $message, $headers);
             
             if ($sent) {
                 error_log("EduBot: Confirmation email sent to {$to}");
@@ -2575,20 +2714,6 @@ class EduBot_Shortcode {
             // Get school email from School Information > Contact Email setting
             $school_email = '';
             
-            // Debug: Check what classes exist and try to load school config
-            error_log('EduBot: Class EduBot_School_Config exists: ' . (class_exists('EduBot_School_Config') ? 'Yes' : 'No'));
-            
-            // Try to manually include the school config file if class doesn't exist
-            if (!class_exists('EduBot_School_Config')) {
-                $config_file = dirname(__FILE__) . '/class-school-config.php';
-                if (file_exists($config_file)) {
-                    require_once $config_file;
-                    error_log('EduBot: Manually loaded school config class from: ' . $config_file);
-                } else {
-                    error_log('EduBot: School config file not found at: ' . $config_file);
-                }
-            }
-            
             // Priority 1: Try multiple possible WordPress options for school contact email
             $possible_options = [
                 'edubot_school_email', // From School Settings page
@@ -2600,7 +2725,6 @@ class EduBot_Shortcode {
             
             foreach ($possible_options as $option_name) {
                 $option_value = get_option($option_name);
-                error_log("EduBot: Checking option '{$option_name}': " . ($option_value ? $option_value : 'empty'));
                 if (!empty($option_value) && filter_var($option_value, FILTER_VALIDATE_EMAIL)) {
                     $school_email = $option_value;
                     error_log('EduBot: Using email from WordPress option ' . $option_name . ': ' . $school_email);
@@ -2613,7 +2737,6 @@ class EduBot_Shortcode {
                 try {
                     $school_config = EduBot_School_Config::getInstance();
                     $config = $school_config->get_config();
-                    error_log('EduBot: School config structure: ' . print_r($config, true));
                     $contact_info = $config['school_info']['contact_info'] ?? array();
                     if (!empty($contact_info['email'])) {
                         $school_email = $contact_info['email'];
@@ -2627,7 +2750,6 @@ class EduBot_Shortcode {
             // Priority 3: Fallback to plugin settings if School Information not available
             if (empty($school_email)) {
                 $settings = get_option('edubot_pro_settings', array());
-                error_log('EduBot: Plugin settings structure: ' . print_r($settings, true));
                 if (!empty($settings['contact_email'])) {
                     $school_email = $settings['contact_email'];
                     error_log('EduBot: Using contact email from plugin settings: ' . $school_email);
@@ -2637,7 +2759,7 @@ class EduBot_Shortcode {
                 }
             }
             
-            // Priority 3: Final fallback
+            // Priority 4: Final fallback
             if (empty($school_email)) {
                 $school_email = 'admissions@epistemo.in';
                 error_log('EduBot: Using fallback email: ' . $school_email);
@@ -2655,7 +2777,14 @@ class EduBot_Shortcode {
             
             $headers = array('Content-Type: text/html; charset=UTF-8');
             
-            $sent = wp_mail($school_email, $subject, $message, $headers);
+            // Use API integrations for email sending
+            if (!class_exists('EduBot_API_Integrations')) {
+                error_log('EduBot: API Integrations class not found');
+                return false;
+            }
+            
+            $api_integrations = new EduBot_API_Integrations();
+            $sent = $api_integrations->send_email($school_email, $subject, $message, $headers);
             
             if ($sent) {
                 error_log("EduBot: School notification email sent to {$school_email}");
@@ -4007,6 +4136,14 @@ class EduBot_Shortcode {
             $this->update_conversation_data($session_id, 'step', 'completed');
             
             // Directly generate enquiry number and save to database
+            error_log("EduBot: About to submit with collected_data: " . json_encode($collected_data));
+            
+            // Verify we have critical fields
+            if (empty($collected_data['student_name']) || empty($collected_data['email']) || empty($collected_data['phone'])) {
+                error_log("EduBot: ERROR - Missing critical fields in collected_data: " . json_encode($collected_data));
+                return "❌ Error: Missing required contact information. Please start over with your name, email, and phone number.";
+            }
+            
             return $this->process_final_submission($collected_data, $session_id);
         }
         
@@ -5466,7 +5603,15 @@ Reply STOP to unsubscribe");
             file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
             
             if ($result && !is_wp_error($result)) {
-                if (isset($result['success']) && $result['success']) {
+                // Check if response contains messages (Meta API format)
+                if (is_array($result) && isset($result['messages'][0]['id'])) {
+                    $debug_msg = "✅ SUCCESS: WhatsApp message sent successfully to $phone\n";
+                    $debug_msg .= "   - Message ID: {$result['messages'][0]['id']}\n";
+                    file_put_contents($debug_file, $debug_msg, FILE_APPEND | LOCK_EX);
+                    error_log("EduBot: WhatsApp confirmation sent successfully to {$phone}");
+                    return true;
+                } elseif (is_array($result) && isset($result['success']) && $result['success']) {
+                    // Fallback for other API formats
                     $debug_msg = "✅ SUCCESS: WhatsApp message sent successfully to $phone\n";
                     if (isset($result['message_id'])) {
                         $debug_msg .= "   - Message ID: {$result['message_id']}\n";
@@ -5614,20 +5759,29 @@ Reply STOP to unsubscribe");
         );
         
         foreach ($utm_params as $param) {
-            // Check session storage first (persists across page loads)
-            if (isset($_SESSION['edubot_' . $param])) {
-                $utm_data[$param] = sanitize_text_field($_SESSION['edubot_' . $param]);
-            }
-            // Fallback to current request
-            elseif (isset($_GET[$param])) {
+            // Priority 1: Check current request FIRST (fresh data from URL)
+            if (isset($_GET[$param])) {
                 $utm_data[$param] = sanitize_text_field($_GET[$param]);
-                // Store in session for future use
+                // Update both session AND cookie with fresh data
                 $_SESSION['edubot_' . $param] = $utm_data[$param];
+                error_log("EduBot get_utm_data: Using UTM from current request: {$param} = " . $utm_data[$param]);
             }
-            // Check POST data as well
+            // Priority 2: Fallback to POST data
             elseif (isset($_POST[$param])) {
                 $utm_data[$param] = sanitize_text_field($_POST[$param]);
                 $_SESSION['edubot_' . $param] = $utm_data[$param];
+            }
+            // Priority 3: Check session (intermediate storage)
+            elseif (isset($_SESSION['edubot_' . $param])) {
+                $utm_data[$param] = sanitize_text_field($_SESSION['edubot_' . $param]);
+            }
+            // Priority 4: Check cookies (long-term persistence, 30+ days)
+            // This is the MOST IMPORTANT for user returning after 1+ month
+            elseif (isset($_COOKIE['edubot_' . $param])) {
+                $utm_data[$param] = sanitize_text_field($_COOKIE['edubot_' . $param]);
+                // Re-populate session from cookie
+                $_SESSION['edubot_' . $param] = $utm_data[$param];
+                error_log("EduBot get_utm_data: Using UTM from persistent cookie (30 day): {$param} = " . $utm_data[$param]);
             }
         }
         
@@ -5636,8 +5790,12 @@ Reply STOP to unsubscribe");
             $_SESSION['edubot_utm_captured_at'] = current_time('mysql');
         }
         
+        // Get timestamp from session or cookie
         if (isset($_SESSION['edubot_utm_captured_at'])) {
             $utm_data['captured_at'] = $_SESSION['edubot_utm_captured_at'];
+        } elseif (isset($_COOKIE['edubot_utm_captured_at'])) {
+            $utm_data['captured_at'] = sanitize_text_field($_COOKIE['edubot_utm_captured_at']);
+            error_log("EduBot get_utm_data: Using captured_at timestamp from cookie: " . $utm_data['captured_at']);
         }
         
         return $utm_data;

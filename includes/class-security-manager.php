@@ -437,7 +437,34 @@ class EduBot_Security_Manager {
             return false;
         }
 
-        // Validate URL format
+        // Allow relative URLs (like WordPress media paths)
+        if (strpos($url, '/') === 0 && strpos($url, '//') !== 0) {
+            // Relative URL - validate path only (no scheme/host needed)
+            if (strlen($url) <= 2048 && strpos($url, '%25') === false) {
+                // Block dangerous patterns in relative paths
+                $dangerous_patterns = array(
+                    'javascript:',
+                    'data:',
+                    'vbscript:',
+                    'file:',
+                    'ftp:',
+                    '<script',
+                    'onload=',
+                    'onerror=',
+                    'onclick='
+                );
+                $url_lower = strtolower($url);
+                foreach ($dangerous_patterns as $pattern) {
+                    if (strpos($url_lower, $pattern) !== false) {
+                        return false;
+                    }
+                }
+                return true; // Relative URL is safe
+            }
+            return false;
+        }
+
+        // Validate URL format for absolute URLs
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
             return false;
         }

@@ -885,13 +885,28 @@ class EduBot_API_Integrations {
      * Send email
      */
     public function send_email($to, $subject, $message, $headers = array()) {
-        $api_keys = $this->school_config->get_api_keys();
+        // Get email provider from WordPress options
+        $email_provider = get_option('edubot_email_provider', '');
         
-        if (empty($api_keys['email_service'])) {
+        // If no provider set, try to get from school config API keys
+        if (empty($email_provider)) {
+            $api_keys = $this->school_config->get_api_keys();
+            $email_provider = $api_keys['email_service'] ?? '';
+        }
+        
+        if (empty($email_provider)) {
+            error_log('EduBot: No email provider configured');
             return wp_mail($to, $subject, $message, $headers);
         }
 
-        switch ($api_keys['email_service']) {
+        // Build API keys array from WordPress options
+        $api_keys = array(
+            'email_api_key' => get_option('edubot_email_api_key', ''),
+            'email_from_address' => get_option('edubot_email_from_address', ''),
+            'email_from_name' => get_option('edubot_email_from_name', '')
+        );
+
+        switch ($email_provider) {
             case 'sendgrid':
                 return $this->send_sendgrid_email($to, $subject, $message, $api_keys);
                 
@@ -902,6 +917,7 @@ class EduBot_API_Integrations {
                 return $this->send_zeptomail_email($to, $subject, $message, $api_keys);
                 
             default:
+                error_log('EduBot: Unknown email provider: ' . $email_provider);
                 return wp_mail($to, $subject, $message, $headers);
         }
     }
@@ -990,14 +1006,38 @@ class EduBot_API_Integrations {
      * Send email via ZeptoMail
      */
     private function send_zeptomail_email($to, $subject, $message, $api_keys) {
-        $config = $this->school_config->get_config();
-        $from_email = $config['school_info']['contact_info']['email'];
-        $from_name = $config['school_info']['name'];
+        // Use from_email from WordPress options or school config
+        $from_email = $api_keys['email_from_address'] ?? '';
+        $from_name = $api_keys['email_from_name'] ?? '';
+        
+        // Fallback to school config if not set in options
+        if (empty($from_email)) {
+            try {
+                $config = $this->school_config->get_config();
+                $from_email = $config['school_info']['contact_info']['email'] ?? '';
+                $from_name = $config['school_info']['name'] ?? '';
+            } catch (Exception $e) {
+                error_log('EduBot ZeptoMail: Could not get school config - ' . $e->getMessage());
+            }
+        }
+        
+        if (empty($from_email)) {
+            error_log('EduBot ZeptoMail: No from_email configured');
+            return false;
+        }
+        
+        if (empty($api_keys['email_api_key'])) {
+            error_log('EduBot ZeptoMail: No API key configured');
+            return false;
+        }
+        
+        // Handle HTML vs plain text
+        $body_key = (stripos($message, '<') !== false && stripos($message, '>') !== false) ? 'htmlbody' : 'textbody';
         
         $data = array(
             'from' => array(
                 'address' => $from_email,
-                'name' => $from_name
+                'name' => !empty($from_name) ? $from_name : 'Administrator'
             ),
             'to' => array(
                 array(
@@ -1007,9 +1047,11 @@ class EduBot_API_Integrations {
                 )
             ),
             'subject' => $subject,
-            'textbody' => $message
+            $body_key => $message
         );
 
+        error_log('EduBot ZeptoMail: Sending email from ' . $from_email . ' to ' . $to);
+        
         $response = wp_remote_post('https://api.zeptomail.in/v1.1/email', array(
             'headers' => array(
                 'accept' => 'application/json',
@@ -1029,9 +1071,11 @@ class EduBot_API_Integrations {
         $status_code = wp_remote_retrieve_response_code($response);
         $response_body = wp_remote_retrieve_body($response);
         
+        error_log('EduBot ZeptoMail: HTTP Status ' . $status_code);
+        
         // ZeptoMail returns 201 for successful email send, 200 for other operations
         if ($status_code !== 200 && $status_code !== 201) {
-            error_log('EduBot ZeptoMail API Error: HTTP ' . $status_code . ' - ' . $response_body);
+            error_log('EduBot ZeptoMail API Error: HTTP ' . $status_code . ' - Response: ' . $response_body);
             return false;
         }
 
@@ -1039,6 +1083,8 @@ class EduBot_API_Integrations {
         $response_data = json_decode($response_body, true);
         if (isset($response_data['request_id'])) {
             error_log('EduBot ZeptoMail: Email sent successfully. Request ID: ' . $response_data['request_id']);
+        } else {
+            error_log('EduBot ZeptoMail: Email sent. Response: ' . $response_body);
         }
 
         return true;

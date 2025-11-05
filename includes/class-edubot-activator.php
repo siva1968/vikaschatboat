@@ -10,25 +10,35 @@ class EduBot_Activator {
      * Permanent fix - proper database initialization
      */
     public static function activate() {
-        // Create core tables first
-        self::create_tables();
+        // CRITICAL: Suppress output to prevent "headers already sent" errors
+        // WordPress headers must be sent BEFORE any output is generated
+        ob_start();
         
-        // Initialize database with proper schema and dependency order
-        $db_result = self::initialize_database();
-        
-        // Set default options
-        self::set_default_options();
-        
-        // Schedule WP-Cron events
-        self::schedule_events();
-        
-        // Flush rewrite rules
-        flush_rewrite_rules();
-        
-        // Log activation
-        error_log('✓ EduBot Pro activated successfully. Version: ' . EDUBOT_PRO_VERSION);
-        if (!empty($db_result['errors'])) {
-            error_log('⚠ Activation warnings: ' . implode('; ', $db_result['errors']));
+        try {
+            // Initialize database with proper schema and dependency order
+            // This replaces the old create_tables() - we only create tables once
+            $db_result = self::initialize_database();
+            
+            // Set default options
+            self::set_default_options();
+            
+            // Schedule WP-Cron events
+            self::schedule_events();
+            
+            // Flush rewrite rules
+            flush_rewrite_rules();
+            
+            // Log activation
+            error_log('✓ EduBot Pro activated successfully. Version: ' . EDUBOT_PRO_VERSION);
+            if (!empty($db_result['errors'])) {
+                error_log('⚠ Activation warnings: ' . implode('; ', $db_result['errors']));
+            }
+        } catch (Exception $e) {
+            error_log('✗ EduBot Pro activation error: ' . $e->getMessage());
+        } finally {
+            // CRITICAL: Discard any output that was buffered
+            // This prevents "headers already sent" errors
+            ob_end_clean();
         }
     }
 
@@ -136,6 +146,17 @@ class EduBot_Activator {
                 }
             }
 
+            // 9. Applications (For storing enquiry applications)
+            $applications = $wpdb->prefix . 'edubot_applications';
+            if (!self::table_exists($applications)) {
+                $sql = self::sql_applications();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "applications: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'applications';
+                }
+            }
+
         } catch (Exception $e) {
             $errors[] = "Exception: " . $e->getMessage();
         }
@@ -185,7 +206,7 @@ class EduBot_Activator {
             whatsapp_sent TINYINT(1) DEFAULT 0,
             email_sent TINYINT(1) DEFAULT 0,
             sms_sent TINYINT(1) DEFAULT 0,
-            enquiry_source VARCHAR(100),
+            source VARCHAR(100),
             status VARCHAR(50) DEFAULT 'pending',
             conversion_value DECIMAL(10,2),
             notes LONGTEXT,
@@ -195,7 +216,7 @@ class EduBot_Activator {
             KEY idx_email (email),
             KEY idx_phone (phone),
             KEY idx_status (status),
-            KEY idx_source (enquiry_source),
+            KEY idx_source (source),
             KEY idx_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;";
     }
@@ -381,6 +402,41 @@ class EduBot_Activator {
             KEY idx_level (level),
             KEY idx_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;";
+    }
+
+    /**
+     * SQL: Applications table (For storing enquiry applications)
+     */
+    private static function sql_applications() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_applications';
+        $charset_collate = $wpdb->get_charset_collate();
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id BIGINT(20) NOT NULL AUTO_INCREMENT,
+            site_id BIGINT(20) NOT NULL,
+            application_number VARCHAR(50) NOT NULL,
+            student_data LONGTEXT NOT NULL,
+            custom_fields_data LONGTEXT,
+            conversation_log LONGTEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            source VARCHAR(50) DEFAULT 'chatbot',
+            ip_address VARCHAR(45),
+            user_agent TEXT,
+            utm_data LONGTEXT,
+            whatsapp_sent TINYINT(1) DEFAULT 0,
+            email_sent TINYINT(1) DEFAULT 0,
+            sms_sent TINYINT(1) DEFAULT 0,
+            follow_up_scheduled DATETIME,
+            assigned_to BIGINT(20),
+            priority VARCHAR(20) DEFAULT 'normal',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY application_number (application_number),
+            KEY site_id (site_id),
+            KEY status (status),
+            KEY created_at (created_at)
+        ) $charset_collate;";
     }
     
     /**
