@@ -123,9 +123,18 @@ class EduBot_Workflow_Manager {
             }
         }
         
-        // Extract grade
+        // Extract grade (with or without "grade"/"class" prefix)
         if (preg_match('/\b(?:grade|class)\s*(\d+|nursery|pp1|pp2|lkg|ukg|pre-?kg)\b/i', $message, $matches)) {
             $info['grade'] = ucwords(strtolower($matches[1]));
+        } elseif (preg_match('/\b(nursery|pp1|pp2|lkg|ukg|pre-?kg)\b/i', $message, $matches)) {
+            // Also match standalone pre-primary grades
+            $info['grade'] = strtoupper($matches[1]);
+        } elseif (preg_match('/\b(\d{1,2})(?:th|st|nd|rd)?\b/i', $message, $matches)) {
+            // Match standalone numbers like "1", "5", "10th"
+            $grade_num = intval($matches[1]);
+            if ($grade_num >= 1 && $grade_num <= 12) {
+                $info['grade'] = 'Grade ' . $grade_num;
+            }
         }
         
         // Extract board
