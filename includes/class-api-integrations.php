@@ -883,10 +883,13 @@ class EduBot_API_Integrations {
 
     /**
      * Send email
+     * Now uses wp_edubot_api_integrations table with fallback to WordPress options
      */
     public function send_email($to, $subject, $message, $headers = array()) {
-        // Get email provider from WordPress options
-        $email_provider = get_option('edubot_email_provider', '');
+        // Get API settings from table (with fallback to options)
+        $api_settings = EduBot_API_Migration::get_api_settings();
+        
+        $email_provider = $api_settings['email_provider'] ?? '';
         
         // If no provider set, try to get from school config API keys
         if (empty($email_provider)) {
@@ -899,11 +902,11 @@ class EduBot_API_Integrations {
             return wp_mail($to, $subject, $message, $headers);
         }
 
-        // Build API keys array from WordPress options
+        // Build API keys array from table (or fallback to options)
         $api_keys = array(
-            'email_api_key' => get_option('edubot_email_api_key', ''),
-            'email_from_address' => get_option('edubot_email_from_address', ''),
-            'email_from_name' => get_option('edubot_email_from_name', '')
+            'email_api_key' => $api_settings['email_api_key'] ?? '',
+            'email_from_address' => $api_settings['email_from_address'] ?? '',
+            'email_from_name' => $api_settings['email_from_name'] ?? ''
         );
 
         switch ($email_provider) {
@@ -1088,5 +1091,178 @@ class EduBot_API_Integrations {
         }
 
         return true;
+    }
+
+    /**
+     * Validate email using AI
+     *
+     * @param string $email The email to validate
+     * @return array Array with 'valid' boolean and 'corrected' email if applicable
+     */
+    public function validate_email_with_ai($email) {
+        $api_keys = $this->school_config->get_api_keys();
+
+        if (empty($api_keys['openai_key'])) {
+            // Fallback to basic validation if AI not available
+            return array(
+                'valid' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
+                'corrected' => null,
+                'method' => 'regex'
+            );
+        }
+
+        $prompt = "Analyze this email input: '{$email}'\n\n" .
+                 "Task: Determine if this is a valid email address or if the user made a typo.\n\n" .
+                 "Common errors to detect:\n" .
+                 "- Missing @ symbol (e.g., 'emailgmail.com' should be 'email@gmail.com')\n" .
+                 "- Wrong symbol instead of @ (e.g., '%', 'at', '#')\n" .
+                 "- Spacing issues\n" .
+                 "- Domain typos (e.g., 'gmial.com' should be 'gmail.com')\n\n" .
+                 "Respond in this EXACT JSON format only:\n" .
+                 "{\"valid\": true/false, \"corrected\": \"corrected@email.com\" or null, \"issue\": \"description of issue\" or null}\n\n" .
+                 "Examples:\n" .
+                 "Input: 'prasadmasinagmail.com' → {\"valid\": false, \"corrected\": \"prasadmasina@gmail.com\", \"issue\": \"Missing @ symbol\"}\n" .
+                 "Input: 'prasad%gmail.com' → {\"valid\": false, \"corrected\": \"prasad@gmail.com\", \"issue\": \"Wrong symbol % instead of @\"}\n" .
+                 "Input: 'test@gmail.com' → {\"valid\": true, \"corrected\": null, \"issue\": null}";
+
+        $config = $this->school_config->get_config();
+        $model = isset($config['chatbot_settings']['ai_model']) ?
+            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+
+        $data = array(
+            'model' => $model,
+            'messages' => array(
+                array(
+                    'role' => 'system',
+                    'content' => 'You are an email validation expert. Always respond with valid JSON only.'
+                ),
+                array(
+                    'role' => 'user',
+                    'content' => $prompt
+                )
+            ),
+            'max_tokens' => 150,
+            'temperature' => 0.1
+        );
+
+        $response = $this->make_openai_request($data, $api_keys['openai_key']);
+
+        if (is_wp_error($response)) {
+            // Fallback to regex validation
+            return array(
+                'valid' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
+                'corrected' => null,
+                'method' => 'regex_fallback'
+            );
+        }
+
+        if ($response && isset($response['choices'][0]['message']['content'])) {
+            $ai_response = trim($response['choices'][0]['message']['content']);
+
+            // Parse JSON response
+            $validation_result = json_decode($ai_response, true);
+
+            if ($validation_result && isset($validation_result['valid'])) {
+                $validation_result['method'] = 'ai';
+                return $validation_result;
+            }
+        }
+
+        // Fallback if AI response is invalid
+        return array(
+            'valid' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
+            'corrected' => null,
+            'method' => 'regex_fallback'
+        );
+    }
+
+    /**
+     * Validate phone number using AI
+     *
+     * @param string $phone The phone number to validate
+     * @return array Array with 'valid' boolean and 'corrected' phone if applicable
+     */
+    public function validate_phone_with_ai($phone) {
+        $api_keys = $this->school_config->get_api_keys();
+
+        if (empty($api_keys['openai_key'])) {
+            // Fallback to basic validation
+            $phone_clean = preg_replace('/[^\d+]/', '', $phone);
+            $valid = preg_match('/^(\+?91)?[6-9]\d{9}$/', $phone_clean);
+            return array(
+                'valid' => $valid,
+                'corrected' => null,
+                'method' => 'regex'
+            );
+        }
+
+        $prompt = "Analyze this phone input: '{$phone}'\n\n" .
+                 "Task: Determine if this is a valid Indian mobile number (10 digits, starting with 6-9).\n\n" .
+                 "Common errors to detect:\n" .
+                 "- Missing digits (e.g., 9 digits instead of 10)\n" .
+                 "- Extra digits\n" .
+                 "- Wrong starting digit (should be 6, 7, 8, or 9)\n" .
+                 "- Alphanumeric characters mixed in\n" .
+                 "- Spacing or formatting issues\n\n" .
+                 "Respond in this EXACT JSON format only:\n" .
+                 "{\"valid\": true/false, \"corrected\": \"+919876543210\" or null, \"issue\": \"description\" or null, \"digit_count\": number}\n\n" .
+                 "Examples:\n" .
+                 "Input: '9866133566' → {\"valid\": true, \"corrected\": \"+919866133566\", \"issue\": null, \"digit_count\": 10}\n" .
+                 "Input: '986613356' → {\"valid\": false, \"corrected\": null, \"issue\": \"Only 9 digits, needs 10\", \"digit_count\": 9}\n" .
+                 "Input: '5866133566' → {\"valid\": false, \"corrected\": null, \"issue\": \"Must start with 6, 7, 8, or 9\", \"digit_count\": 10}";
+
+        $config = $this->school_config->get_config();
+        $model = isset($config['chatbot_settings']['ai_model']) ?
+            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+
+        $data = array(
+            'model' => $model,
+            'messages' => array(
+                array(
+                    'role' => 'system',
+                    'content' => 'You are a phone number validation expert for Indian mobile numbers. Always respond with valid JSON only.'
+                ),
+                array(
+                    'role' => 'user',
+                    'content' => $prompt
+                )
+            ),
+            'max_tokens' => 150,
+            'temperature' => 0.1
+        );
+
+        $response = $this->make_openai_request($data, $api_keys['openai_key']);
+
+        if (is_wp_error($response)) {
+            // Fallback to regex validation
+            $phone_clean = preg_replace('/[^\d+]/', '', $phone);
+            $valid = preg_match('/^(\+?91)?[6-9]\d{9}$/', $phone_clean);
+            return array(
+                'valid' => $valid,
+                'corrected' => null,
+                'method' => 'regex_fallback'
+            );
+        }
+
+        if ($response && isset($response['choices'][0]['message']['content'])) {
+            $ai_response = trim($response['choices'][0]['message']['content']);
+
+            // Parse JSON response
+            $validation_result = json_decode($ai_response, true);
+
+            if ($validation_result && isset($validation_result['valid'])) {
+                $validation_result['method'] = 'ai';
+                return $validation_result;
+            }
+        }
+
+        // Fallback if AI response is invalid
+        $phone_clean = preg_replace('/[^\d+]/', '', $phone);
+        $valid = preg_match('/^(\+?91)?[6-9]\d{9}$/', $phone_clean);
+        return array(
+            'valid' => $valid,
+            'corrected' => null,
+            'method' => 'regex_fallback'
+        );
     }
 }

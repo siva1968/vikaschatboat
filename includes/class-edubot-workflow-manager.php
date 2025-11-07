@@ -194,20 +194,47 @@ class EduBot_Workflow_Manager {
             return $this->get_next_step_message($session_id);
         }
 
-        // Check if entire message is an email
-        if (filter_var(trim($message), FILTER_VALIDATE_EMAIL)) {
-            $this->session_manager->update_session_data($session_id, 'email', strtolower(trim($message)));
+        // Use AI-powered email validation
+        $api_integrations = new EduBot_API_Integrations();
+        $validation = $api_integrations->validate_email_with_ai(trim($message));
+
+        if ($validation['valid']) {
+            // Email is valid (or AI corrected it)
+            $email_to_save = !empty($validation['corrected']) ? $validation['corrected'] : strtolower(trim($message));
+            $this->session_manager->update_session_data($session_id, 'email', $email_to_save);
+
+            // Show confirmation if AI corrected the email
+            if (!empty($validation['corrected']) && $validation['corrected'] !== trim($message)) {
+                $session_data = $this->session_manager->get_session($session_id);
+                $progress = $this->get_progress_message($session_data['data'] ?? array());
+                return $progress . "\n\n💡 **I corrected your email to:** " . $validation['corrected'] . "\n\n" .
+                       "Proceeding to next step...\n\n" .
+                       $this->get_next_step_message($session_id);
+            }
+
             return $this->get_next_step_message($session_id);
         }
 
-        // Email validation failed - show clear error
-        return "❌ **Invalid Email Address**\n\n" .
-               "You entered: " . esc_html(trim($message)) . "\n\n" .
-               "📧 Please provide a valid email address in the format:\n" .
-               "• example@gmail.com\n" .
-               "• parent@email.com\n" .
-               "• name@domain.com\n\n" .
-               "This email will be used to send admission updates and confirmations.";
+        // Email validation failed - show clear error with AI insights
+        $error_message = "❌ **Invalid Email Address**\n\n" .
+                        "You entered: " . esc_html(trim($message)) . "\n\n";
+
+        if (!empty($validation['issue'])) {
+            $error_message .= "**Issue detected:** " . esc_html($validation['issue']) . "\n\n";
+        }
+
+        if (!empty($validation['corrected'])) {
+            $error_message .= "💡 **Did you mean:** " . esc_html($validation['corrected']) . "?\n\n" .
+                             "Reply with the corrected email or enter a different one.\n\n";
+        }
+
+        $error_message .= "📧 Please provide a valid email address in the format:\n" .
+                         "• example@gmail.com\n" .
+                         "• parent@email.com\n" .
+                         "• name@domain.com\n\n" .
+                         "This email will be used to send admission updates and confirmations.";
+
+        return $error_message;
     }
     
     /**
@@ -219,27 +246,52 @@ class EduBot_Workflow_Manager {
             return $this->get_next_step_message($session_id);
         }
 
-        // Check if entire message is a phone number
-        $phone_clean = preg_replace('/[^\d+]/', '', trim($message));
-        if (preg_match('/^(\+?91)?[6-9]\d{9}$/', $phone_clean)) {
+        // Use AI-powered phone validation
+        $api_integrations = new EduBot_API_Integrations();
+        $validation = $api_integrations->validate_phone_with_ai(trim($message));
+
+        if ($validation['valid']) {
+            // Phone is valid (or AI corrected it)
+            $phone_to_save = !empty($validation['corrected']) ? $validation['corrected'] : trim($message);
+
+            // Ensure +91 prefix
+            $phone_clean = preg_replace('/[^\d+]/', '', $phone_to_save);
             if (strlen($phone_clean) == 10) {
                 $phone_clean = '+91' . $phone_clean;
             }
+
             $this->session_manager->update_session_data($session_id, 'phone', $phone_clean);
+
+            // Show confirmation if AI corrected the phone
+            if (!empty($validation['corrected']) && $validation['corrected'] !== trim($message)) {
+                $session_data = $this->session_manager->get_session($session_id);
+                $progress = $this->get_progress_message($session_data['data'] ?? array());
+                return $progress . "\n\n💡 **I formatted your phone number to:** " . $phone_clean . "\n\n" .
+                       "Proceeding to next step...\n\n" .
+                       $this->get_next_step_message($session_id);
+            }
+
             return $this->get_next_step_message($session_id);
         }
 
-        // Phone validation failed - show clear error
+        // Phone validation failed - show clear error with AI insights
         $phone_display = trim($message);
-        $phone_length = strlen(preg_replace('/[^\d]/', '', $phone_display));
+        $digit_count = isset($validation['digit_count']) ? $validation['digit_count'] : strlen(preg_replace('/[^\d]/', '', $phone_display));
 
-        return "❌ **Invalid Phone Number**\n\n" .
-               "You entered: " . esc_html($phone_display) . " ({$phone_length} digits)\n\n" .
-               "📱 Please provide a valid 10-digit Indian mobile number:\n" .
-               "• Must start with 6, 7, 8, or 9\n" .
-               "• Example: 9876543210\n" .
-               "• Example: +919876543210\n\n" .
-               "This will be used for admission updates and callbacks.";
+        $error_message = "❌ **Invalid Phone Number**\n\n" .
+                        "You entered: " . esc_html($phone_display) . " ({$digit_count} digits)\n\n";
+
+        if (!empty($validation['issue'])) {
+            $error_message .= "**Issue detected:** " . esc_html($validation['issue']) . "\n\n";
+        }
+
+        $error_message .= "📱 Please provide a valid 10-digit Indian mobile number:\n" .
+                         "• Must start with 6, 7, 8, or 9\n" .
+                         "• Example: 9876543210\n" .
+                         "• Example: +919876543210\n\n" .
+                         "This will be used for admission updates and callbacks.";
+
+        return $error_message;
     }
     
     /**
