@@ -80,14 +80,14 @@ class EduBot_Workflow_Manager {
      */
     private function determine_current_step($session_data) {
         $collected = $session_data['data'] ?? array();
-        
+
         if (empty($collected['student_name'])) return 'collect_name';
-        if (empty($collected['email'])) return 'collect_email';
         if (empty($collected['phone'])) return 'collect_phone';
+        if (empty($collected['email'])) return 'collect_email';
         if (empty($collected['grade'])) return 'collect_grade';
         if (empty($collected['board'])) return 'collect_board';
         if (empty($collected['date_of_birth'])) return 'collect_dob';
-        
+
         return 'ready_to_submit';
     }
     
@@ -112,7 +112,11 @@ class EduBot_Workflow_Manager {
         }
         
         // Extract name (simple pattern for student names)
-        if (preg_match('/(?:name\s*:?\s*)?([A-Za-z\s\.]{2,30})(?:\s|$)/i', $message, $matches)) {
+        // Don't extract name if message looks like an email (with or without @)
+        $looks_like_email = strpos($message, '@') !== false ||
+                           preg_match('/\b[a-z0-9._%+-]+(?:@|at)?[a-z0-9.-]+\.(com|in|org|net|edu|co)\b/i', $message);
+
+        if (!$looks_like_email && preg_match('/(?:name\s*:?\s*)?([A-Za-z\s\.]{2,30})(?:\s|$)/i', $message, $matches)) {
             $name = trim($matches[1]);
             if (strlen($name) >= 2 && strlen($name) <= 30 && !preg_match('/\b(grade|class|email|phone)\b/i', $name)) {
                 $info['name'] = ucwords(strtolower($name));
@@ -181,24 +185,29 @@ class EduBot_Workflow_Manager {
     private function handle_email_collection($message, $session_id, $extracted_info) {
         if (!empty($extracted_info['email'])) {
             $this->session_manager->update_session_data($session_id, 'email', $extracted_info['email']);
-            
+
             // Check if phone was also provided
             if (!empty($extracted_info['phone'])) {
                 $this->session_manager->update_session_data($session_id, 'phone', $extracted_info['phone']);
             }
-            
+
             return $this->get_next_step_message($session_id);
         }
-        
+
         // Check if entire message is an email
         if (filter_var(trim($message), FILTER_VALIDATE_EMAIL)) {
             $this->session_manager->update_session_data($session_id, 'email', strtolower(trim($message)));
             return $this->get_next_step_message($session_id);
         }
-        
-        return "📧 **Please provide your email address:**\n\n" .
-               "Example: parent@email.com\n\n" .
-               "This will be used to send admission updates and confirmations.";
+
+        // Email validation failed - show clear error
+        return "❌ **Invalid Email Address**\n\n" .
+               "You entered: " . esc_html(trim($message)) . "\n\n" .
+               "📧 Please provide a valid email address in the format:\n" .
+               "• example@gmail.com\n" .
+               "• parent@email.com\n" .
+               "• name@domain.com\n\n" .
+               "This email will be used to send admission updates and confirmations.";
     }
     
     /**
@@ -209,7 +218,7 @@ class EduBot_Workflow_Manager {
             $this->session_manager->update_session_data($session_id, 'phone', $extracted_info['phone']);
             return $this->get_next_step_message($session_id);
         }
-        
+
         // Check if entire message is a phone number
         $phone_clean = preg_replace('/[^\d+]/', '', trim($message));
         if (preg_match('/^(\+?91)?[6-9]\d{9}$/', $phone_clean)) {
@@ -219,9 +228,17 @@ class EduBot_Workflow_Manager {
             $this->session_manager->update_session_data($session_id, 'phone', $phone_clean);
             return $this->get_next_step_message($session_id);
         }
-        
-        return "📱 **Please provide your phone number:**\n\n" .
-               "Example: 9876543210\n\n" .
+
+        // Phone validation failed - show clear error
+        $phone_display = trim($message);
+        $phone_length = strlen(preg_replace('/[^\d]/', '', $phone_display));
+
+        return "❌ **Invalid Phone Number**\n\n" .
+               "You entered: " . esc_html($phone_display) . " ({$phone_length} digits)\n\n" .
+               "📱 Please provide a valid 10-digit Indian mobile number:\n" .
+               "• Must start with 6, 7, 8, or 9\n" .
+               "• Example: 9876543210\n" .
+               "• Example: +919876543210\n\n" .
                "This will be used for admission updates and callbacks.";
     }
     
@@ -300,13 +317,13 @@ class EduBot_Workflow_Manager {
         $progress = $this->get_progress_message($collected);
         
         switch ($next_step) {
-            case 'collect_email':
-                return $progress . "\n📧 **Great! Now I need your email address:**\n\n" .
-                       "Example: parent@email.com";
-                       
             case 'collect_phone':
-                return $progress . "\n📱 **Perfect! Now I need your phone number:**\n\n" .
+                return $progress . "\n📱 **Great! Now I need your phone number:**\n\n" .
                        "Example: 9876543210";
+
+            case 'collect_email':
+                return $progress . "\n📧 **Perfect! Now I need your email address:**\n\n" .
+                       "Example: parent@email.com";
                        
             case 'collect_grade':
                 return $progress . "\n🎓 **Excellent! Which grade/class are you seeking admission for?**\n\n" .
