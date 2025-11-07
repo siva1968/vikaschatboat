@@ -28,25 +28,48 @@ if (!defined('ABSPATH')) {
                         <th scope="row">School Logo</th>
                         <td>
                             <div class="edubot-logo-upload">
-                                <input type="hidden" name="edubot_school_logo" id="edubot_school_logo" value="<?php echo esc_attr(get_option('edubot_school_logo', '')); ?>" />
-                                <div class="logo-preview">
+                                <?php
+                                $logo_url = get_option('edubot_school_logo', '');
+                                ?>
+                                <div class="logo-preview" id="logo-preview">
                                     <?php
-                                    $logo_url = get_option('edubot_school_logo', '');
                                     if ($logo_url) {
-                                        echo '<img src="' . esc_url($logo_url) . '" style="max-width: 200px; max-height: 100px; display: block; margin-bottom: 10px;" />';
+                                        echo '<img id="logo-img" src="' . esc_url($logo_url) . '" style="max-width: 200px; max-height: 100px; display: block; margin-bottom: 10px;" />';
+                                    } else {
+                                        echo '<img id="logo-img" style="max-width: 200px; max-height: 100px; display: none; margin-bottom: 10px;" />';
                                     }
                                     ?>
                                 </div>
+                                
+                                <!-- Direct URL input -->
+                                <div style="margin-bottom: 10px;">
+                                    <input
+                                        type="text"
+                                        id="edubot_school_logo"
+                                        name="edubot_school_logo"
+                                        value="<?php echo esc_attr($logo_url); ?>"
+                                        class="regular-text"
+                                        placeholder="https://example.com/logo.png or /wp-content/uploads/logo.png"
+                                        pattern="(https?://.*|/.*)"
+                                        title="Enter a full URL (https://...) or relative path (/wp-content/...)"
+                                    />
+                                    <p class="description">
+                                        Enter absolute URL (https://domain.com/logo.png) or relative path (/wp-content/uploads/logo.png)
+                                    </p>
+                                </div>
+                                
+                                <!-- Media picker button (optional) -->
                                 <button type="button" class="button edubot-upload-logo-btn">
-                                    <?php echo $logo_url ? 'Change Logo' : 'Select Logo'; ?>
+                                    Browse Media Library
                                 </button>
                                 <?php if ($logo_url): ?>
                                     <button type="button" class="button edubot-remove-logo-btn" style="margin-left: 10px;">Remove Logo</button>
                                 <?php endif; ?>
+                                
                                 <p class="description">
-                                    Upload or select your school logo from the media library. 
+                                    Enter your school logo URL. 
                                     Accepted formats: JPG, PNG, SVG, GIF (Max 2MB). 
-                                    <br><small>Examples: /wp-content/uploads/school-logo.png or https://example.com/logo.png</small>
+                                    <br><small>Examples: https://example.com/logo.png or /wp-content/uploads/school-logo.png</small>
                                 </p>
                             </div>
                         </td>
