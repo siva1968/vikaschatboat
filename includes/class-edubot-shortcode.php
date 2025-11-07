@@ -1318,10 +1318,19 @@ class EduBot_Shortcode {
                 error_log('EduBot Debug: Using provided session ID: ' . $session_id);
             }
 
-            // Initialize workflow manager
+            // Initialize workflow manager with all dependencies
+            if (!class_exists('EduBot_Session_Manager')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-session-manager.php';
+            }
+            if (!class_exists('EduBot_API_Integrations')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-school-config.php';
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-security-manager.php';
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
+            }
             if (!class_exists('EduBot_Workflow_Manager')) {
                 require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-workflow-manager.php';
             }
+
             $workflow_manager = new EduBot_Workflow_Manager();
 
             // Process message through workflow manager (includes AI validation)
