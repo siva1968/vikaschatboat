@@ -1062,10 +1062,24 @@ class EduBot_Shortcode {
      * Handle chatbot response with enhanced security
      */
     public function handle_chatbot_response() {
-        // Simplified nonce verification - more forgiving for development
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_nonce')) {
-            error_log('EduBot: Nonce verification failed');
-            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page.'));
+        // Robust nonce verification with detailed logging
+        $nonce = $_POST['nonce'] ?? '';
+        
+        // Log nonce details for debugging
+        error_log('EduBot: AJAX request received');
+        error_log('EduBot: Nonce provided: ' . (!empty($nonce) ? 'Yes (length: ' . strlen($nonce) . ')' : 'No'));
+        
+        // Verify nonce
+        $nonce_verified = wp_verify_nonce($nonce, 'edubot_nonce');
+        error_log('EduBot: Nonce verification result: ' . ($nonce_verified ? 'Valid' : 'Invalid'));
+        
+        if (!$nonce_verified) {
+            error_log('EduBot: Nonce verification failed - possible causes: expired, invalid action, or missing nonce');
+            // Send error but be helpful
+            wp_send_json_error(array(
+                'message' => 'Security check failed. Please refresh the page and try again.',
+                'code' => 'nonce_verification_failed'
+            ));
             return;
         }
 
@@ -1114,7 +1128,8 @@ class EduBot_Shortcode {
                     'action' => $response['action'] ?? 'info',
                     'session_data' => $response['session_data'] ?? array(),
                     'session_id' => $session_id,
-                    'quick_actions' => $response['quick_actions'] ?? array()
+                    'quick_actions' => $response['quick_actions'] ?? array(),
+                    'nonce' => wp_create_nonce('edubot_nonce') // Fresh nonce for next request
                 );
                 error_log("EduBot AJAX: Sending array response: " . json_encode($final_response));
                 wp_send_json_success($final_response);
@@ -1125,7 +1140,8 @@ class EduBot_Shortcode {
                     'action' => 'info',
                     'session_data' => array(),
                     'session_id' => $session_id,
-                    'quick_actions' => array()  // Ensure quick_actions is always present
+                    'quick_actions' => array(),  // Ensure quick_actions is always present
+                    'nonce' => wp_create_nonce('edubot_nonce') // Fresh nonce for next request
                 );
                 error_log("EduBot AJAX: Sending string response: " . json_encode($final_response));
                 wp_send_json_success($final_response);
@@ -1278,18 +1294,22 @@ class EduBot_Shortcode {
             }
         }
         
-        // Check if this message contains personal information for admission enquiry
+        // Check if this is an admission-related message or session
+        // Use the new AI-powered Workflow Manager for better validation and UX
+        $existing_session = !empty($session_id) ? $this->get_conversation_session($session_id) : null;
+        $is_admission_flow = !empty($existing_session) && isset($existing_session['flow_type']) && $existing_session['flow_type'] === 'admission';
+
         $personal_info = $this->parse_personal_info($message);
-        if (!empty($personal_info) && (
-            !empty($personal_info['name']) || 
-            !empty($personal_info['email']) || 
+        $has_personal_info = !empty($personal_info) && (
+            !empty($personal_info['name']) ||
+            !empty($personal_info['email']) ||
             !empty($personal_info['phone'])
-        )) {
-            error_log('EduBot: Message contains personal info, routing to admission flow');
-            error_log('EduBot Debug: Personal info details - Name: ' . ($personal_info['name'] ?? 'none') . 
-                     ', Email: ' . ($personal_info['email'] ?? 'none') . 
-                     ', Phone: ' . ($personal_info['phone'] ?? 'none'));
-            
+        );
+
+        // Route to AI-powered workflow manager if admission-related
+        if ($is_admission_flow || $has_personal_info) {
+            error_log('EduBot: Routing to AI-powered Workflow Manager');
+
             // CRITICAL FIX: Use existing session ID if provided, only create new if empty
             if (empty($session_id)) {
                 $session_id = 'sess_' . uniqid();  // Create fresh session only if none provided
@@ -1297,28 +1317,24 @@ class EduBot_Shortcode {
             } else {
                 error_log('EduBot Debug: Using provided session ID: ' . $session_id);
             }
-            
-            // Initialize or ensure session exists
-            $existing_session = $this->get_conversation_session($session_id);
-            if (!$existing_session || $this->is_session_completed($session_id)) {
-                error_log('EduBot Debug: Initializing session for personal info collection');
-                $this->init_conversation_session($session_id, 'admission');
+
+            // Initialize workflow manager
+            if (!class_exists('EduBot_Workflow_Manager')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-workflow-manager.php';
             }
-            
-            $result = $this->handle_admission_flow_safe($message, 'admission', $session_id);
-            
-            error_log('EduBot Debug: handle_admission_flow_safe returned: ' . 
-                     (is_array($result) ? json_encode($result) : substr($result, 0, 100)));
-            
-            // Ensure we return the proper array format expected by the caller
-            if (is_string($result)) {
-                return array(
-                    'response' => $result,
-                    'action' => 'personal_info_processed',
-                    'session_data' => array('session_id' => $session_id)
-                );
-            }
-            return $result;
+            $workflow_manager = new EduBot_Workflow_Manager();
+
+            // Process message through workflow manager (includes AI validation)
+            $workflow_response = $workflow_manager->process_user_input($message, $session_id);
+
+            error_log('EduBot Debug: Workflow Manager response: ' . substr($workflow_response, 0, 200));
+
+            // Return formatted response
+            return array(
+                'response' => $workflow_response,
+                'action' => 'workflow_processed',
+                'session_data' => array('session_id' => $session_id)
+            );
         }
         
         // Check if this message contains academic information for existing session
@@ -1539,9 +1555,9 @@ class EduBot_Shortcode {
             $additional_info = $this->parse_additional_info($message);
             error_log("EduBot: Additional info parsed: " . print_r($additional_info, true));
             
-            // Check for validation errors first
+            // Check for validation errors first - return error immediately without "❌" prefix (already included in error message)
             if (!empty($additional_info['error'])) {
-                return "❌ " . $additional_info['error'];
+                return $additional_info['error'];
             }
             
             // Store collected DOB if valid
@@ -1598,6 +1614,43 @@ class EduBot_Shortcode {
         $personal_info = $this->parse_personal_info($message);
         error_log("EduBot Debug: Parsed personal info: " . print_r($personal_info, true));
         
+        // CRITICAL: Validate phone number if it was extracted AND is marked invalid
+        // This happens regardless of whether we have other fields
+        if (!empty($personal_info['phone']) && !empty($personal_info['phone_invalid'])) {
+            $phone_digit_count = strlen(preg_replace('/[^\d]/', '', $personal_info['phone']));
+            
+            // Check if phone number is actually valid (10 digits starting with 6-9)
+            $phone_digits_only = preg_replace('/[^\d]/', '', $personal_info['phone']);
+            if ($phone_digit_count === 10 && preg_match('/^[6-9]/', $phone_digits_only)) {
+                // Actually valid - just accept it (don't show error)
+                error_log("EduBot: Phone is actually valid despite being marked invalid: " . $personal_info['phone']);
+                // Don't return error - let it proceed to be saved
+            } else {
+                // Actually invalid - ALWAYS show error immediately
+                $digit_str = $phone_digit_count === 1 ? 'digit' : 'digits';
+                
+                // Check if phone contains letters (alphanumeric error)
+                if (preg_match('/[a-zA-Z]/', $personal_info['phone'])) {
+                    return "❌ **Invalid Phone Number - Contains Letters**\n\n" .
+                           "You entered: {$message}\n\n" .
+                           "⚠️ Phone numbers should only contain **digits**, not letters.\n\n" .
+                           "Please provide the complete 10-digit phone number.";
+                }
+                
+                // Check if it's an incomplete number (less than 10 digits)
+                if ($phone_digit_count < 10) {
+                    return "❌ **Incomplete Phone Number**\n\n" .
+                           "You entered: {$message} ({$phone_digit_count} {$digit_str})\n\n" .
+                           "Please provide the complete 10-digit phone number.";
+                }
+                
+                // Other invalid formats (too many digits or doesn't start with 6-9)
+                return "❌ **Invalid Phone Number**\n\n" .
+                       "You entered: {$message} ({$phone_digit_count} {$digit_str})\n\n" .
+                       "Please provide the complete 10-digit phone number.";
+            }
+        }
+        
         // Session data already retrieved above
         error_log("EduBot Debug: Current collected data: " . print_r($collected_data, true));
         
@@ -1642,9 +1695,24 @@ class EduBot_Shortcode {
                 $this->update_conversation_data($session_id, 'email', $personal_info['email']);
                 error_log("EduBot Debug: Stored email: " . $personal_info['email']);
             }
-            if (!empty($personal_info['phone']) && preg_match('/^\+?[\d\s-]{10,15}$/', $personal_info['phone'])) {
-                $this->update_conversation_data($session_id, 'phone', $personal_info['phone']);
-                error_log("EduBot Debug: Stored phone: " . $personal_info['phone']);
+            // Store phone if it was extracted and NOT marked as invalid
+            if (!empty($personal_info['phone'])) {
+                if (empty($personal_info['phone_invalid'])) {
+                    // Definitely valid - store it
+                    $this->update_conversation_data($session_id, 'phone', $personal_info['phone']);
+                    error_log("EduBot Debug: Stored valid phone: " . $personal_info['phone']);
+                } else {
+                    // Marked as invalid - check if it's actually valid before storing
+                    $phone_digit_count = strlen(preg_replace('/[^\d]/', '', $personal_info['phone']));
+                    $phone_digits_only = preg_replace('/[^\d]/', '', $personal_info['phone']);
+                    if ($phone_digit_count === 10 && preg_match('/^[6-9]/', $phone_digits_only)) {
+                        // Actually valid - store it anyway
+                        $this->update_conversation_data($session_id, 'phone', $personal_info['phone']);
+                        error_log("EduBot Debug: Stored phone marked invalid but actually valid: " . $personal_info['phone']);
+                    } else {
+                        error_log("EduBot Debug: Phone marked invalid and not storing: " . $personal_info['phone']);
+                    }
+                }
             }
             
             // Always refresh session data to get the latest complete data
@@ -1656,14 +1724,63 @@ class EduBot_Shortcode {
                 empty($personal_info['email']) && 
                 empty($personal_info['phone'])) {
                 
-                error_log("EduBot Debug: Name-only input detected, asking for contact details");
-                return "✅ **Student Name: {$personal_info['name']}**\n\n" .
-                       "Great! Now I need your contact details:\n\n" .
-                       "📧 **Your Email Address**\n" .
-                       "📱 **Your Phone Number**\n\n" .
-                       "You can enter them like:\n" .
-                       "Email: parent@email.com, Phone: 9876543210\n\n" .
-                       "Or just enter your email address first.";
+                error_log("EduBot Debug: Name-only input detected, checking if we need more info");
+                
+                // Store the name first
+                $this->update_conversation_data($session_id, 'student_name', $personal_info['name']);
+                $session_data = $this->get_conversation_session($session_id);
+                $collected_data = $session_data && isset($session_data['data']) ? $session_data['data'] : array();
+                
+                // Check what's still missing
+                $missing_fields = array();
+                if (empty($collected_data['email'])) $missing_fields[] = "📧 Email Address";
+                if (empty($collected_data['phone'])) $missing_fields[] = "📱 Phone Number";
+                
+                // If we already have email and phone from previous inputs, move to next step
+                if (empty($missing_fields)) {
+                    error_log("EduBot Debug: All contact info already collected, moving to academic info");
+                    $this->update_conversation_data($session_id, 'step', 'academic');
+                    return "✅ **Personal Information Complete!**\n\n" .
+                           "Perfect! I have your contact details:\n" .
+                           "👶 **Student:** {$collected_data['student_name']}\n" .
+                           "📧 **Email:** {$collected_data['email']}\n" .
+                           "📱 **Phone:** {$collected_data['phone']}\n\n" .
+                           "**Step 2: Academic Information** 🎓\n\n" .
+                           "Now, what is your child's current grade?\n" .
+                           "• **Grade 1-12** (e.g., Grade 10)\n" .
+                           "• **Nursery / Play school** (e.g., Nursery, LKG, UKG)\n" .
+                           "• **Homeschooled** or other setup\n\n" .
+                           "Please mention the grade:";
+                }
+                
+                // Build response based on what's still needed
+                $response = "✅ **Student Name: {$personal_info['name']}**\n\n";
+                
+                if (count($missing_fields) === 1) {
+                    // Only one field missing
+                    if (!empty($collected_data['phone'])) {
+                        // We have phone, only need email
+                        $response .= "Great! Now I need your email address:\n\n" .
+                                   "📧 **Your Email Address**\n\n" .
+                                   "Example: parent@email.com";
+                    } else if (!empty($collected_data['email'])) {
+                        // We have email, only need phone
+                        $response .= "Great! Now I need your phone number:\n\n" .
+                                   "📱 **Your Phone Number**\n\n" .
+                                   "Example: 9876543210 or +91 9876543210";
+                    }
+                } else {
+                    // Multiple fields missing (should only be email and phone at this point)
+                    $response .= "Great! Now I need your contact details:\n\n" .
+                               "📧 **Your Email Address**\n" .
+                               "📱 **Your Phone Number**\n\n" .
+                               "You can enter them like:\n" .
+                               "Email: parent@email.com, Phone: 9876543210\n\n" .
+                               "Or just enter your email address first.";
+                }
+                
+                error_log("EduBot Debug: Name-only input detected, asking for missing contact details: " . json_encode($missing_fields));
+                return $response;
             }
             
             // Check what's still needed
@@ -1707,6 +1824,26 @@ class EduBot_Shortcode {
         $academic_info = $this->parse_academic_info($message);
         $session_data = $this->get_conversation_session($session_id);
         $collected_data = $session_data ? $session_data['data'] : array();
+        
+        // FIXED: Validate grade if extracted
+        if (!empty($academic_info['grade'])) {
+            // Check if it's a valid grade
+            if ($academic_info['grade'] === null) {
+                // Invalid grade detected
+                return "❌ **Invalid Grade**\n\n" .
+                       "You entered: {$message}\n\n" .
+                       "We offer admission for:\n" .
+                       "**Pre-Primary:** Nursery, PP1, PP2\n" .
+                       "**Primary:** Grade 1-5\n" .
+                       "**Secondary:** Grade 6-10\n" .
+                       "**Senior Secondary:** Grade 11-12\n\n" .
+                       "Please enter a valid grade like:\n" .
+                       "• Grade 5, CBSE\n" .
+                       "• Nursery\n" .
+                       "• Grade 10, CAIE\n\n" .
+                       "Try again:";
+            }
+        }
         
         // Check if this looks like academic info and we have personal info already
         if (!empty($academic_info) && !empty($collected_data['student_name']) && 
@@ -1831,12 +1968,16 @@ class EduBot_Shortcode {
         }
         
         // Handle simple phone number inputs when we have name and email in session
-        if (preg_match('/^\s*(\+?91|0)?[\s-]?[6-9]\d{9}\s*$/', trim($message)) || 
-            preg_match('/^\s*\d{10}\s*$/', trim($message))) {
+        // FIXED: Accept phone numbers with 8-15 digits, not just strict 10-digit pattern
+        $message_clean = preg_replace('/[^\d+]/', '', trim($message));
+        $phone_digit_count = strlen(preg_replace('/[^\d]/', '', $message_clean));
+        
+        // Check if this looks like a phone number attempt (has at least 8 digits)
+        if ($phone_digit_count >= 8 && $phone_digit_count <= 15) {
             $session_data = $this->get_conversation_session($session_id);
             $collected_data = $session_data ? $session_data['data'] : array();
             
-            error_log("EduBot Debug: Simple phone detected: {$message}");
+            error_log("EduBot Debug: Simple phone detected: {$message} (digits: {$phone_digit_count})");
             error_log("EduBot Debug: Session data for phone: " . print_r($collected_data, true));
             
             if (!empty($collected_data['student_name']) && 
@@ -1846,8 +1987,31 @@ class EduBot_Shortcode {
                 error_log("EduBot: Processing phone input for existing session");
                 
                 $phone = preg_replace('/[^\d+]/', '', trim($message));
-                if (!preg_match('/^\+/', $phone) && strlen($phone) === 10) {
+                
+                // Validate phone number format
+                if (!preg_match('/^\+/', $phone) && $phone_digit_count === 10 && preg_match('/^[6-9]/', $phone)) {
+                    // Valid 10-digit phone starting with 6-9
                     $phone = '+91' . $phone;
+                } elseif (preg_match('/^\+91/', $phone) && $phone_digit_count === 12) {
+                    // Already has +91 prefix
+                    $phone = substr($phone, 1); // Remove + and add it back later
+                    $phone = '+91' . substr($phone, 2);
+                } elseif (preg_match('/^91/', $phone) && $phone_digit_count === 12) {
+                    // Has 91 without +
+                    $phone = '+' . $phone;
+                } elseif ($phone_digit_count === 10 && preg_match('/^[6-9]/', $phone)) {
+                    // Plain 10 digits starting with 6-9
+                    $phone = '+91' . $phone;
+                } else {
+                    // Invalid phone format
+                    $digit_str = $phone_digit_count === 1 ? 'digit' : 'digits';
+                    return "❌ **Invalid Phone Number**\n\n" .
+                           "You entered: {$message} ({$phone_digit_count} {$digit_str})\n\n" .
+                           "📱 Please enter a valid 10-digit mobile number:\n" .
+                           "• **Start with:** 6, 7, 8, or 9\n" .
+                           "• **Format:** 9876543210 or +91 9876543210\n" .
+                           "• **Length:** Exactly 10 digits\n\n" .
+                           "Try again:";
                 }
                 
                 $this->update_conversation_data($session_id, 'phone', $phone);
@@ -1973,9 +2137,9 @@ class EduBot_Shortcode {
                 $additional_info = $this->parse_additional_info($message);
                 error_log("EduBot: DOB parsing result: " . print_r($additional_info, true));
                 
-                // Check for validation errors first
+                // Check for validation errors first - return error immediately (already includes ❌ in error message)
                 if (!empty($additional_info['error'])) {
-                    return "❌ " . $additional_info['error'];
+                    return $additional_info['error'];
                 }
                 
                 // Store collected DOB if valid
@@ -2239,25 +2403,54 @@ class EduBot_Shortcode {
         $message_clean = trim($message);
         $original_message = $message_clean;
         
+        // Initialize phone_invalid flag to false by default
+        $info['phone_invalid'] = false;
+        
         // Try to extract email first
         if (preg_match('/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/', $message_clean, $email_matches)) {
             $info['email'] = $email_matches[0];
             $message_clean = str_replace($email_matches[0], ' ', $message_clean);
         }
         
-        // Try to extract phone number (enhanced patterns)
-        if (preg_match('/(\+?91[\s-]?[6-9]\d{9}|\+91\d{10}|\b[6-9]\d{9}\b)/', $message_clean, $phone_matches)) {
+        // FIRST: Check for mixed alphanumeric phone attempts (e.g., "986612sasad")
+        // These are invalid phone attempts that should be caught
+        if (preg_match('/\b(\d{6,15}[a-zA-Z]+|[a-zA-Z]*\d{6,15})\b/', $message_clean, $alphanumeric_matches)) {
+            // This is a mixed alphanumeric input that looks like a phone attempt
+            $info['phone'] = $alphanumeric_matches[1];  // Store the mixed input
+            $info['phone_invalid'] = true;  // Mark as invalid (contains letters)
+            $message_clean = str_replace($alphanumeric_matches[1], ' ', $message_clean);
+        }
+        // Try to extract phone number (flexible - accepts 8-15 digits, including invalid ones)
+        // FIXED: Now detects 9-digit and other invalid formats too, not just 10-digit
+        elseif (preg_match('/\+?91?[\s-]?[0-9]{8,15}/', $message_clean, $phone_matches)) {
             $phone_raw = preg_replace('/[^\d+]/', '', $phone_matches[0]);
-            // Normalize phone number
-            if (strlen($phone_raw) == 10 && preg_match('/^[6-9]/', $phone_raw)) {
+            
+            // Store raw phone (may be invalid) - validation happens later
+            $digit_count = strlen(preg_replace('/[^\d]/', '', $phone_raw));
+            
+            // Normalize phone number - even if invalid, store for later validation
+            if ($digit_count == 10 && preg_match('/^[6-9]/', $phone_raw)) {
+                // Valid 10-digit number
                 $info['phone'] = '+91' . $phone_raw;
-            } elseif (strlen($phone_raw) == 12 && substr($phone_raw, 0, 2) == '91') {
+                $info['phone_invalid'] = false;  // Mark as valid
+            } elseif ($digit_count == 12 && substr($phone_raw, 0, 2) == '91') {
+                // Has 91 prefix without +
                 $info['phone'] = '+' . $phone_raw;
-            } elseif (strlen($phone_raw) == 13 && substr($phone_raw, 0, 3) == '+91') {
+                $info['phone_invalid'] = false;  // Mark as valid
+            } elseif ($digit_count == 13 && substr($phone_raw, 0, 3) == '+91') {
+                // Already has +91 prefix
                 $info['phone'] = $phone_raw;
+                $info['phone_invalid'] = false;  // Mark as valid
+            } else {
+                // INVALID FORMAT - store anyway for downstream validation
+                // This includes 9-digit, 11-digit, or numbers starting with 0-5
+                $info['phone'] = $phone_raw;  // Store raw for validation
+                $info['phone_invalid'] = true;  // Mark as needing validation
             }
+            
             // Remove phone number from message for name extraction
-            $message_clean = preg_replace('/(\+?91[\s-]?[6-9]\d{9}|\+91\d{10}|\b[6-9]\d{9}\b)/', ' ', $message_clean);
+            // Use broader pattern to catch all digit sequences
+            $message_clean = preg_replace('/\+?91?[\s-]?[0-9]{8,15}/', ' ', $message_clean);
         }
         
         // Try to extract name from structured input first (Name: format)
@@ -2386,14 +2579,19 @@ class EduBot_Shortcode {
                 return $info;
             }
         }
-        // Check for invalid formats and provide error message
+        // Check for invalid year formats (2-digit year)
         elseif (preg_match('/\b(\d{1,2})[-\/](\d{1,2})[-\/](\d{2})\b/', $message)) {
-            $info['error'] = "Please use 4-digit year format (dd/mm/yyyy). Example: 16/10/2010";
+            $info['error'] = "❌ **Invalid Date Format**\n\nPlease use 4-digit year format (dd/mm/yyyy).\n\nExample: 16/10/2010\n\nMake sure to enter the complete 4-digit year.";
+            return $info;
+        }
+        // Check for invalid year formats (more or less than 4 digits, like 20101 or 201)
+        elseif (preg_match('/\b(\d{1,2})[-\/](\d{1,2})[-\/](\d{1,3}|\d{5,})\b/', $message)) {
+            $info['error'] = "❌ **Invalid Date Format**\n\nPlease enter the date in dd/mm/yyyy format with exactly 4 digits for the year.\n\nExample: 16/10/2010\n\nYou entered an invalid year. Please check and try again.";
             return $info;
         }
         elseif (preg_match('/\b(\d{1,2})\s*(years?|yrs?|year\s*old)\b/i', $message) || 
                 preg_match('/^\s*(\d{1,2})\s*$/', $message)) {
-            $info['error'] = "Please enter the date of birth in dd/mm/yyyy format instead of age. Example: 16/10/2010";
+            $info['error'] = "❌ **Invalid Format**\n\nPlease enter the date of birth in dd/mm/yyyy format, not age.\n\nExample: 16/10/2010";
             return $info;
         }
 
@@ -3570,35 +3768,286 @@ class EduBot_Shortcode {
     }
     
     private function send_application_notifications($application_data) {
+        global $wpdb;
+        
+        $school_config = EduBot_School_Config::getInstance();
+        $config = $school_config->get_config();
+        $school_name = $config['school_info']['name'] ?? 'School';
         $settings = get_option('edubot_pro_settings', array());
         
-        // Send confirmation email to parent
-        if (!empty($application_data['email'])) {
-            $subject = 'Application Received - ' . ($settings['school_name'] ?? 'School');
-            $message = "Dear " . $application_data['parent_name'] . ",\n\n";
-            $message .= "Thank you for submitting an application for " . $application_data['student_name'] . ".\n\n";
-            $message .= "Application Number: " . $application_data['application_number'] . "\n";
-            $message .= "Grade: " . $application_data['grade'] . "\n\n";
-            $message .= "We will review your application and contact you soon.\n\n";
-            $message .= "Best regards,\n";
-            $message .= $settings['school_name'] ?? 'School Administration';
-            
-            wp_mail($application_data['email'], $subject, $message);
+        // Get API settings from the correct table using migration helper
+        if (!class_exists('EduBot_API_Migration')) {
+            error_log('EduBot: API Migration class not found');
+            return;
         }
         
-        // Send notification to admin
-        if (!empty($settings['admin_email'])) {
-            $subject = 'New Application Received - ' . $application_data['application_number'];
-            $message = "A new application has been received:\n\n";
-            $message .= "Student: " . $application_data['student_name'] . "\n";
-            $message .= "Parent: " . $application_data['parent_name'] . "\n";
-            $message .= "Grade: " . $application_data['grade'] . "\n";
-            $message .= "Email: " . $application_data['email'] . "\n";
-            $message .= "Phone: " . $application_data['phone'] . "\n";
-            $message .= "Application Number: " . $application_data['application_number'] . "\n\n";
-            $message .= "Please review the application in the admin panel.";
-            
-            wp_mail($settings['admin_email'], $subject, $message);
+        $api_settings = EduBot_API_Migration::get_api_settings(get_current_blog_id());
+        
+        // Get notification settings from school config table
+        $school_config_table = $wpdb->prefix . 'edubot_school_configs';
+        $school_config_row = $wpdb->get_row($wpdb->prepare(
+            "SELECT config_data FROM $school_config_table WHERE site_id = %d LIMIT 1",
+            get_current_blog_id()
+        ));
+        $config_data = array();
+        if ($school_config_row) {
+            $config_data = json_decode($school_config_row->config_data, true);
+        }
+        
+        // Initialize API integrations and database manager
+        if (!class_exists('EduBot_API_Integrations')) {
+            error_log('EduBot: API Integrations class not found for form submissions');
+            return;
+        }
+        
+        $api_integrations = new EduBot_API_Integrations();
+        $database_manager = new EduBot_Database_Manager();
+        
+        // Get the application record ID from database to track notification status
+        $table = $wpdb->prefix . 'edubot_applications';
+        $application_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table WHERE application_number = %s LIMIT 1",
+            $application_data['application_number']
+        ));
+        
+        // 1. SEND PARENT CONFIRMATION EMAIL
+        if (!empty($application_data['email']) && filter_var($application_data['email'], FILTER_VALIDATE_EMAIL)) {
+            try {
+                $subject = "✅ Admission Enquiry Confirmation - {$school_name}";
+                
+                // Build HTML email
+                $message = "
+                <html>
+                    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                        <div style='max-width: 600px; margin: 0 auto;'>
+                            <h2 style='color: #2c3e50;'>Thank you for your admission enquiry!</h2>
+                            <p>Dear " . sanitize_text_field($application_data['parent_name']) . ",</p>
+                            
+                            <p>We have received your application for <strong>" . sanitize_text_field($application_data['student_name']) . "</strong>.</p>
+                            
+                            <div style='background-color: #f8f9fa; padding: 15px; border-left: 4px solid #0066cc; margin: 20px 0;'>
+                                <p><strong>📋 Enquiry Number: " . sanitize_text_field($application_data['application_number']) . "</strong></p>
+                                <p><strong>📚 Grade Applied: </strong>" . sanitize_text_field($application_data['grade']) . "</p>
+                                <p><strong>📅 Submitted: </strong>" . current_time('F j, Y \a\t g:i A') . "</p>
+                            </div>
+                            
+                            <p><strong>✅ Information Submitted:</strong></p>
+                            <ul>
+                                <li>Student Name: " . sanitize_text_field($application_data['student_name']) . "</li>
+                                <li>Grade: " . sanitize_text_field($application_data['grade']) . "</li>
+                                " . (!empty($application_data['educational_board']) ? "<li>Board: " . sanitize_text_field($application_data['educational_board']) . "</li>" : "") . "
+                                " . (!empty($application_data['academic_year']) ? "<li>Academic Year: " . sanitize_text_field($application_data['academic_year']) . "</li>" : "") . "
+                                <li>Email: " . sanitize_email($application_data['email']) . "</li>
+                                <li>Phone: " . sanitize_text_field($application_data['phone']) . "</li>
+                            </ul>
+                            
+                            <p><strong>🚀 Next Steps:</strong></p>
+                            <ul>
+                                <li>Our admission team will review your application</li>
+                                <li>You'll receive detailed information about the admission process</li>
+                                <li>Campus visit will be scheduled as per your convenience</li>
+                            </ul>
+                            
+                            <div style='background-color: #fffbea; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                                <p><strong>📞 Need immediate assistance?</strong></p>
+                                <p>Call: 7702800800 / 9248111448<br/>
+                                Email: admissions@epistemo.in</p>
+                            </div>
+                            
+                            <p>Thank you for choosing " . sanitize_text_field($school_name) . "! 🏫</p>
+                            
+                            <hr style='border: none; border-top: 1px solid #ddd; margin: 30px 0;'>
+                            <p style='font-size: 12px; color: #999;'>This is an automated email. Please do not reply to this message.</p>
+                        </div>
+                    </body>
+                </html>";
+                
+                $headers = array('Content-Type: text/html; charset=UTF-8');
+                $email_sent = $api_integrations->send_email(
+                    $application_data['email'],
+                    $subject,
+                    $message,
+                    $headers
+                );
+                
+                if ($email_sent) {
+                    error_log("EduBot: Parent confirmation email sent to {$application_data['email']} for application {$application_data['application_number']}");
+                    if ($application_id) {
+                        $database_manager->update_notification_status($application_id, 'email', 1, 'applications');
+                    }
+                } else {
+                    error_log("EduBot: Failed to send parent confirmation email to {$application_data['email']}");
+                }
+            } catch (Exception $e) {
+                error_log('EduBot: Exception sending parent confirmation email: ' . $e->getMessage());
+            }
+        }
+        
+        // 2. SEND SCHOOL NOTIFICATION EMAIL
+        $school_email = '';
+        $possible_options = [
+            'edubot_school_email',
+            'school_contact_email',
+            'school_information_contact_email',
+            'edubot_school_contact_email',
+            'admin_email'
+        ];
+        
+        foreach ($possible_options as $option_name) {
+            $option_value = get_option($option_name);
+            if (!empty($option_value) && filter_var($option_value, FILTER_VALIDATE_EMAIL)) {
+                $school_email = $option_value;
+                break;
+            }
+        }
+        
+        if (empty($school_email) && class_exists('EduBot_School_Config')) {
+            try {
+                $config = $school_config->get_config();
+                $contact_info = $config['school_info']['contact_info'] ?? array();
+                if (!empty($contact_info['email'])) {
+                    $school_email = $contact_info['email'];
+                }
+            } catch (Exception $e) {
+                error_log('EduBot: Could not get school config: ' . $e->getMessage());
+            }
+        }
+        
+        if (empty($school_email)) {
+            $settings = get_option('edubot_pro_settings', array());
+            $school_email = $settings['admin_email'] ?? get_option('admin_email');
+        }
+        
+        if (!empty($school_email) && filter_var($school_email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                $subject = "📋 New Application Received - {$application_data['application_number']}";
+                
+                $message = "
+                <html>
+                    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                        <div style='max-width: 600px; margin: 0 auto;'>
+                            <h2 style='color: #2c3e50;'>New Admission Application Received</h2>
+                            
+                            <div style='background-color: #e3f2fd; padding: 15px; border-left: 4px solid #2196F3; margin: 20px 0;'>
+                                <p style='margin: 5px 0;'><strong>Application Number: " . sanitize_text_field($application_data['application_number']) . "</strong></p>
+                                <p style='margin: 5px 0;'><strong>Submitted: </strong>" . current_time('F j, Y \a\t g:i A') . "</p>
+                            </div>
+                            
+                            <p><strong>📝 Applicant Information:</strong></p>
+                            <table style='width: 100%; border-collapse: collapse;'>
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd; width: 40%;'><strong>Student Name</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['student_name']) . "</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Parent/Guardian</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['parent_name']) . "</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Grade</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['grade']) . "</td>
+                                </tr>
+                                " . (!empty($application_data['educational_board']) ? "
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Board</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['educational_board']) . "</td>
+                                </tr>" : "") . "
+                                " . (!empty($application_data['academic_year']) ? "
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Academic Year</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['academic_year']) . "</td>
+                                </tr>" : "") . "
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Email</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_email($application_data['email']) . "</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>Phone</strong></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd;'>" . sanitize_text_field($application_data['phone']) . "</td>
+                                </tr>
+                            </table>
+                            
+                            <p style='margin-top: 20px;'><strong>🔗 Next Action:</strong></p>
+                            <p>Review this application in the admin panel: <a href='" . admin_url('admin.php?page=edubot-applications') . "'>View Applications</a></p>
+                            
+                            <hr style='border: none; border-top: 1px solid #ddd; margin: 30px 0;'>
+                            <p style='font-size: 12px; color: #999;'>This is an automated notification from the EduBot system.</p>
+                        </div>
+                    </body>
+                </html>";
+                
+                $headers = array('Content-Type: text/html; charset=UTF-8');
+                $school_email_sent = $api_integrations->send_email(
+                    $school_email,
+                    $subject,
+                    $message,
+                    $headers
+                );
+                
+                if ($school_email_sent) {
+                    error_log("EduBot: School notification email sent to {$school_email} for application {$application_data['application_number']}");
+                } else {
+                    error_log("EduBot: Failed to send school notification email to {$school_email}");
+                }
+            } catch (Exception $e) {
+                error_log('EduBot: Exception sending school notification email: ' . $e->getMessage());
+            }
+        }
+        
+        // 3. SEND WHATSAPP CONFIRMATION TO PARENT
+        if (!empty($application_data['phone'])) {
+            try {
+                // Check if WhatsApp notifications are enabled and configured
+                $whatsapp_enabled = false;
+                
+                // Check if WhatsApp provider is configured
+                if (!empty($api_settings['whatsapp_provider']) && !empty($api_settings['whatsapp_token'])) {
+                    // Provider is configured, check if enabled in settings
+                    if ($config_data && isset($config_data['notification_settings']['whatsapp_enabled'])) {
+                        $whatsapp_enabled = $config_data['notification_settings']['whatsapp_enabled'];
+                    } else {
+                        $whatsapp_enabled = get_option('edubot_whatsapp_notifications', 0);
+                    }
+                } else {
+                    error_log('EduBot: WhatsApp provider not configured - provider: ' . $api_settings['whatsapp_provider'] . ', token: ' . (empty($api_settings['whatsapp_token']) ? 'not set' : 'set'));
+                }
+                
+                if (!$whatsapp_enabled) {
+                    error_log('EduBot: WhatsApp notifications are disabled in settings');
+                } else {
+                    // Normalize phone number
+                    $phone = preg_replace('/[^0-9+]/', '', $application_data['phone']);
+                    
+                    // WhatsApp message for parent
+                    $whatsapp_message = "🎉 *Admission Enquiry Confirmation* 🎉\n\n";
+                    $whatsapp_message .= "Thank you for your application to *" . sanitize_text_field($school_name) . "*!\n\n";
+                    $whatsapp_message .= "📋 *Enquiry Number:* " . sanitize_text_field($application_data['application_number']) . "\n";
+                    $whatsapp_message .= "👶 *Student:* " . sanitize_text_field($application_data['student_name']) . "\n";
+                    $whatsapp_message .= "📚 *Grade Applied:* " . sanitize_text_field($application_data['grade']) . "\n\n";
+                    $whatsapp_message .= "✅ *Next Steps:*\n";
+                    $whatsapp_message .= "• Our admission team will review your application\n";
+                    $whatsapp_message .= "• You'll receive detailed information about the admission process\n";
+                    $whatsapp_message .= "• Campus visit will be scheduled as per your convenience\n\n";
+                    $whatsapp_message .= "📞 *Need immediate assistance?*\n";
+                    $whatsapp_message .= "Call: 7702800800 / 9248111448\n";
+                    $whatsapp_message .= "Email: admissions@epistemo.in\n\n";
+                    $whatsapp_message .= "Thank you! 🙏";
+                    
+                    // Send via API integrations
+                    $whatsapp_sent = $api_integrations->send_whatsapp($phone, $whatsapp_message);
+                    
+                    if ($whatsapp_sent) {
+                        error_log("EduBot: WhatsApp confirmation sent to {$phone} for application {$application_data['application_number']}");
+                        if ($application_id) {
+                            $database_manager->update_notification_status($application_id, 'whatsapp', 1, 'applications');
+                        }
+                    } else {
+                        error_log("EduBot: Failed to send WhatsApp confirmation to {$phone}");
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('EduBot: Exception sending WhatsApp confirmation: ' . $e->getMessage());
+            }
         }
     }
     
@@ -4787,8 +5236,35 @@ class EduBot_Shortcode {
         return array('extracted_data' => array(), 'response' => '');
     }
     
+    /**
+     * Get valid grades for admission
+     * 
+     * @return array Valid grades
+     */
+    private function get_valid_grades() {
+        return array(
+            'Nursery',
+            'Pre Nursery',
+            'PP1',
+            'PP2',
+            'Grade 1',
+            'Grade 2',
+            'Grade 3',
+            'Grade 4',
+            'Grade 5',
+            'Grade 6',
+            'Grade 7',
+            'Grade 8',
+            'Grade 9',
+            'Grade 10',
+            'Grade 11',
+            'Grade 12',
+        );
+    }
+
     private function extract_grade_from_message($message) {
         $message_lower = strtolower($message);
+        $valid_grades = $this->get_valid_grades();
         
         // Try to get grades from backend configuration first
         try {
@@ -4835,13 +5311,13 @@ class EduBot_Shortcode {
         
         // Check for Grade 11 with streams first (more specific matches)
         if (preg_match('/grade\s*11\s*science/i', $message_lower)) {
-            return 'Grade 11 Science';
+            return 'Grade 11';  // Store as Grade 11 only
         }
         if (preg_match('/grade\s*11\s*commerce/i', $message_lower)) {
-            return 'Grade 11 Commerce';
+            return 'Grade 11';  // Store as Grade 11 only
         }
         if (preg_match('/grade\s*11\s*humanities/i', $message_lower)) {
-            return 'Grade 11 Humanities';
+            return 'Grade 11';  // Store as Grade 11 only
         }
         
         if (stripos($message_lower, 'nursery') !== false) {
@@ -4854,27 +5330,41 @@ class EduBot_Shortcode {
             return 'PP2';
         }
         if (stripos($message_lower, 'pre-kg') !== false || stripos($message_lower, 'prekg') !== false) {
-            return 'Pre-KG';
+            return 'Pre Nursery';  // Changed from Pre-KG to Pre Nursery
         }
         if (stripos($message_lower, 'lkg') !== false) {
-            return 'LKG';
+            return 'PP1';  // LKG maps to PP1
         }
         if (stripos($message_lower, 'ukg') !== false) {
-            return 'UKG';
+            return 'PP2';  // UKG maps to PP2
         }
         
-        // Extract grade numbers (but check Grade 11 without streams separately)
+        // Extract grade numbers (with validation)
         if (preg_match('/grade\s*(\d+)/i', $message, $matches)) {
-            return 'Grade ' . $matches[1];
-        }
-        if (preg_match('/class\s*(\d+)/i', $message, $matches)) {
-            return 'Class ' . $matches[1];
-        }
-        if (preg_match('/(\d+)(th|st|nd|rd)/i', $message, $matches)) {
-            return 'Grade ' . $matches[1];
+            $grade_num = intval($matches[1]);
+            // FIXED: Validate grade is between 1-12
+            if ($grade_num >= 1 && $grade_num <= 12) {
+                return 'Grade ' . $grade_num;
+            }
         }
         
-        return 'Selected Grade';
+        if (preg_match('/class\s*(\d+)/i', $message, $matches)) {
+            $grade_num = intval($matches[1]);
+            // FIXED: Validate grade is between 1-12
+            if ($grade_num >= 1 && $grade_num <= 12) {
+                return 'Grade ' . $grade_num;
+            }
+        }
+        
+        if (preg_match('/(\d+)(th|st|nd|rd)/i', $message, $matches)) {
+            $grade_num = intval($matches[1]);
+            // FIXED: Validate grade is between 1-12
+            if ($grade_num >= 1 && $grade_num <= 12) {
+                return 'Grade ' . $grade_num;
+            }
+        }
+        
+        return null;  // Changed from 'Selected Grade' to null for invalid
     }
     
     private function extract_board_from_message($message) {
