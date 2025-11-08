@@ -1218,20 +1218,70 @@ class EduBot_Workflow_Manager {
             $student_email = $collected_data['email'] ?? 'N/A';
             $student_phone = $collected_data['phone'] ?? 'N/A';
             $grade = $collected_data['grade'] ?? 'N/A';
+            $board = $collected_data['board'] ?? 'N/A';
+            $contact_person = $collected_data['parent_name'] ?? $student_name;
             
             $subject = "🎓 New Admission Enquiry - {$student_name} - {$enquiry_number}";
-            $body = "🎓 *New Admission Enquiry - {$student_name}*\n\n" .
-                    "📋 *Enquiry Number:* {$enquiry_number}\n" .
-                    "👶 *Student:* {$student_name}\n" .
-                    "🎯 *Grade:* {$grade}\n" .
-                    "📚 *Board:* " . ($collected_data['board'] ?? 'N/A') . "\n" .
-                    "👨‍👩‍👧 *Parent:* {$student_name}\n" .
-                    "📱 *Phone:* {$student_phone}\n" .
-                    "📧 *Email:* {$student_email}\n" .
-                    "📅 *Submitted:* " . date('d/m/Y h:i A') . "\n\n" .
-                    "Please review and contact the family for next steps.\n\n" .
-                    "—\n" .
-                    "Log in to the admin panel to view full details.";
+            
+            // Build professional HTML email for admin
+            $body = "
+            <html>
+                <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                    <div style='max-width: 600px; margin: 0 auto;'>
+                        <h2 style='color: #2c3e50; border-bottom: 3px solid #0066cc; padding-bottom: 10px;'>🎓 New Admission Enquiry Received</h2>
+                        
+                        <div style='background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                            <p style='margin: 0; font-size: 16px;'><strong>Enquiry Number:</strong> {$enquiry_number}</p>
+                            <p style='margin: 10px 0 0 0; font-size: 14px; color: #555;'>Submitted: " . date('F j, Y \a\t g:i A') . "</p>
+                        </div>
+                        
+                        <div style='background-color: #f8f9fa; padding: 20px; border-left: 4px solid #0066cc; margin: 20px 0;'>
+                            <p style='margin: 0 0 15px 0;'><strong style='color: #0066cc;'>� Student Information</strong></p>
+                            <table style='width: 100%; border-collapse: collapse;'>
+                                <tr style='border-bottom: 1px solid #ddd;'>
+                                    <td style='padding: 8px; font-weight: bold; width: 40%;'>Student Name:</td>
+                                    <td style='padding: 8px;'>{$student_name}</td>
+                                </tr>
+                                <tr style='border-bottom: 1px solid #ddd;'>
+                                    <td style='padding: 8px; font-weight: bold;'>Grade:</td>
+                                    <td style='padding: 8px;'>{$grade}</td>
+                                </tr>
+                                <tr style='border-bottom: 1px solid #ddd;'>
+                                    <td style='padding: 8px; font-weight: bold;'>Board:</td>
+                                    <td style='padding: 8px;'>{$board}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        
+                        <div style='background-color: #f8f9fa; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0;'>
+                            <p style='margin: 0 0 15px 0;'><strong style='color: #28a745;'>👥 Contact Information</strong></p>
+                            <table style='width: 100%; border-collapse: collapse;'>
+                                <tr style='border-bottom: 1px solid #ddd;'>
+                                    <td style='padding: 8px; font-weight: bold; width: 40%;'>Parent/Guardian:</td>
+                                    <td style='padding: 8px;'>{$contact_person}</td>
+                                </tr>
+                                <tr style='border-bottom: 1px solid #ddd;'>
+                                    <td style='padding: 8px; font-weight: bold;'>Phone:</td>
+                                    <td style='padding: 8px;'><a href='tel:{$student_phone}' style='color: #0066cc; text-decoration: none;'>{$student_phone}</a></td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; font-weight: bold;'>Email:</td>
+                                    <td style='padding: 8px;'><a href='mailto:{$student_email}' style='color: #0066cc; text-decoration: none;'>{$student_email}</a></td>
+                                </tr>
+                            </table>
+                        </div>
+                        
+                        <div style='background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;'>
+                            <p style='margin: 0;'><strong>⚡ Action Required:</strong> Please review this enquiry and contact the family to proceed with the admission process.</p>
+                        </div>
+                        
+                        <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px;'>
+                            <p>This is an automated notification from EduBot Admission System.<br/>
+                            <a href='" . admin_url('admin.php?page=edubot-enquiries') . "' style='color: #0066cc; text-decoration: none;'>View in Admin Panel</a></p>
+                        </div>
+                    </div>
+                </body>
+            </html>";
             
             // Get from email - use verified sender from ZeptoMail
             $from_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
@@ -1249,7 +1299,7 @@ class EduBot_Workflow_Manager {
                     )
                 ),
                 'subject' => $subject,
-                'textbody' => $body
+                'htmlbody' => $body
             );
             
             $response = wp_remote_post(
@@ -1329,24 +1379,25 @@ class EduBot_Workflow_Manager {
             $contact_person = $collected_data['contact_person'] ?? $parent_name;
             
             // Template parameters for school admin notification (9 parameters in exact order)
-            // 1. School Name
+            // Meta template: "New Admission Enquiry - {student_name}"
+            // 1. Student Name (for header: "New Admission Enquiry - {{1}}")
             // 2. Enquiry Number
-            // 3. Student Name
+            // 3. Student Name (duplicate for body)
             // 4. Grade
             // 5. Board (e.g., CBSE, ICSE)
             // 6. Contact Person/Parent Name
-            // 7. Phone (NOTE: Swapped with email to match Meta template order)
-            // 8. Email (NOTE: Swapped with phone to match Meta template order)
-            // 9. Appointment Date/Time
+            // 7. Phone
+            // 8. Email
+            // 9. Submission Date/Time
             $template_params = array(
-                $school_name,           // 1. School name
+                $student_name,          // 1. Student name (for header)
                 $enquiry_number,        // 2. Enquiry number
-                $student_name,          // 3. Student name
+                $student_name,          // 3. Student name (for body)
                 $grade,                 // 4. Grade
                 $board,                 // 5. Board
                 $contact_person,        // 6. Contact person
-                $student_phone,         // 7. Phone (swapped from position 8)
-                $student_email,         // 8. Email (swapped from position 7)
+                $student_phone,         // 7. Phone
+                $student_email,         // 8. Email
                 date('d/m/Y h A')       // 9. Date/Time (DD/MM/YYYY HH AM)
             );
             
