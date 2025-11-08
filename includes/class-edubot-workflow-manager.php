@@ -1350,11 +1350,14 @@ class EduBot_Workflow_Manager {
                 date('d/m/Y h A')       // 9. Date/Time (DD/MM/YYYY HH AM)
             );
             
-            error_log("EduBot Workflow Manager: Using edubot_school_whatsapp_template_name_ template for school admin with params: " . json_encode($template_params));
+            // Get template name from settings
+            $template_name = get_option('edubot_school_whatsapp_template_name', 'edubot_school_whatsapp_template_name_');
+            
+            error_log("EduBot Workflow Manager: Using school admin template: {$template_name} with params: " . json_encode($template_params));
             
             $result = $this->send_meta_whatsapp_template(
                 $admin_phone,
-                'edubot_school_whatsapp_template_name_',
+                $template_name,
                 $template_params
             );
             
