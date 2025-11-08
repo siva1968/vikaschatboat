@@ -59,6 +59,9 @@ class EduBot_Workflow_Manager {
                 case 'collect_board':
                     return $this->handle_board_collection($message, $session_id, $extracted_info);
                     
+                case 'collect_academic_year':
+                    return $this->handle_academic_year_collection($message, $session_id, $extracted_info);
+                    
                 case 'collect_dob':
                     return $this->handle_dob_collection($message, $session_id, $extracted_info);
                     
@@ -86,6 +89,14 @@ class EduBot_Workflow_Manager {
         if (empty($collected['email'])) return 'collect_email';
         if (empty($collected['grade'])) return 'collect_grade';
         if (empty($collected['board'])) return 'collect_board';
+        
+        // Check if multiple academic years are available - if yes, ask user to select
+        $school_config = EduBot_School_Config::getInstance();
+        $available_years = $school_config->get_available_academic_years();
+        if (count($available_years) > 1 && empty($collected['academic_year'])) {
+            return 'collect_academic_year';
+        }
+        
         if (empty($collected['date_of_birth'])) return 'collect_dob';
 
         return 'ready_to_submit';
@@ -352,6 +363,37 @@ class EduBot_Workflow_Manager {
     }
     
     /**
+     * Handle academic year selection step
+     */
+    private function handle_academic_year_collection($message, $session_id, $extracted_info) {
+        $school_config = EduBot_School_Config::getInstance();
+        $available_years = $school_config->get_available_academic_years();
+        
+        // Try to extract year selection as a number (1, 2, etc.)
+        $message_trimmed = trim($message);
+        if (is_numeric($message_trimmed)) {
+            $year_index = intval($message_trimmed) - 1; // Convert to 0-based index
+            
+            if ($year_index >= 0 && $year_index < count($available_years)) {
+                $selected_year = $available_years[$year_index];
+                $this->session_manager->update_session_data($session_id, 'academic_year', $selected_year);
+                return $this->get_next_step_message($session_id);
+            }
+        }
+        
+        // Invalid selection, show menu again
+        $year_options = "";
+        foreach ($available_years as $idx => $year) {
+            $year_options .= "• " . ($idx + 1) . ": " . $year . "\n";
+        }
+        
+        return "❌ **Please select a valid year number**\n\n" .
+               "Available options:\n" .
+               $year_options . "\n" .
+               "Reply with the number (1, 2, etc.)";
+    }
+    
+    /**
      * Handle date of birth collection step
      */
     private function handle_dob_collection($message, $session_id, $extracted_info) {
@@ -394,6 +436,20 @@ class EduBot_Workflow_Manager {
                 return $progress . "\n📚 **Almost done! Which educational board do you prefer?**\n\n" .
                        "• **CBSE** • **CAIE**";
                        
+            case 'collect_academic_year':
+                // Get available years and show selection menu
+                $school_config = EduBot_School_Config::getInstance();
+                $available_years = $school_config->get_available_academic_years();
+                
+                $year_options = "";
+                foreach ($available_years as $idx => $year) {
+                    $year_options .= "• " . ($idx + 1) . ": " . $year . "\n";
+                }
+                
+                return $progress . "\n📅 **Which academic year are you applying for?**\n\n" .
+                       $year_options . "\n" .
+                       "Reply with the number (1, 2, etc.)";
+                       
             case 'collect_dob':
                 return $progress . "\n📅 **Finally, please provide the student's date of birth:**\n\n" .
                        "Format: DD/MM/YYYY (e.g., 16/10/2010)";
@@ -426,6 +482,9 @@ class EduBot_Workflow_Manager {
         }
         if (!empty($collected['board'])) {
             $progress .= "📚 Board: {$collected['board']}\n";
+        }
+        if (!empty($collected['academic_year'])) {
+            $progress .= "📅 Year: {$collected['academic_year']}\n";
         }
         
         return $progress;
