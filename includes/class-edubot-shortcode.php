@@ -2772,7 +2772,14 @@ class EduBot_Shortcode {
             error_log("EduBot: Successfully saved enquiry {$enquiry_number} to database with ID {$enquiry_id}");
             
             // Also save to applications table for unified admin interface
-            $this->save_to_applications_table($collected_data, $enquiry_number);
+            try {
+                error_log("EduBot: About to call save_to_applications_table for {$enquiry_number}");
+                $this->save_to_applications_table($collected_data, $enquiry_number);
+                error_log("EduBot: Finished calling save_to_applications_table for {$enquiry_number}");
+            } catch (Exception $app_error) {
+                error_log("EduBot: CRITICAL - Exception when saving to applications table: " . $app_error->getMessage());
+                error_log("EduBot: Exception trace: " . $app_error->getTraceAsString());
+            }
             
             // Initialize database manager for status updates
             $database_manager = new EduBot_Database_Manager();
@@ -3092,13 +3099,18 @@ class EduBot_Shortcode {
                 'whatsapp_token' => get_option('edubot_whatsapp_token', '')
             ];
             
-            // Format message for Meta Business API
+            // Format message for Meta Business API with CORRECT structure
+            // Must include header component (empty) + body component with parameters
             $formatted_message = [
                 'type' => 'template',
                 'template' => [
                     'name' => $template_name,
                     'language' => ['code' => $template_language],
                     'components' => [
+                        [
+                            'type' => 'header',
+                            'parameters' => []  // Header component with empty parameters
+                        ],
                         [
                             'type' => 'body',
                             'parameters' => array_map(function($param) {
@@ -6076,13 +6088,18 @@ Reply STOP to unsubscribe");
                     'whatsapp_token' => get_option('edubot_whatsapp_token', '')
                 ];
                 
-                // Format message for Meta Business API
+                // Format message for Meta Business API with CORRECT structure
+                // Must include header component (empty) + body component with parameters
                 $formatted_message = [
                     'type' => 'template',
                     'template' => [
                         'name' => $message_data['template_name'],
                         'language' => ['code' => $message_data['template_language']],
                         'components' => [
+                            [
+                                'type' => 'header',
+                                'parameters' => []  // Header component with empty parameters
+                            ],
                             [
                                 'type' => 'body',
                                 'parameters' => array_map(function($param) {

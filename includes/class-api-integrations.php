@@ -766,7 +766,7 @@ class EduBot_API_Integrations {
             return false;
         }
         
-        $url = "https://graph.facebook.com/v21.0/{$phone_id}/messages";
+        $url = "https://graph.facebook.com/v22.0/{$phone_id}/messages";
         
         // Handle both template messages and text messages
         if (is_array($message) && isset($message['type']) && $message['type'] === 'template') {
