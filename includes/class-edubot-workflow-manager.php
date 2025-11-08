@@ -1415,8 +1415,12 @@ class EduBot_Workflow_Manager {
      * Get help message
      */
     private function get_help_message() {
+        $school_config = EduBot_School_Config::getInstance();
+        $available_years = $school_config->get_available_academic_years();
+        $years_text = implode(' & ', $available_years);
+        
         return "👋 **Welcome to Epistemo Vikas Leadership School!**\n\n" .
-               "I'll help you with your admission enquiry for **AY 2026-27**.\n\n" .
+               "I'll help you with your admission enquiry for **AY {$years_text}**.\n\n" .
                "Please provide:\n" .
                "👶 Student Name\n" .
                "📧 Email Address\n" .
