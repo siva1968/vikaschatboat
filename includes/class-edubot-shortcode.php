@@ -1937,10 +1937,9 @@ class EduBot_Shortcode {
                 $this->update_conversation_data($session_id, 'board', $academic_info['board']);
                 $collected_data['board'] = $academic_info['board'];
             }
-            if (!empty($academic_info['academic_year'])) {
-                $this->update_conversation_data($session_id, 'academic_year', $academic_info['academic_year']);
-                $collected_data['academic_year'] = $academic_info['academic_year'];
-            }
+            // NOTE: Do NOT auto-populate academic_year from parse_academic_info()
+            // Year selection must be done explicitly by user when multiple years available
+            // Skip: if (!empty($academic_info['academic_year'])) { ... }
             
             // Check what's still needed for academic info
             $missing_academic = array();
@@ -1991,6 +1990,7 @@ class EduBot_Shortcode {
                     $academic_year = $available_years[0];
                     $this->update_conversation_data($session_id, 'academic_year', $academic_year);
                     $collected_data['academic_year'] = $academic_year;
+                    // Continue to final step with auto-selected year
                 }
             }
             
