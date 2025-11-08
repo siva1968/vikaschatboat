@@ -624,6 +624,10 @@ class EduBot_Workflow_Manager {
             // Mark session as completed
             $this->session_manager->update_session_data($session_id, '_status', 'completed');
             
+            // Clear session data after successful submission so chatbot is ready for new enquiry
+            // This allows the same session to start fresh for a new admission enquiry
+            $this->session_manager->clear_session($session_id);
+            
             return "🎉 **Admission Enquiry Submitted Successfully!**\n\n" .
                    "**📋 Your Enquiry Number: {$enquiry_number}**\n\n" .
                    "Our admission team will contact you within 24 hours.\n\n" .
@@ -1314,10 +1318,12 @@ class EduBot_Workflow_Manager {
             $student_email = $collected_data['email'] ?? 'N/A';
             $student_phone = $collected_data['phone'] ?? 'N/A';
             $grade = $collected_data['grade'] ?? 'N/A';
-            $parent_name = $collected_data['parent_name'] ?? 'N/A';
+            $parent_name = $collected_data['parent_name'] ?? '';
             $school_name = $collected_data['school_name'] ?? 'N/A';
             $board = $collected_data['board'] ?? 'CBSE';
-            $contact_person = $collected_data['contact_person'] ?? $parent_name;
+            
+            // Use parent name if available, otherwise use student name, otherwise 'N/A'
+            $contact_person = !empty($parent_name) ? $parent_name : (!empty($student_name) ? $student_name : 'N/A');
             
             // Template parameters for school admin notification (9 parameters in exact order)
             // 1. School Name
@@ -1326,8 +1332,8 @@ class EduBot_Workflow_Manager {
             // 4. Grade
             // 5. Board (e.g., CBSE, ICSE)
             // 6. Contact Person/Parent Name
-            // 7. Email
-            // 8. Phone
+            // 7. Phone (NOTE: Swapped with email to match Meta template order)
+            // 8. Email (NOTE: Swapped with phone to match Meta template order)
             // 9. Appointment Date/Time
             $template_params = array(
                 $school_name,           // 1. School name
@@ -1336,8 +1342,8 @@ class EduBot_Workflow_Manager {
                 $grade,                 // 4. Grade
                 $board,                 // 5. Board
                 $contact_person,        // 6. Contact person
-                $student_email,         // 7. Email
-                $student_phone,         // 8. Phone
+                $student_phone,         // 7. Phone (swapped from position 8)
+                $student_email,         // 8. Email (swapped from position 7)
                 date('d/m/Y h A')       // 9. Date/Time (DD/MM/YYYY HH AM)
             );
             
