@@ -1318,12 +1318,10 @@ class EduBot_Workflow_Manager {
             $student_email = $collected_data['email'] ?? 'N/A';
             $student_phone = $collected_data['phone'] ?? 'N/A';
             $grade = $collected_data['grade'] ?? 'N/A';
-            $parent_name = $collected_data['parent_name'] ?? '';
+            $parent_name = $collected_data['parent_name'] ?? $student_name; // Use student name as fallback
             $school_name = $collected_data['school_name'] ?? 'N/A';
             $board = $collected_data['board'] ?? 'CBSE';
-            
-            // Use parent name if available, otherwise use student name, otherwise 'N/A'
-            $contact_person = !empty($parent_name) ? $parent_name : (!empty($student_name) ? $student_name : 'N/A');
+            $contact_person = $collected_data['contact_person'] ?? $parent_name;
             
             // Template parameters for school admin notification (9 parameters in exact order)
             // 1. School Name
