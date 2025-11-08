@@ -402,10 +402,19 @@ class EduBot_Workflow_Manager {
             return $this->get_next_step_message($session_id);
         }
         
+        // Check if user provided a date but it's invalid
+        if (preg_match('/\d{1,2}[-\/]\d{1,2}[-\/]\d{4}/', $message, $matches)) {
+            return "❌ **Invalid Date**\n\n" .
+                   "You entered: {$matches[0]}\n\n" .
+                   "Please provide a valid date of birth in DD/MM/YYYY format.\n" .
+                   "Student should be between 2-20 years old.\n\n" .
+                   "Example: 16/10/2010";
+        }
+        
         return "📅 **Please provide the student's date of birth:**\n\n" .
                "Format: DD/MM/YYYY\n" .
                "Example: 16/10/2010\n\n" .
-               "Make sure to use the correct format with 4-digit year.";
+               "Student should be between 2-20 years old.";
     }
     
     /**
