@@ -1219,14 +1219,19 @@ class EduBot_Workflow_Manager {
             $student_phone = $collected_data['phone'] ?? 'N/A';
             $grade = $collected_data['grade'] ?? 'N/A';
             
-            $subject = "New Admission Enquiry - {$enquiry_number} - {$student_name}";
-            $body = "New admission enquiry received:\n\n" .
-                    "Enquiry Number: {$enquiry_number}\n" .
-                    "Student Name: {$student_name}\n" .
-                    "Email: {$student_email}\n" .
-                    "Phone: {$student_phone}\n" .
-                    "Grade: {$grade}\n\n" .
-                    "Please log in to the admin panel to view full details.";
+            $subject = "🎓 New Admission Enquiry - {$student_name} - {$enquiry_number}";
+            $body = "🎓 *New Admission Enquiry - {$student_name}*\n\n" .
+                    "📋 *Enquiry Number:* {$enquiry_number}\n" .
+                    "👶 *Student:* {$student_name}\n" .
+                    "🎯 *Grade:* {$grade}\n" .
+                    "📚 *Board:* " . ($collected_data['board'] ?? 'N/A') . "\n" .
+                    "👨‍👩‍👧 *Parent:* {$student_name}\n" .
+                    "📱 *Phone:* {$student_phone}\n" .
+                    "📧 *Email:* {$student_email}\n" .
+                    "📅 *Submitted:* " . date('d/m/Y h:i A') . "\n\n" .
+                    "Please review and contact the family for next steps.\n\n" .
+                    "—\n" .
+                    "Log in to the admin panel to view full details.";
             
             // Get from email - use verified sender from ZeptoMail
             $from_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
