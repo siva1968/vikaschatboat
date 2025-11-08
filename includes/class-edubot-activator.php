@@ -7,20 +7,35 @@ class EduBot_Activator {
 
     /**
      * Plugin activation
-     * Permanent fix - proper database initialization
+     * Permanent fix - proper database initialization with transactions
      */
     public static function activate() {
-        // CRITICAL: Suppress output to prevent "headers already sent" errors
-        // WordPress headers must be sent BEFORE any output is generated
-        ob_start();
+        global $wpdb;
         
         try {
+            // Start database transaction for atomic operations
+            $wpdb->query('START TRANSACTION');
+            
             // Initialize database with proper schema and dependency order
             // This replaces the old create_tables() - we only create tables once
             $db_result = self::initialize_database();
             
+            // Run migrations to update existing table schemas
+            $migrations = self::run_migrations();
+            
             // Set default options
             self::set_default_options();
+            
+            // Auto-migrate API settings from WordPress options to table if needed
+            if (class_exists('EduBot_API_Migration')) {
+                if (EduBot_API_Migration::migration_needed()) {
+                    $migration_result = EduBot_API_Migration::migrate_api_settings();
+                    error_log('EduBot Activation: API Migration Result - ' . ($migration_result['success'] ? 'SUCCESS' : 'FAILED'));
+                    if (!empty($migration_result['migrated_fields'])) {
+                        error_log('EduBot Activation: Migrated ' . count($migration_result['migrated_fields']) . ' API settings to database table');
+                    }
+                }
+            }
             
             // Schedule WP-Cron events
             self::schedule_events();
@@ -28,17 +43,35 @@ class EduBot_Activator {
             // Flush rewrite rules
             flush_rewrite_rules();
             
-            // Log activation
-            error_log('✓ EduBot Pro activated successfully. Version: ' . EDUBOT_PRO_VERSION);
-            if (!empty($db_result['errors'])) {
-                error_log('⚠ Activation warnings: ' . implode('; ', $db_result['errors']));
+            // Commit transaction
+            $wpdb->query('COMMIT');
+            
+            // Log activation using secure Logger
+            if (function_exists('EduBot_Logger')) {
+                EduBot_Logger::info('EduBot Pro activated successfully', array(
+                    'version' => EDUBOT_PRO_VERSION,
+                    'tables_created' => count($db_result['created']),
+                    'has_errors' => !empty($db_result['errors']),
+                    'migrations_run' => count($migrations),
+                ));
+                
+                if (!empty($db_result['errors'])) {
+                    EduBot_Logger::warning('EduBot Pro activation warnings', array(
+                        'error_count' => count($db_result['errors']),
+                    ));
+                }
             }
         } catch (Exception $e) {
-            error_log('✗ EduBot Pro activation error: ' . $e->getMessage());
-        } finally {
-            // CRITICAL: Discard any output that was buffered
-            // This prevents "headers already sent" errors
-            ob_end_clean();
+            // Rollback transaction on error
+            $wpdb->query('ROLLBACK');
+            
+            // Log error using secure Logger
+            if (function_exists('EduBot_Logger')) {
+                EduBot_Logger::critical('EduBot Pro activation error', array(
+                    'message' => $e->getMessage(),
+                    'code' => $e->getCode(),
+                ));
+            }
         }
     }
 
@@ -190,7 +223,29 @@ class EduBot_Activator {
                 }
             }
 
-            // 13. API Integrations (WhatsApp, Email, SMS, OpenAI configurations)
+            // 13. MCB Settings (MyClassBoard integration configuration)
+            $mcb_settings = $wpdb->prefix . 'edubot_mcb_settings';
+            if (!self::table_exists($mcb_settings)) {
+                $sql = self::sql_mcb_settings();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "mcb_settings: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'mcb_settings';
+                }
+            }
+
+            // 14. MCB Sync Log (MyClassBoard synchronization tracking)
+            $mcb_sync_log = $wpdb->prefix . 'edubot_mcb_sync_log';
+            if (!self::table_exists($mcb_sync_log)) {
+                $sql = self::sql_mcb_sync_log();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "mcb_sync_log: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'mcb_sync_log';
+                }
+            }
+
+            // 15. API Integrations (WhatsApp, Email, SMS, OpenAI configurations)
             $api_integrations = $wpdb->prefix . 'edubot_api_integrations';
             if (!self::table_exists($api_integrations)) {
                 $sql = self::sql_api_integrations();
@@ -215,6 +270,48 @@ class EduBot_Activator {
     }
 
     /**
+     * Run database migrations to update existing tables
+     * This handles schema changes after initial table creation
+     */
+    private static function run_migrations() {
+        global $wpdb;
+        $migrations = [];
+        
+        // Migration: Add visitor_id column to visitors table if it doesn't exist
+        $visitors_table = $wpdb->prefix . 'edubot_visitors';
+        $has_visitor_id = $wpdb->get_var("SHOW COLUMNS FROM {$visitors_table} LIKE 'visitor_id'");
+        
+        if (!$has_visitor_id) {
+            // Add the visitor_id column after id
+            $wpdb->query("ALTER TABLE {$visitors_table} ADD COLUMN visitor_id varchar(255) UNIQUE NOT NULL AFTER id");
+            $migrations[] = 'Added visitor_id column to visitors table';
+        }
+        
+        // Migration: Add ip_address column to visitor_analytics table if it doesn't exist
+        $analytics_table = $wpdb->prefix . 'edubot_visitor_analytics';
+        if (self::table_exists($analytics_table)) {
+            $has_ip_address = $wpdb->get_var("SHOW COLUMNS FROM {$analytics_table} LIKE 'ip_address'");
+            
+            if (!$has_ip_address) {
+                // Add the ip_address column after event_data
+                $wpdb->query("ALTER TABLE {$analytics_table} ADD COLUMN ip_address varchar(45) NOT NULL DEFAULT '' AFTER event_data");
+                $migrations[] = 'Added ip_address column to visitor_analytics table';
+            }
+            
+            // Migration: Add user_agent column to visitor_analytics table if it doesn't exist
+            $has_user_agent = $wpdb->get_var("SHOW COLUMNS FROM {$analytics_table} LIKE 'user_agent'");
+            
+            if (!$has_user_agent) {
+                // Add the user_agent column after ip_address
+                $wpdb->query("ALTER TABLE {$analytics_table} ADD COLUMN user_agent text AFTER ip_address");
+                $migrations[] = 'Added user_agent column to visitor_analytics table';
+            }
+        }
+        
+        return $migrations;
+    }
+
+    /**
      * Check if table exists
      */
     private static function table_exists($table_name) {
@@ -224,10 +321,12 @@ class EduBot_Activator {
 
     /**
      * SQL: Enquiries table (Parent)
+     * FIXED: Reduced key length to fit MySQL 3072 byte limit
      */
     private static function sql_enquiries() {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_enquiries';
+        $charset_collate = $wpdb->get_charset_collate();
         return "CREATE TABLE IF NOT EXISTS $table (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             enquiry_number VARCHAR(50),
@@ -237,8 +336,10 @@ class EduBot_Activator {
             board VARCHAR(50),
             academic_year VARCHAR(20),
             parent_name VARCHAR(255),
-            email VARCHAR(255),
+            email VARCHAR(100),
             phone VARCHAR(20),
+            mother_name VARCHAR(255),
+            mother_phone VARCHAR(20),
             address TEXT,
             gender VARCHAR(10),
             ip_address VARCHAR(45),
@@ -254,6 +355,9 @@ class EduBot_Activator {
             status VARCHAR(50) DEFAULT 'pending',
             conversion_value DECIMAL(10,2),
             notes LONGTEXT,
+            mcb_sync_status VARCHAR(50),
+            mcb_enquiry_id VARCHAR(100),
+            mcb_query_code VARCHAR(100),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY unique_enquiry_number (enquiry_number),
@@ -261,7 +365,11 @@ class EduBot_Activator {
             KEY idx_phone (phone),
             KEY idx_status (status),
             KEY idx_source (source),
-            KEY idx_created (created_at)
+            KEY idx_created (created_at),
+            KEY idx_status_created (status, created_at),
+            KEY idx_student (student_name(100)),
+            KEY idx_utm_tracking (gclid, fbclid),
+            KEY idx_mcb_sync (mcb_sync_status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;";
     }
 
@@ -479,7 +587,12 @@ class EduBot_Activator {
             UNIQUE KEY application_number (application_number),
             KEY site_id (site_id),
             KEY status (status),
-            KEY created_at (created_at)
+            KEY created_at (created_at),
+            KEY idx_site_status (site_id, status),
+            KEY idx_site_created (site_id, created_at),
+            KEY idx_status_created (status, created_at),
+            KEY idx_assigned (assigned_to, status),
+            KEY idx_priority (priority, created_at)
         ) $charset_collate;";
     }
     
@@ -516,7 +629,13 @@ class EduBot_Activator {
             }
         }
         
-        error_log("EduBot Pro: Database migrated from version $from_version to " . EDUBOT_PRO_DB_VERSION);
+        // Log migration using secure Logger
+        if (function_exists('EduBot_Logger')) {
+            EduBot_Logger::info('EduBot Pro database migrated', array(
+                'from_version' => $from_version,
+                'to_version' => EDUBOT_PRO_DB_VERSION,
+            ));
+        }
     }
     
     /**
@@ -564,7 +683,13 @@ class EduBot_Activator {
             
             require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
             dbDelta($sql);
-            error_log("EduBot: Created enquiries table");
+            
+            // Log table creation using secure Logger
+            if (function_exists('EduBot_Logger')) {
+                EduBot_Logger::info('EduBot enquiries table created', array(
+                    'table_name' => $table_name,
+                ));
+            }
         } else {
             // Table exists, check if it's missing the source column and add if needed
             $required_columns = array(
@@ -588,7 +713,14 @@ class EduBot_Activator {
                 
                 if (empty($column_exists)) {
                     $wpdb->query("ALTER TABLE $table_name ADD COLUMN $column_name $column_definition");
-                    error_log("EduBot: Added missing column '$column_name' to enquiries table");
+                    
+                    // Log column addition using secure Logger
+                    if (function_exists('EduBot_Logger')) {
+                        EduBot_Logger::debug('EduBot column added to enquiries table', array(
+                            'column_name' => $column_name,
+                            'table_name' => $table_name,
+                        ));
+                    }
                 }
             }
         }
@@ -797,11 +929,15 @@ class EduBot_Activator {
                 'max_retries' => 3
             ),
             'notification_settings' => array(
-                'whatsapp_enabled' => false,
-                'email_enabled' => true,
+                'email_provider' => 'wordpress',  // Default to WordPress mail
+                'email_enabled' => true,  // Enable email notifications by default
+                'whatsapp_provider' => 'meta',  // Set WhatsApp provider to Meta by default
+                'whatsapp_enabled' => true,  // Enable WhatsApp notifications by default
                 'sms_enabled' => false,
-                'admin_notifications' => true,
-                'parent_notifications' => true
+                'admin_notifications' => true,  // Enable admin notifications by default
+                'admin_email' => get_option('admin_email', 'admin@example.com'),  // Set admin email
+                'admin_phone' => '',  // Will be set by admin
+                'parent_notifications' => true  // Enable parent notifications by default
             ),
             'automation_settings' => array(
                 'auto_send_brochure' => true,
@@ -825,12 +961,82 @@ class EduBot_Activator {
             array('%d', '%s', '%s', '%s')
         );
         
+        // PERMANENT FIX: Initialize API Integrations table with default configuration
+        // This ensures notifications are properly configured on fresh installation
+        $table_api_integrations = $wpdb->prefix . 'edubot_api_integrations';
+        
+        // Check if API integrations record already exists for this site
+        $existing_api_config = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM {$table_api_integrations} WHERE site_id = %d",
+            $site_id
+        ));
+        
+        if (!$existing_api_config) {
+            // Default notification settings stored in api_integrations table
+            $default_notification_settings = array(
+                'whatsapp_parent_notifications' => true,
+                'whatsapp_school_notifications' => true,
+                'email_notifications' => true,
+                'sms_notifications' => false
+            );
+            
+            $wpdb->insert(
+                $table_api_integrations,
+                array(
+                    'site_id' => $site_id,
+                    // Email defaults
+                    'email_provider' => 'wordpress',  // Use WordPress default mail
+                    'email_from_address' => get_option('admin_email', 'noreply@example.com'),
+                    'email_from_name' => get_bloginfo('name'),
+                    'smtp_host' => '',
+                    'smtp_port' => 587,
+                    'smtp_username' => '',
+                    'smtp_password' => '',
+                    'email_api_key' => '',
+                    'email_domain' => '',
+                    // WhatsApp defaults (provider set to Meta, but token needs to be added)
+                    'whatsapp_provider' => 'meta',
+                    'whatsapp_token' => '',  // Will be filled in by admin
+                    'whatsapp_phone_id' => '',  // Will be filled in by admin
+                    'whatsapp_business_account_id' => '',
+                    'whatsapp_template_type' => 'business_template',
+                    'whatsapp_template_name' => 'admission_confirmation',
+                    // SMS defaults
+                    'sms_provider' => '',
+                    'sms_api_key' => '',
+                    'sms_sender_id' => 'EDUBOT',
+                    // OpenAI defaults
+                    'openai_api_key' => '',
+                    'openai_model' => 'gpt-3.5-turbo',
+                    // Notification settings
+                    'notification_settings' => json_encode($default_notification_settings),
+                    'status' => 'active'
+                ),
+                array(
+                    '%d',  // site_id
+                    '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s',  // email fields
+                    '%s', '%s', '%s', '%s', '%s', '%s',  // whatsapp fields
+                    '%s', '%s', '%s',  // sms fields
+                    '%s', '%s',  // openai fields
+                    '%s',  // notification_settings
+                    '%s'   // status
+                )
+            );
+        }
+        
         // CRITICAL: Set version options to prevent migrations from running on every page load
         // If these are not set, migration checks will always return true and re-run migrations
         // This causes dbDelta() to be called repeatedly, which strips UNSIGNED modifiers
         update_option('edubot_db_version', EDUBOT_PRO_VERSION);
         update_option('edubot_enquiries_db_version', '1.3.1');
         update_option('edubot_analytics_db_version', '1.1.0');
+        
+        // CRITICAL FIX: Set notification enable options so notifications are triggered
+        // The shortcode code checks these WordPress options via get_option()
+        // If these are not set, notifications won't be triggered even if configured in database
+        update_option('edubot_email_notifications', 1);          // 1 = enabled
+        update_option('edubot_whatsapp_notifications', 1);       // 1 = enabled (defaults to 0!)
+        update_option('edubot_school_whatsapp_notifications', 1); // 1 = enabled
     }
 
     /**
@@ -905,6 +1111,8 @@ class EduBot_Activator {
             ga_client_id varchar(100),
             event_type varchar(50),
             event_data longtext,
+            ip_address varchar(45) NOT NULL DEFAULT '',
+            user_agent text,
             timestamp datetime DEFAULT CURRENT_TIMESTAMP,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -924,6 +1132,7 @@ class EduBot_Activator {
         $charset_collate = $wpdb->get_charset_collate();
         return "CREATE TABLE IF NOT EXISTS $table (
             id bigint(20) NOT NULL AUTO_INCREMENT,
+            visitor_id varchar(255) UNIQUE NOT NULL,
             site_id bigint(20) NOT NULL,
             ip_address varchar(45) NOT NULL,
             user_agent text NOT NULL,
@@ -949,6 +1158,7 @@ class EduBot_Activator {
             timezone varchar(50),
             language varchar(10),
             PRIMARY KEY (id),
+            UNIQUE KEY unique_visitor_id (visitor_id),
             UNIQUE KEY unique_visitor (site_id, ip_address, user_agent(100)),
             KEY site_id (site_id),
             KEY first_visit (first_visit),
@@ -960,6 +1170,49 @@ class EduBot_Activator {
      * SQL: API Integrations table (Stores WhatsApp, Email, SMS, OpenAI configurations)
      * This table stores all API provider settings including credentials (encrypted)
      */
+    private static function sql_mcb_settings() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'edubot_mcb_settings';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) NOT NULL,
+            config_data longtext NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY unique_site (site_id),
+            KEY idx_updated (updated_at)
+        ) $charset_collate;";
+    }
+
+    /**
+     * MCB Sync Log table - Track synchronization with MyClassBoard
+     */
+    private static function sql_mcb_sync_log() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'edubot_mcb_sync_log';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            enquiry_id bigint(20) NOT NULL,
+            request_data longtext DEFAULT NULL,
+            response_data longtext DEFAULT NULL,
+            success tinyint(1) DEFAULT 0,
+            error_message text DEFAULT NULL,
+            retry_count int(11) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_enquiry (enquiry_id),
+            KEY idx_success (success),
+            KEY idx_created (created_at),
+            KEY idx_retry (retry_count)
+        ) $charset_collate;";
+    }
+
     private static function sql_api_integrations() {
         global $wpdb;
         $table = $wpdb->prefix . 'edubot_api_integrations';
