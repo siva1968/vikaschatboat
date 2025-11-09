@@ -308,6 +308,32 @@ class EduBot_Activator {
             }
         }
         
+        // Migration: Add MCB columns to applications table (v1.5.0+)
+        $applications_table = $wpdb->prefix . 'edubot_applications';
+        
+        // Add enquiry_id column if it doesn't exist
+        $has_enquiry_id = $wpdb->get_var("SHOW COLUMNS FROM {$applications_table} LIKE 'enquiry_id'");
+        if (!$has_enquiry_id) {
+            $wpdb->query("ALTER TABLE {$applications_table} ADD COLUMN enquiry_id BIGINT UNSIGNED AFTER status");
+            $wpdb->query("ALTER TABLE {$applications_table} ADD INDEX idx_enquiry_id (enquiry_id)");
+            $migrations[] = 'Added enquiry_id column to applications table';
+        }
+        
+        // Add mcb_sync_status column if it doesn't exist
+        $has_mcb_sync = $wpdb->get_var("SHOW COLUMNS FROM {$applications_table} LIKE 'mcb_sync_status'");
+        if (!$has_mcb_sync) {
+            $wpdb->query("ALTER TABLE {$applications_table} ADD COLUMN mcb_sync_status VARCHAR(50) DEFAULT 'pending' AFTER enquiry_id");
+            $wpdb->query("ALTER TABLE {$applications_table} ADD INDEX idx_mcb_sync (mcb_sync_status)");
+            $migrations[] = 'Added mcb_sync_status column to applications table';
+        }
+        
+        // Add mcb_enquiry_id column if it doesn't exist
+        $has_mcb_enquiry_id = $wpdb->get_var("SHOW COLUMNS FROM {$applications_table} LIKE 'mcb_enquiry_id'");
+        if (!$has_mcb_enquiry_id) {
+            $wpdb->query("ALTER TABLE {$applications_table} ADD COLUMN mcb_enquiry_id VARCHAR(100) AFTER mcb_sync_status");
+            $migrations[] = 'Added mcb_enquiry_id column to applications table';
+        }
+        
         return $migrations;
     }
 
@@ -571,10 +597,16 @@ class EduBot_Activator {
             custom_fields_data LONGTEXT,
             conversation_log LONGTEXT,
             status VARCHAR(50) DEFAULT 'pending',
+            enquiry_id BIGINT UNSIGNED,
+            mcb_sync_status VARCHAR(50) DEFAULT 'pending',
+            mcb_enquiry_id VARCHAR(100),
             source VARCHAR(50) DEFAULT 'chatbot',
             ip_address VARCHAR(45),
             user_agent TEXT,
             utm_data LONGTEXT,
+            gclid VARCHAR(100),
+            fbclid VARCHAR(100),
+            click_id_data LONGTEXT,
             whatsapp_sent TINYINT(1) DEFAULT 0,
             email_sent TINYINT(1) DEFAULT 0,
             sms_sent TINYINT(1) DEFAULT 0,
@@ -587,6 +619,8 @@ class EduBot_Activator {
             UNIQUE KEY application_number (application_number),
             KEY site_id (site_id),
             KEY status (status),
+            KEY enquiry_id (enquiry_id),
+            KEY mcb_sync (mcb_sync_status),
             KEY created_at (created_at),
             KEY idx_site_status (site_id, status),
             KEY idx_site_created (site_id, created_at),
@@ -612,6 +646,9 @@ class EduBot_Activator {
             
             $columns_to_add = array(
                 'utm_data' => 'longtext',
+                'gclid' => 'varchar(100)',
+                'fbclid' => 'varchar(100)',
+                'click_id_data' => 'longtext',
                 'follow_up_scheduled' => 'datetime',
                 'assigned_to' => 'bigint(20)',
                 'priority' => "varchar(20) DEFAULT 'normal'"

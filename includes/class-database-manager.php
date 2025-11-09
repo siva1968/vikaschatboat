@@ -13,11 +13,17 @@ class EduBot_Database_Manager {
         $table = $wpdb->prefix . 'edubot_applications';
         $site_id = get_current_blog_id();
 
+        error_log("EduBot save_application - Input data keys: " . implode(', ', array_keys($application_data)));
+        error_log("EduBot save_application - Has utm_data in input: " . (isset($application_data['utm_data']) ? 'YES' : 'NO'));
+
         // Validate and sanitize input data
         $validated_data = $this->validate_application_data($application_data);
         if (is_wp_error($validated_data)) {
             return $validated_data;
         }
+
+        error_log("EduBot save_application - Validated data keys: " . implode(', ', array_keys($validated_data)));
+        error_log("EduBot save_application - Has utm_data after validation: " . (isset($validated_data['utm_data']) ? 'YES' : 'NO'));
 
         $data = array(
             'site_id' => $site_id,
@@ -27,10 +33,16 @@ class EduBot_Database_Manager {
             'status' => sanitize_text_field($validated_data['status']),
             'source' => sanitize_text_field($validated_data['source']),
             'ip_address' => sanitize_text_field($this->get_client_ip()),
-            'user_agent' => sanitize_text_field($this->get_user_agent())
+            'user_agent' => sanitize_text_field($this->get_user_agent()),
+            'utm_data' => isset($validated_data['utm_data']) ? $validated_data['utm_data'] : null,
+            'gclid' => isset($validated_data['gclid']) ? sanitize_text_field($validated_data['gclid']) : null,
+            'fbclid' => isset($validated_data['fbclid']) ? sanitize_text_field($validated_data['fbclid']) : null,
+            'click_id_data' => isset($validated_data['click_id_data']) ? $validated_data['click_id_data'] : null
         );
 
-        $formats = array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s');
+        error_log("EduBot save_application - Data array utm_data value (first 50 chars): '" . substr($data['utm_data'] ?? 'NULL', 0, 50) . "'");
+
+        $formats = array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');
 
         $result = $wpdb->insert($table, $data, $formats);
 
@@ -152,17 +164,50 @@ class EduBot_Database_Manager {
     public function get_application($application_id) {
         global $wpdb;
         
-        // Remove 'enq_' prefix if present
+        // Remove 'enq_' or 'app_' prefix if present
+        $actual_id = $application_id;
+        $source_table = null;
+        
         if (strpos($application_id, 'enq_') === 0) {
             $actual_id = str_replace('enq_', '', $application_id);
-        } else {
-            $actual_id = $application_id;
+            $source_table = $wpdb->prefix . 'edubot_enquiries';
+        } elseif (strpos($application_id, 'app_') === 0) {
+            $actual_id = str_replace('app_', '', $application_id);
+            $source_table = $wpdb->prefix . 'edubot_applications';
         }
         
-        $table = $wpdb->prefix . 'edubot_enquiries';
+        // Try to get from wp_edubot_applications first (newer form submissions with UTM data)
+        if ($source_table !== $wpdb->prefix . 'edubot_enquiries') {
+            $app_table = $wpdb->prefix . 'edubot_applications';
+            $application = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $app_table WHERE id = %d",
+                $actual_id
+            ), ARRAY_A);
+            
+            if ($application) {
+                // Already has the structure we need from wp_edubot_applications
+                return array(
+                    'id' => 'app_' . $application['id'],
+                    'application_number' => $application['application_number'],
+                    'student_data' => $application['student_data'],
+                    'status' => $application['status'],
+                    'source' => $application['source'] ?? 'application_form',
+                    'created_at' => $application['created_at'],
+                    'ip_address' => $application['ip_address'] ?? null,
+                    'user_agent' => $application['user_agent'] ?? null,
+                    'utm_data' => $application['utm_data'] ?? null,
+                    'gclid' => $application['gclid'] ?? null,
+                    'fbclid' => $application['fbclid'] ?? null,
+                    'click_id_data' => $application['click_id_data'] ?? null
+                );
+            }
+        }
+        
+        // Fallback to wp_edubot_enquiries (older chatbot submissions)
+        $enquiry_table = $wpdb->prefix . 'edubot_enquiries';
         
         $enquiry = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE id = %d",
+            "SELECT * FROM $enquiry_table WHERE id = %d",
             $actual_id
         ), ARRAY_A);
         
@@ -173,18 +218,18 @@ class EduBot_Database_Manager {
                 'application_number' => $enquiry['enquiry_number'],
                 'student_data' => json_encode(array(
                     'student_name' => $enquiry['student_name'],
-                    'date_of_birth' => $enquiry['date_of_birth'],
-                    'grade' => $enquiry['grade'],
-                    'educational_board' => $enquiry['board'],
-                    'academic_year' => $enquiry['academic_year'],
+                    'date_of_birth' => $enquiry['date_of_birth'] ?? '',
+                    'grade' => $enquiry['grade'] ?? '',
+                    'educational_board' => $enquiry['board'] ?? '',
+                    'academic_year' => $enquiry['academic_year'] ?? '',
                     'parent_name' => $enquiry['parent_name'],
                     'email' => $enquiry['email'],
                     'phone' => $enquiry['phone'],
-                    'address' => $enquiry['address'],
-                    'gender' => $enquiry['gender']
+                    'address' => $enquiry['address'] ?? '',
+                    'gender' => $enquiry['gender'] ?? ''
                 )),
                 'status' => $enquiry['status'],
-                'source' => 'chatbot',
+                'source' => $enquiry['source'] ?? 'chatbot',
                 'created_at' => $enquiry['created_at'],
                 'ip_address' => $enquiry['ip_address'] ?? null,
                 'user_agent' => $enquiry['user_agent'] ?? null,

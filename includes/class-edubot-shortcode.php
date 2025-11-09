@@ -3727,6 +3727,65 @@ class EduBot_Shortcode {
             wp_send_json_error(array('message' => 'An application for this student already exists with this email address.'));
         }
         
+        // Capture marketing/UTM data from multiple sources with priority
+        // Priority 1: Check if sent in POST from JavaScript (most reliable during AJAX)
+        $utm_data = array();
+        $utm_params = array('utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'ttclid', 'twclid', '_kenshoo_clickid', 'irclickid', 'li_fat_id', 'sc_click_id', 'yclid');
+        
+        foreach ($utm_params as $param) {
+            // Check POST first (from AJAX/JavaScript with URL params)
+            if (isset($_POST['utm_params']) && is_array($_POST['utm_params']) && isset($_POST['utm_params'][$param])) {
+                $utm_data[$param] = sanitize_text_field($_POST['utm_params'][$param]);
+                error_log("EduBot Form Submission: Got {$param} from POST utm_params");
+            }
+            // Fallback to direct POST fields
+            elseif (isset($_POST[$param])) {
+                $utm_data[$param] = sanitize_text_field($_POST[$param]);
+            }
+        }
+        
+        // Priority 2: Fallback to cookies/session
+        if (empty($utm_data)) {
+            $utm_data = $this->get_utm_data();
+            error_log("EduBot Form Submission: Using UTM from cookies/session");
+        } else {
+            error_log("EduBot Form Submission: Using UTM from AJAX POST data");
+        }
+        
+        error_log("EduBot Form Submission: Captured UTM data: " . json_encode($utm_data));
+        
+        // Extract click IDs for separate storage
+        $gclid = $utm_data['gclid'] ?? null;
+        $fbclid = $utm_data['fbclid'] ?? null;
+        
+        // Prepare click ID data for comprehensive tracking
+        $click_id_data = array();
+        if ($gclid) {
+            $click_id_data['gclid'] = $gclid;
+            $click_id_data['gclid_captured_at'] = current_time('mysql');
+        }
+        if ($fbclid) {
+            $click_id_data['fbclid'] = $fbclid;
+            $click_id_data['fbclid_captured_at'] = current_time('mysql');
+        }
+        
+        // Add other tracking IDs if present
+        $other_click_params = array('msclkid', 'ttclid', 'twclid', '_kenshoo_clickid', 'irclickid');
+        foreach ($other_click_params as $param) {
+            if (isset($utm_data[$param])) {
+                $click_id_data[$param] = $utm_data[$param];
+                $click_id_data[$param . '_captured_at'] = current_time('mysql');
+            }
+        }
+        
+        // Determine source from UTM data or default to chatbot
+        $source = 'application_form'; // Default source for form submissions
+        if (!empty($utm_data['utm_source'])) {
+            // Use utm_source as the source (e.g., 'google', 'facebook', 'email', 'organic_search', 'direct')
+            $source = sanitize_text_field($utm_data['utm_source']);
+            error_log("EduBot Form Submission: Source determined from UTM: " . $source);
+        }
+        
         // Prepare sanitized student data
         $student_data = array(
             'student_name' => $student_name,
@@ -3756,7 +3815,11 @@ class EduBot_Shortcode {
                 'form_version' => '1.0'
             ),
             'status' => 'pending',
-            'source' => 'application_form'
+            'source' => $source,
+            'utm_data' => wp_json_encode($utm_data),
+            'gclid' => $gclid,
+            'fbclid' => $fbclid,
+            'click_id_data' => !empty($click_id_data) ? wp_json_encode($click_id_data) : null
         );
         
         try {

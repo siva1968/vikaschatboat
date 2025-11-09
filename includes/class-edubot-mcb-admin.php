@@ -74,10 +74,23 @@ class EduBot_MCB_Admin {
      * Add MCB sync action to row actions
      */
     public static function add_sync_action($actions, $application) {
-        $enquiry_id = isset($application['enquiry_id']) ? $application['enquiry_id'] : 0;
+        // Check if MCB integration is enabled
+        if (!class_exists('EduBot_MCB_Service')) {
+            return $actions;
+        }
+        
+        $mcb_service = EduBot_MCB_Service::get_instance();
+        
+        // Only show button if MCB sync is enabled
+        if (!$mcb_service->is_sync_enabled()) {
+            return $actions;
+        }
+        
+        // Use 'id' from applications table (primary key)
+        $application_id = isset($application['id']) ? $application['id'] : 0;
         $mcb_status = isset($application['mcb_sync_status']) ? $application['mcb_sync_status'] : '';
         
-        if ($enquiry_id) {
+        if ($application_id) {
             $sync_text = 'Sync MCB';
             $sync_class = 'sync-mcb';
             
@@ -92,7 +105,7 @@ class EduBot_MCB_Admin {
             $actions['mcb_sync'] = sprintf(
                 '<a href="#" class="mcb-sync-btn %s" data-enquiry-id="%d" title="Sync this enquiry to MyClassBoard">%s</a>',
                 $sync_class,
-                $enquiry_id,
+                $application_id,
                 $sync_text
             );
         }

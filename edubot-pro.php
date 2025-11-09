@@ -16,7 +16,7 @@
  * Plugin Name:       EduBot Pro
  * Plugin URI:        https://example.com/edubot-pro
  * Description:       Advanced AI-powered educational chatbot for WordPress with enhanced conversational flow and multi-institutional support.
- * Version:           1.5.0
+ * Version:           1.5.2
  * Author:            Your Name
  * Author URI:        https://example.com
  * License:           GPL-2.0+
@@ -35,7 +35,7 @@ if (!defined('WPINC')) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define('EDUBOT_PRO_VERSION', '1.5.0');
+define('EDUBOT_PRO_VERSION', '1.5.2');
 
 /**
  * CRITICAL: Capture UTM to cookies IMMEDIATELY in plugin bootstrap
@@ -138,6 +138,14 @@ require plugin_dir_path(__FILE__) . 'includes/admin/class-mcb-sync-dashboard.php
 if (is_admin()) {
     new EduBot_MCB_Settings_Page();
     new EduBot_MCB_Sync_Dashboard();
+    
+    // Initialize MCB admin interface (manual sync button and status column)
+    // Use admin_init hook to ensure all admin filters are registered
+    add_action('admin_init', function() {
+        if (class_exists('EduBot_MCB_Admin')) {
+            EduBot_MCB_Admin::init();
+        }
+    });
 }
 
 /**

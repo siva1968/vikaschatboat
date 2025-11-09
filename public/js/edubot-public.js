@@ -609,33 +609,64 @@
         // Handle form submission
         handleFormSubmission: function(form) {
             var formData = new FormData(form[0]);
-            var submitBtn = form.find('.edubot-submit-btn');
+            var submitBtn = form.find('.submit-button');
+            
+            // Capture UTM parameters from URL
+            var urlParams = new URLSearchParams(window.location.search);
+            var utm_params = {};
+            
+            // List of UTM/tracking parameters to capture
+            var param_list = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+                             'gclid', 'fbclid', 'msclkid', 'ttclid', 'twclid', '_kenshoo_clickid', 
+                             'irclickid', 'li_fat_id', 'sc_click_id', 'yclid'];
+            
+            // Extract each parameter from URL
+            param_list.forEach(function(param) {
+                if (urlParams.has(param)) {
+                    utm_params[param] = urlParams.get(param);
+                }
+            });
+            
+            console.log('EduBot: Captured UTM parameters:', utm_params);
             
             // Disable submit button
-            submitBtn.prop('disabled', true).addClass('edubot-loading');
+            submitBtn.prop('disabled', true).addClass('loading');
             
             $.ajax({
                 url: edubot_ajax.ajax_url,
                 type: 'POST',
                 data: {
-                    action: 'edubot_form_submit',
-                    form_data: Object.fromEntries(formData),
-                    nonce: edubot_ajax.nonce
+                    action: 'edubot_submit_application',
+                    edubot_nonce: edubot_ajax.nonce,
+                    utm_params: utm_params,
+                    student_name: formData.get('student_name'),
+                    date_of_birth: formData.get('date_of_birth'),
+                    grade: formData.get('grade'),
+                    gender: formData.get('gender'),
+                    parent_name: formData.get('parent_name'),
+                    email: formData.get('email'),
+                    phone: formData.get('phone'),
+                    address: formData.get('address'),
+                    educational_board: formData.get('educational_board'),
+                    academic_year: formData.get('academic_year'),
+                    special_requirements: formData.get('special_requirements'),
+                    marketing_consent: formData.get('marketing_consent') ? 1 : 0
                 },
                 success: function(response) {
                     if (response.success) {
-                        form.html('<div class="edubot-success-message">' +
-                                '<h3>🎉 Application Submitted Successfully!</h3>' +
-                                '<p>Application Number: <strong>' + response.data.application_number + '</strong></p>' +
+                        form.html('<div class="success-message" style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 6px; color: #155724;">' +
+                                '<h3 style="margin-top: 0;">🎉 Application Submitted Successfully!</h3>' +
+                                '<p><strong>Application Number:</strong> ' + response.data.application_number + '</p>' +
                                 '<p>' + response.data.message + '</p></div>');
                     } else {
-                        alert('Error: ' + response.data);
-                        submitBtn.prop('disabled', false).removeClass('edubot-loading');
+                        alert('Error: ' + (response.data.message || 'Unknown error occurred'));
+                        submitBtn.prop('disabled', false).removeClass('loading');
                     }
                 },
-                error: function() {
-                    alert('An error occurred. Please try again.');
-                    submitBtn.prop('disabled', false).removeClass('edubot-loading');
+                error: function(xhr, status, error) {
+                    alert('An error occurred: ' + error + '. Please try again.');
+                    console.error('Form submission error:', xhr, status, error);
+                    submitBtn.prop('disabled', false).removeClass('loading');
                 }
             });
         },

@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 
 // Core plugin constants (only define if not already defined)
 if (!defined('EDUBOT_PRO_VERSION')) {
-    define('EDUBOT_PRO_VERSION', '1.3.7');
+    define('EDUBOT_PRO_VERSION', '1.5.2');
 }
 
 if (!defined('EDUBOT_PRO_PLUGIN_FILE')) {

@@ -439,7 +439,7 @@ class EduBot_Workflow_Manager {
                        
             case 'collect_grade':
                 return $progress . "\n🎓 **Excellent! Which grade/class are you seeking admission for?**\n\n" .
-                       "Examples: Grade 5, Class 1, Nursery, PP1, LKG";
+                       "Examples: Grade 5, Class 1, Nursery, PP1";
                        
             case 'collect_board':
                 return $progress . "\n📚 **Almost done! Which educational board do you prefer?**\n\n" .

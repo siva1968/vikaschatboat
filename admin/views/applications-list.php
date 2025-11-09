@@ -92,8 +92,19 @@ if (!defined('ABSPATH')) {
                                 </span>
                             </td>
                             <td>
-                                <a href="#" class="button button-small view-application" data-id="<?php echo esc_attr($app['id']); ?>">View</a>
-                                <a href="#" class="button button-small button-link-delete delete-application" data-id="<?php echo esc_attr($app['id']); ?>" onclick="return confirm('Are you sure you want to delete this application?');">Delete</a>
+                                <?php
+                                // Build action links array
+                                $action_links = array(
+                                    'view' => '<a href="#" class="button button-small view-application" data-id="' . esc_attr($app['id']) . '">View</a>',
+                                    'delete' => '<a href="#" class="button button-small button-link-delete delete-application" data-id="' . esc_attr($app['id']) . '" onclick="return confirm(\'Are you sure you want to delete this application?\');">Delete</a>'
+                                );
+                                
+                                // Apply filter to allow MCB and other features to add buttons
+                                $action_links = apply_filters('edubot_applications_row_actions', $action_links, $app);
+                                
+                                // Output action links
+                                echo implode(' ', $action_links);
+                                ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
