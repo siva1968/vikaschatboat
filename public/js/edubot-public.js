@@ -187,7 +187,7 @@
             });
 
             // Handle form submissions (if inline forms exist)
-            $(document).on('submit', '#edubot-application-form', function(e) {
+            $(document).on('submit', '#edubot-application', function(e) {
                 e.preventDefault();
                 self.handleFormSubmission($(this));
             });

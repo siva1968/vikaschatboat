@@ -685,10 +685,19 @@ class EduBot_Workflow_Manager {
         $utm_params = array('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid', 'fbclid');
         
         foreach ($utm_params as $param) {
+            // First check $_GET (immediate parameters in URL)
             if (!empty($_GET[$param])) {
                 $utm_data[$param] = sanitize_text_field($_GET[$param]);
+                error_log("EduBot get_utm_data: Found {$param} in \$_GET: " . $utm_data[$param]);
+            }
+            // If not in $_GET, check cookies (from previous page visit with UTM params)
+            elseif (!empty($_COOKIE['edubot_' . $param])) {
+                $utm_data[$param] = sanitize_text_field($_COOKIE['edubot_' . $param]);
+                error_log("EduBot get_utm_data: Found {$param} in COOKIE: " . $utm_data[$param]);
             }
         }
+        
+        error_log("EduBot get_utm_data: Final UTM data collected: " . wp_json_encode($utm_data));
         
         return $utm_data;
     }
@@ -736,13 +745,37 @@ class EduBot_Workflow_Manager {
 
             error_log('EduBot Workflow Manager: Student data prepared: ' . wp_json_encode($student_data));
 
+            // Collect UTM data from GET parameters
+            $utm_data = $this->get_utm_data();
+            $gclid = $utm_data['gclid'] ?? null;
+            $fbclid = $utm_data['fbclid'] ?? null;
+            
+            // Build click_id_data
+            $click_id_data = array();
+            if ($gclid) {
+                $click_id_data['gclid'] = $gclid;
+                $click_id_data['gclid_captured_at'] = current_time('mysql');
+            }
+            if ($fbclid) {
+                $click_id_data['fbclid'] = $fbclid;
+                $click_id_data['fbclid_captured_at'] = current_time('mysql');
+            }
+
+            error_log('EduBot Workflow Manager: UTM data collected for applications table: ' . wp_json_encode($utm_data));
+
             $application_data = array(
                 'application_number' => $enquiry_number,
                 'student_data' => $student_data,
                 'conversation_log' => array(),
                 'status' => 'pending',
-                'source' => 'chatbot'
+                'source' => 'chatbot',
+                'utm_data' => wp_json_encode($utm_data),
+                'gclid' => $gclid,
+                'fbclid' => $fbclid,
+                'click_id_data' => wp_json_encode($click_id_data)
             );
+
+            error_log('EduBot Workflow Manager: Application data for save: ' . wp_json_encode($application_data));
 
             $result = $database_manager->save_application($application_data);
             

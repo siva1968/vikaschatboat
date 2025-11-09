@@ -3589,6 +3589,17 @@ class EduBot_Shortcode {
      * Handle application submission with enhanced security
      */
     public function handle_application_submission() {
+        // COMPREHENSIVE DEBUG LOGGING
+        error_log("========================================");
+        error_log("EduBot handle_application_submission STARTED");
+        error_log("========================================");
+        error_log("POST Keys: " . implode(', ', array_keys($_POST)));
+        error_log("Has utm_params in POST: " . (isset($_POST['utm_params']) ? 'YES' : 'NO'));
+        if (isset($_POST['utm_params'])) {
+            error_log("utm_params content: " . json_encode($_POST['utm_params']));
+        }
+        error_log("========================================");
+        
         // Enhanced nonce verification
         if (!check_ajax_referer('edubot_application', 'edubot_nonce', false)) {
             $this->log_security_violation('invalid_nonce_application', array(
@@ -3753,6 +3764,10 @@ class EduBot_Shortcode {
         }
         
         error_log("EduBot Form Submission: Captured UTM data: " . json_encode($utm_data));
+        error_log("EduBot Form Submission: gclid = " . ($gclid ?? 'NULL'));
+        error_log("EduBot Form Submission: fbclid = " . ($fbclid ?? 'NULL'));
+        error_log("EduBot Form Submission: click_id_data = " . json_encode($click_id_data));
+        error_log("========================================");
         
         // Extract click IDs for separate storage
         $gclid = $utm_data['gclid'] ?? null;
@@ -3821,6 +3836,16 @@ class EduBot_Shortcode {
             'fbclid' => $fbclid,
             'click_id_data' => !empty($click_id_data) ? wp_json_encode($click_id_data) : null
         );
+        
+        // DEBUG: Log before save
+        error_log("========================================");
+        error_log("EduBot: About to save application");
+        error_log("Application Data Keys: " . implode(', ', array_keys($application_data)));
+        error_log("utm_data value: " . substr($application_data['utm_data'], 0, 100));
+        error_log("gclid value: " . ($application_data['gclid'] ?? 'NULL'));
+        error_log("fbclid value: " . ($application_data['fbclid'] ?? 'NULL'));
+        error_log("click_id_data value: " . substr($application_data['click_id_data'] ?? 'NULL', 0, 100));
+        error_log("========================================");
         
         try {
             // Save to database using the enhanced database manager

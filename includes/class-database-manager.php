@@ -43,8 +43,24 @@ class EduBot_Database_Manager {
         error_log("EduBot save_application - Data array utm_data value (first 50 chars): '" . substr($data['utm_data'] ?? 'NULL', 0, 50) . "'");
 
         $formats = array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');
+        
+        // DEBUG: Show exact data being inserted
+        error_log("========================================");
+        error_log("EduBot: About to INSERT application");
+        error_log("Table: " . $table);
+        error_log("utm_data: " . ($data['utm_data'] ?? 'NULL'));
+        error_log("gclid: " . ($data['gclid'] ?? 'NULL'));
+        error_log("fbclid: " . ($data['fbclid'] ?? 'NULL'));
+        error_log("click_id_data: " . ($data['click_id_data'] ?? 'NULL'));
+        error_log("========================================");
 
         $result = $wpdb->insert($table, $data, $formats);
+        
+        // DEBUG: Show result
+        error_log("EduBot: INSERT result = " . ($result !== false ? 'SUCCESS' : 'FAILED'));
+        if ($result === false) {
+            error_log("EduBot: INSERT error: " . $wpdb->last_error);
+        }
 
         if ($result !== false) {
             // Log successful application save
