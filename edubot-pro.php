@@ -125,9 +125,20 @@ require plugin_dir_path(__FILE__) . 'includes/class-applications-table-fixer.php
 /**
  * Load MCB (MyClassBoard) sync service and integration
  */
+require plugin_dir_path(__FILE__) . 'includes/class-myclassboard-integration.php';
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-service.php';
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-integration.php';
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-admin.php';
+require plugin_dir_path(__FILE__) . 'includes/admin/class-mcb-settings-page.php';
+require plugin_dir_path(__FILE__) . 'includes/admin/class-mcb-sync-dashboard.php';
+
+/**
+ * Initialize MCB admin pages if in admin
+ */
+if (is_admin()) {
+    new EduBot_MCB_Settings_Page();
+    new EduBot_MCB_Sync_Dashboard();
+}
 
 /**
  * Check plugin requirements before activation
