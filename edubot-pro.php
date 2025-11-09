@@ -16,7 +16,7 @@
  * Plugin Name:       EduBot Pro
  * Plugin URI:        https://example.com/edubot-pro
  * Description:       Advanced AI-powered educational chatbot for WordPress with enhanced conversational flow and multi-institutional support.
- * Version:           1.4.2
+ * Version:           1.5.0
  * Author:            Your Name
  * Author URI:        https://example.com
  * License:           GPL-2.0+
@@ -35,7 +35,7 @@ if (!defined('WPINC')) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define('EDUBOT_PRO_VERSION', '1.4.2');
+define('EDUBOT_PRO_VERSION', '1.5.0');
 
 /**
  * CRITICAL: Capture UTM to cookies IMMEDIATELY in plugin bootstrap
