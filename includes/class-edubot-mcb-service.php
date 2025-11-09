@@ -128,14 +128,18 @@ class EduBot_MCB_Service {
             $lead_source = isset($enquiry['source']) ? $enquiry['source'] : 'unknown';
             $source_id = $this->map_lead_source($lead_source);
             
-            // Prepare MCB payload
+            // Extract marketing parameters from utm_data
+            $utm_data = !empty($enquiry['utm_data']) ? json_decode($enquiry['utm_data'], true) : array();
+            $click_id_data = !empty($enquiry['click_id_data']) ? json_decode($enquiry['click_id_data'], true) : array();
+            
+            // Prepare MCB payload with marketing parameters
             $mcb_data = array(
                 'OrgID' => $this->mcb_settings['organization_id'],
                 'BranchID' => $this->mcb_settings['branch_id'],
                 'StudentName' => sanitize_text_field($enquiry['student_name']),
                 'ClassID' => $class_id,
                 'BoardID' => $board_id,
-                'ParentName' => sanitize_text_field($enquiry['contact_person'] ?? $enquiry['student_name']),
+                'ParentName' => sanitize_text_field($enquiry['parent_name'] ?? $enquiry['student_name']),
                 'ParentMobileNo' => sanitize_text_field($enquiry['phone']),
                 'ParentEmailID' => sanitize_email($enquiry['email']),
                 'AcademicYear' => isset($enquiry['academic_year']) ? sanitize_text_field($enquiry['academic_year']) : date('Y') . '-' . (date('Y') + 1),
@@ -145,7 +149,23 @@ class EduBot_MCB_Service {
                 'Phone' => sanitize_text_field($enquiry['phone']),
                 'Email' => sanitize_email($enquiry['email']),
                 'Gender' => isset($enquiry['gender']) ? sanitize_text_field($enquiry['gender']) : '',
-                'DateOfBirth' => isset($enquiry['date_of_birth']) ? sanitize_text_field($enquiry['date_of_birth']) : ''
+                'DateOfBirth' => isset($enquiry['date_of_birth']) ? sanitize_text_field($enquiry['date_of_birth']) : '',
+                
+                // Marketing Parameters - UTM Tracking
+                'UTMSource' => sanitize_text_field($utm_data['utm_source'] ?? ''),
+                'UTMMedium' => sanitize_text_field($utm_data['utm_medium'] ?? ''),
+                'UTMCampaign' => sanitize_text_field($utm_data['utm_campaign'] ?? ''),
+                'UTMContent' => sanitize_text_field($utm_data['utm_content'] ?? ''),
+                'UTMTerm' => sanitize_text_field($utm_data['utm_term'] ?? ''),
+                
+                // Click IDs - Google & Facebook Tracking
+                'GClickID' => sanitize_text_field($enquiry['gclid'] ?? $click_id_data['gclid'] ?? ''),
+                'FBClickID' => sanitize_text_field($enquiry['fbclid'] ?? $click_id_data['fbclid'] ?? ''),
+                
+                // Additional tracking
+                'IPAddress' => sanitize_text_field($enquiry['ip_address'] ?? ''),
+                'LeadSource' => sanitize_text_field($lead_source),
+                'CapturedFrom' => 'EduBot Chatbot'
             );
             
             return $mcb_data;

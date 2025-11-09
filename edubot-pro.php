@@ -127,6 +127,7 @@ require plugin_dir_path(__FILE__) . 'includes/class-applications-table-fixer.php
  */
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-service.php';
 require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-integration.php';
+require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-admin.php';
 
 /**
  * Check plugin requirements before activation
