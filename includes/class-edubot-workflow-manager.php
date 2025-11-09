@@ -615,6 +615,14 @@ class EduBot_Workflow_Manager {
             $enquiry_id = $wpdb->insert_id;
             error_log("EduBot Workflow Manager: Successfully saved enquiry {$enquiry_number} to database with ID {$enquiry_id}");
             
+            // Trigger MCB sync (if enabled)
+            try {
+                do_action('edubot_enquiry_submitted', $enquiry_id);
+                error_log("EduBot Workflow Manager: MCB sync triggered for enquiry {$enquiry_id}");
+            } catch (Exception $mcb_error) {
+                error_log("EduBot Workflow Manager: Exception during MCB sync trigger: " . $mcb_error->getMessage());
+            }
+            
             // Save to applications table
             try {
                 $this->save_to_applications_table($collected_data, $enquiry_number);

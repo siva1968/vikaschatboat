@@ -123,6 +123,12 @@ require plugin_dir_path(__FILE__) . 'includes/class-edubot-core.php';
 require plugin_dir_path(__FILE__) . 'includes/class-applications-table-fixer.php';
 
 /**
+ * Load MCB (MyClassBoard) sync service and integration
+ */
+require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-service.php';
+require plugin_dir_path(__FILE__) . 'includes/class-edubot-mcb-integration.php';
+
+/**
  * Check plugin requirements before activation
  */
 function edubot_pro_check_requirements() {
