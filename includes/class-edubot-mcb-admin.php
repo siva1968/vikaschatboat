@@ -118,14 +118,16 @@ class EduBot_MCB_Admin {
                 $sync_text
             );
             
-            // Add preview button
-            // NOTE: For MCB, we need to pass the enquiry_number (application_number),
-            // NOT the prefixed ID. The MCB service will use this to find the actual
-            // application record and link it to the enquiry.
-            $actions['mcb_preview'] = sprintf(
-                '<a href="#" class="mcb-preview-btn" data-enquiry-id="%s" title="Preview MCB data that will be sent">👁️ Preview</a>',
-                esc_attr($application['application_number'] ?? 'N/A')
-            );
+            // Add preview button - only if debug mode is enabled
+            if ($mcb_service->is_debug_enabled()) {
+                // NOTE: For MCB, we need to pass the enquiry_number (application_number),
+                // NOT the prefixed ID. The MCB service will use this to find the actual
+                // application record and link it to the enquiry.
+                $actions['mcb_preview'] = sprintf(
+                    '<a href="#" class="mcb-preview-btn" data-enquiry-id="%s" title="Preview MCB data that will be sent">👁️ Preview</a>',
+                    esc_attr($application['application_number'] ?? 'N/A')
+                );
+            }
         }
         
         return $actions;

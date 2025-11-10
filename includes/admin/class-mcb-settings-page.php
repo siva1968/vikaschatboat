@@ -85,6 +85,7 @@ class EduBot_MCB_Settings_Page {
             'sync_updates'          => isset( $input['sync_updates'] ) ? 1 : 0,
             'auto_sync'             => isset( $input['auto_sync'] ) ? 1 : 0,
             'test_mode'             => isset( $input['test_mode'] ) ? 1 : 0,
+            'debug_mode'            => isset( $input['debug_mode'] ) ? 1 : 0,
             'timeout'               => intval( $input['timeout'] ?? 65 ),
             'retry_attempts'        => intval( $input['retry_attempts'] ?? 3 ),
         );
@@ -345,6 +346,22 @@ class EduBot_MCB_Settings_Page {
                                             <span class="slider"></span>
                                         </label>
                                         <p class="description">Enable test mode (logs sync attempts without sending)</p>
+                                    </td>
+                                </tr>
+
+                                <!-- Debug Mode -->
+                                <tr>
+                                    <th scope="row">
+                                        <label for="edubot_mcb_debug_mode">Debug Mode</label>
+                                    </th>
+                                    <td>
+                                        <label class="switch">
+                                            <input type="checkbox" name="edubot_mcb_settings[debug_mode]" 
+                                                   id="edubot_mcb_debug_mode" value="1" 
+                                                   <?php checked( $settings['debug_mode'], 1 ); ?>>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <p class="description">Enable debug mode to show MCB preview button in applications list</p>
                                     </td>
                                 </tr>
 

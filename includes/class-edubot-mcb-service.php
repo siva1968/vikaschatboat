@@ -60,6 +60,13 @@ class EduBot_MCB_Service {
     }
     
     /**
+     * Check if debug mode is enabled
+     */
+    public function is_debug_enabled() {
+        return !empty($this->mcb_settings['debug_mode']);
+    }
+    
+    /**
      * Sync an enquiry to MCB
      * 
      * @param int $enquiry_id - Application ID to sync (from the applications table)
