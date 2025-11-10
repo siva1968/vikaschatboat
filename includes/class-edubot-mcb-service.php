@@ -844,7 +844,30 @@ class EduBot_MCB_Service {
                         if (is_string($response_data)) {
                             error_log('[RESP-016D] Response is a plain string, treating as MCB message');
                             $error_message = $response_data;
-                            $sync_status = 'failed';
+                            
+                            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                            // SPECIAL CASE: "Student details already Exists"
+                            // This means the student/enquiry already exists in MCB
+                            // We should treat this as SUCCESS (not failure) since the enquiry is in MCB
+                            if (stripos($response_data, 'Student details already Exists') !== false || 
+                                stripos($response_data, 'already exists') !== false) {
+                                error_log('[RESP-016F] 📌 SPECIAL CASE: Student already exists in MCB');
+                                error_log('[RESP-016G] 🟢 Treating as SUCCESS - enquiry is in MCB system');
+                                
+                                // Mark as synced (success case)
+                                $success = true;
+                                $sync_status = 'synced';
+                                
+                                // Use the enquiry_id we sent as the MCB enquiry ID
+                                $mcb_enquiry_id = $enquiry_id;
+                                $mcb_query_code = $enquiry_id;
+                                
+                                error_log('[RESP-016H] Marked as SYNCED with enquiry_id: ' . $enquiry_id);
+                            } else {
+                                // Regular error message
+                                $sync_status = 'failed';
+                                error_log('[RESP-016I] Regular MCB error, marking as FAILED');
+                            }
                         } else {
                             error_log('[RESP-016E] Response is not array or string, unexpected type');
                             $error_message = 'Unexpected MCB response format';
