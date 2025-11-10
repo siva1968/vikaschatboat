@@ -93,9 +93,9 @@ if (!defined('ABSPATH')) {
                                 </span>
                             </td>
                             <td>
-                                <?php if (!empty($app['mcb_query_code'])): ?>
+                                <?php if (!empty($app['mcb_enquiry_id'])): ?>
                                     <span class="mcb-enquiry-code" style="background: #fff3cd; padding: 4px 8px; border-radius: 3px; font-weight: bold; font-family: monospace; font-size: 12px;">
-                                        <?php echo esc_html($app['mcb_query_code']); ?>
+                                        <?php echo esc_html($app['mcb_enquiry_id']); ?>
                                     </span>
                                 <?php else: ?>
                                     <span style="color: #999;">—</span>

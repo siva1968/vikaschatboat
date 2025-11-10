@@ -3565,14 +3565,9 @@ class EduBot_Admin {
             $status_icon = $mcb_status === 'synced' ? '✓' : ($mcb_status === 'failed' ? '✗' : '⏳');
             $html .= '<tr><td><strong>Sync Status:</strong></td><td><span style="color: ' . esc_attr($status_color) . '; font-weight: bold;">' . esc_html($status_icon) . ' ' . esc_html(ucfirst($mcb_status)) . '</span></td></tr>';
             
-            // MCB EnquiryCode (the important one!)
-            if (!empty($application['mcb_query_code'])) {
-                $html .= '<tr><td><strong>EnquiryCode:</strong></td><td><span style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-family: monospace;">' . esc_html($application['mcb_query_code']) . '</span></td></tr>';
-            }
-            
-            // MCB Enquiry ID
+            // MCB EnquiryCode (the important one - shown in mcb_enquiry_id field!)
             if (!empty($application['mcb_enquiry_id'])) {
-                $html .= '<tr><td><strong>MCB Enquiry ID:</strong></td><td>' . esc_html($application['mcb_enquiry_id']) . '</td></tr>';
+                $html .= '<tr><td><strong>EnquiryCode:</strong></td><td><span style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-family: monospace;">' . esc_html($application['mcb_enquiry_id']) . '</span></td></tr>';
             }
             
             $html .= '</table>';

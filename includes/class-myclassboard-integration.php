@@ -432,21 +432,23 @@ class EduBot_MyClassBoard_Integration {
                 error_log( '[MCB-OLD-038] 📋 Found enquiry_number: ' . $enquiry['enquiry_number'] );
 
                 // Update applications table where application_number = enquiry_number
+                // Use mcb_query_code if available (EnquiryCode from message), otherwise use mcb_enquiry_id
+                $enquiry_code_to_store = !empty( $mcb_query_code ) ? $mcb_query_code : $mcb_enquiry_id;
+                
                 $apps_updated = $wpdb->update(
                     $wpdb->prefix . 'edubot_applications',
                     array(
                         'mcb_sync_status' => 'synced',
-                        'mcb_enquiry_id'  => $mcb_enquiry_id,
-                        'mcb_query_code'  => $mcb_query_code,
+                        'mcb_enquiry_id'  => $enquiry_code_to_store,
                     ),
                     array( 'application_number' => $enquiry['enquiry_number'] ),
-                    array( '%s', '%s', '%s' ),
+                    array( '%s', '%s' ),
                     array( '%s' )
                 );
 
                 if ( $apps_updated > 0 ) {
                     error_log( '[MCB-OLD-039] ✅ Updated ' . $apps_updated . ' row(s) in wp_edubot_applications table' );
-                    error_log( '[MCB-OLD-044] 📌 Stored MCB EnquiryCode: ' . $mcb_query_code );
+                    error_log( '[MCB-OLD-044] 📌 Stored MCB EnquiryCode: ' . $enquiry_code_to_store );
                 } else {
                     error_log( '[MCB-OLD-040] ⚠️ No rows updated in wp_edubot_applications table (may not exist for chatbot submissions)' );
                 }
