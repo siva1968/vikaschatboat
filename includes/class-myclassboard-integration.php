@@ -404,6 +404,9 @@ class EduBot_MyClassBoard_Integration {
             $mcb_enquiry_id = isset( $response['enquiry_id'] ) ? $response['enquiry_id'] : '';
             $mcb_query_code = isset( $response['query_code'] ) ? $response['query_code'] : '';
 
+            error_log( '[MCB-OLD-036] 📊 Updating enquiry status to "synced" in both tables' );
+
+            // Update enquiry table
             $wpdb->update(
                 $wpdb->prefix . 'edubot_enquiries',
                 array(
@@ -415,6 +418,70 @@ class EduBot_MyClassBoard_Integration {
                 array( '%s', '%s', '%s' ),
                 array( '%d' )
             );
+
+            error_log( '[MCB-OLD-037] ✅ Updated wp_edubot_enquiries table' );
+
+            // Also update applications table (if it exists with this enquiry)
+            // Get the enquiry number to find the corresponding application
+            $enquiry = $wpdb->get_row( $wpdb->prepare(
+                "SELECT enquiry_number FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d",
+                $enquiry_id
+            ), ARRAY_A );
+
+            if ( $enquiry ) {
+                error_log( '[MCB-OLD-038] 📋 Found enquiry_number: ' . $enquiry['enquiry_number'] );
+
+                // Update applications table where application_number = enquiry_number
+                $apps_updated = $wpdb->update(
+                    $wpdb->prefix . 'edubot_applications',
+                    array(
+                        'mcb_sync_status' => 'synced',
+                        'mcb_enquiry_id'  => $mcb_enquiry_id,
+                    ),
+                    array( 'application_number' => $enquiry['enquiry_number'] ),
+                    array( '%s', '%s' ),
+                    array( '%s' )
+                );
+
+                if ( $apps_updated > 0 ) {
+                    error_log( '[MCB-OLD-039] ✅ Updated ' . $apps_updated . ' row(s) in wp_edubot_applications table' );
+                } else {
+                    error_log( '[MCB-OLD-040] ⚠️ No rows updated in wp_edubot_applications table (may not exist for chatbot submissions)' );
+                }
+            }
+        } else {
+            // Handle failed sync - update both tables with failed status
+            error_log( '[MCB-OLD-041] ❌ MCB sync failed, updating status to "failed" in both tables' );
+
+            $wpdb->update(
+                $wpdb->prefix . 'edubot_enquiries',
+                array( 'mcb_sync_status' => 'failed' ),
+                array( 'id' => $enquiry_id ),
+                array( '%s' ),
+                array( '%d' )
+            );
+
+            error_log( '[MCB-OLD-042] ✅ Updated wp_edubot_enquiries table to "failed"' );
+
+            // Get enquiry number to update applications table too
+            $enquiry = $wpdb->get_row( $wpdb->prepare(
+                "SELECT enquiry_number FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d",
+                $enquiry_id
+            ), ARRAY_A );
+
+            if ( $enquiry ) {
+                $apps_updated = $wpdb->update(
+                    $wpdb->prefix . 'edubot_applications',
+                    array( 'mcb_sync_status' => 'failed' ),
+                    array( 'application_number' => $enquiry['enquiry_number'] ),
+                    array( '%s' ),
+                    array( '%s' )
+                );
+
+                if ( $apps_updated > 0 ) {
+                    error_log( '[MCB-OLD-043] ✅ Updated ' . $apps_updated . ' row(s) in wp_edubot_applications table to "failed"' );
+                }
+            }
         }
 
         return $response;
