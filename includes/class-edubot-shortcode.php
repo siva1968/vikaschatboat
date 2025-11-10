@@ -1774,6 +1774,10 @@ class EduBot_Shortcode {
                 $this->update_conversation_data($session_id, 'email', $personal_info['email']);
                 error_log("EduBot Debug: Stored email: " . $personal_info['email']);
             }
+            if (!empty($personal_info['parent_name']) && strlen(trim($personal_info['parent_name'])) >= 2) {
+                $this->update_conversation_data($session_id, 'parent_name', $personal_info['parent_name']);
+                error_log("EduBot Debug: Stored parent name: " . $personal_info['parent_name']);
+            }
             // Store phone if it was extracted and NOT marked as invalid
             if (!empty($personal_info['phone'])) {
                 if (empty($personal_info['phone_invalid'])) {
@@ -1867,12 +1871,14 @@ class EduBot_Shortcode {
             if (empty($collected_data['student_name'])) $missing_fields[] = "👶 Student Name";
             if (empty($collected_data['email'])) $missing_fields[] = "📧 Email Address";
             if (empty($collected_data['phone'])) $missing_fields[] = "📱 Phone Number";
+            if (empty($collected_data['parent_name'])) $missing_fields[] = "👨‍👩‍👧 Parent/Guardian Name";
             
             if (!empty($missing_fields)) {
                 $response = "✅ **Information Recorded:**\n";
                 if (!empty($collected_data['student_name'])) $response .= "• Student: {$collected_data['student_name']}\n";
                 if (!empty($collected_data['email'])) $response .= "• Email: {$collected_data['email']}\n";
                 if (!empty($collected_data['phone'])) $response .= "• Phone: {$collected_data['phone']}\n";
+                if (!empty($collected_data['parent_name'])) $response .= "• Parent: {$collected_data['parent_name']}\n";
                 
                 $response .= "\n**Still needed:**\n";
                 foreach ($missing_fields as $field) {
@@ -1888,6 +1894,7 @@ class EduBot_Shortcode {
             return "✅ **Personal Information Complete!**\n\n" .
                    "Perfect! I have your contact details:\n" .
                    "👶 **Student:** {$collected_data['student_name']}\n" .
+                   "👨‍👩‍👧 **Parent:** {$collected_data['parent_name']}\n" .
                    "📧 **Email:** {$collected_data['email']}\n" .
                    "📱 **Phone:** {$collected_data['phone']}\n\n" .
                    "**Step 2: Academic Information** 🎓\n\n" .
@@ -2498,7 +2505,7 @@ class EduBot_Shortcode {
     }
     
     /**
-     * Parse multi-field input to extract name, email, phone - ENHANCED
+     * Parse multi-field input to extract name, email, phone, parent_name - ENHANCED
      */
     private function parse_personal_info($message) {
         $info = array();
@@ -2555,6 +2562,16 @@ class EduBot_Shortcode {
             $message_clean = preg_replace('/\+?91?[\s-]?[0-9]{8,15}/', ' ', $message_clean);
         }
         
+        // Try to extract parent_name using "Parent:" or "Guardian:" prefix
+        if (preg_match('/\b(?:parent\s*:?\s*|guardian\s*:?\s*)\s*([a-zA-Z\s\.]{2,30})(?:\s|,|$)/i', $original_message, $parent_matches)) {
+            $candidate_parent = trim($parent_matches[1]);
+            if (strlen($candidate_parent) >= 2 && strlen($candidate_parent) <= 30 && preg_match('/^[a-zA-Z\s\.]+$/', $candidate_parent)) {
+                $info['parent_name'] = ucwords(strtolower($candidate_parent));
+                // Remove parent name from message for student name extraction
+                $message_clean = str_replace($parent_matches[0], ' ', $message_clean);
+            }
+        }
+        
         // Try to extract name from structured input first (Name: format)
         if (preg_match('/\b(?:student\s*:?\s*|name\s*:?\s*)\s*([a-zA-Z\s\.]{2,30})(?:\s|$)/i', $original_message, $name_matches)) {
             $candidate_name = trim($name_matches[1]);
@@ -2567,7 +2584,7 @@ class EduBot_Shortcode {
         if (empty($info['name'])) {
             // Clean the message: remove labels and non-name content
             $name_clean = $message_clean;
-            $name_clean = preg_replace('/\s*(student\s*:?\s*|name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*|contact\s*:?\s*)/i', ' ', $name_clean);
+            $name_clean = preg_replace('/\s*(student\s*:?\s*|name\s*:?\s*|email\s*:?\s*|phone\s*:?\s*|mobile\s*:?\s*|contact\s*:?\s*|parent\s*:?\s*|guardian\s*:?\s*)/i', ' ', $name_clean);
             $name_clean = preg_replace('/\b(grade\s*\d+|class\s*\d+|cbse|caie|cambridge|icse|igcse)\b/i', ' ', $name_clean);
             $name_clean = preg_replace('/[^\w\s\.]/', ' ', $name_clean);
             $name_clean = preg_replace('/\s+/', ' ', $name_clean);
