@@ -253,7 +253,9 @@ class EduBot_MCB_Admin {
                 'message' => $result['message'],
                 'enquiry_number' => $result['enquiry_number'],
                 'mcb_data' => $result['mcb_data'],
-                'marketing_data' => $result['marketing_data']
+                'marketing_data' => $result['marketing_data'],
+                'enquiry_source_data' => $result['enquiry_source_data'],
+                'mcb_settings' => $result['mcb_settings']
             ));
         } else {
             wp_send_json_error(array(
