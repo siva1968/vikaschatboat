@@ -434,8 +434,16 @@ class EduBot_MyClassBoard_Integration {
         // Use custom API URL if set, otherwise use default
         $api_url = ! empty( $settings['api_url'] ) ? $settings['api_url'] : self::MCB_API_ENDPOINT;
 
+        error_log('[MCB-OLD-001] ╔═══════════════════════════════════════════╗');
+        error_log('[MCB-OLD-002] ║  OLD SYSTEM: send_to_mcb() CALLED       ║');
+        error_log('[MCB-OLD-003] ╚═══════════════════════════════════════════╝');
+        error_log('[MCB-OLD-004] API URL: ' . $api_url);
+        error_log('[MCB-OLD-005] Max Attempts: ' . $max_attempts);
+        error_log('[MCB-OLD-006] Timeout: ' . $settings['timeout'] . ' seconds');
+
         while ( $attempts < $max_attempts ) {
             $attempts++;
+            error_log('[MCB-OLD-007] ━━━ ATTEMPT ' . $attempts . '/' . $max_attempts . ' ━━━');
 
             $response = wp_remote_post(
                 $api_url,
@@ -451,13 +459,17 @@ class EduBot_MyClassBoard_Integration {
 
             // Check for request error
             if ( is_wp_error( $response ) ) {
-                error_log( 'EduBot MCB: Request error - ' . $response->get_error_message() );
+                error_log('[MCB-OLD-008] ❌ WP_Error detected');
+                error_log('[MCB-OLD-009] Error Code: ' . $response->get_error_code());
+                error_log('[MCB-OLD-010] Error Message: ' . $response->get_error_message());
                 
                 if ( $attempts < $max_attempts ) {
-                    sleep( 2 ); // Wait before retry
+                    error_log('[MCB-OLD-011] Will retry after 2 seconds...');
+                    sleep( 2 );
                     continue;
                 }
 
+                error_log('[MCB-OLD-012] ❌ Max attempts reached with WP_Error');
                 return array(
                     'success'   => false,
                     'error'     => $response->get_error_message(),
@@ -468,15 +480,23 @@ class EduBot_MyClassBoard_Integration {
             // Parse response
             $body = wp_remote_retrieve_body( $response );
             $status_code = wp_remote_retrieve_response_code( $response );
+            $headers = wp_remote_retrieve_headers( $response );
+
+            error_log('[MCB-OLD-013] ✅ Response received');
+            error_log('[MCB-OLD-014] HTTP Status Code: ' . $status_code);
+            error_log('[MCB-OLD-015] Response Body Length: ' . strlen($body) . ' bytes');
+            error_log('[MCB-OLD-016] Response Body: ' . $body);
 
             if ( $status_code < 200 || $status_code >= 300 ) {
-                error_log( 'EduBot MCB: API error - Status ' . $status_code );
+                error_log('[MCB-OLD-017] ❌ HTTP Error Status: ' . $status_code);
                 
                 if ( $attempts < $max_attempts ) {
+                    error_log('[MCB-OLD-018] Will retry after 2 seconds...');
                     sleep( 2 );
                     continue;
                 }
 
+                error_log('[MCB-OLD-019] ❌ Max attempts reached with HTTP error');
                 return array(
                     'success'   => false,
                     'error'     => 'HTTP ' . $status_code,
@@ -486,9 +506,21 @@ class EduBot_MyClassBoard_Integration {
 
             // Parse JSON response
             $response_data = json_decode( $body, true );
+            $json_error = json_last_error();
+
+            if ( $json_error !== JSON_ERROR_NONE ) {
+                error_log('[MCB-OLD-020] ❌ JSON Decode Error: ' . json_last_error_msg());
+            } else {
+                error_log('[MCB-OLD-021] ✅ JSON decoded successfully');
+                error_log('[MCB-OLD-022] Response Keys: ' . implode(', ', array_keys($response_data)));
+            }
 
             // Check for success indicators
             if ( isset( $response_data['Status'] ) && strtolower( $response_data['Status'] ) === 'success' ) {
+                error_log('[MCB-OLD-023] ✅ Status field = success');
+                error_log('[MCB-OLD-024] EnquiryID: ' . ($response_data['EnquiryID'] ?? 'NOT SET'));
+                error_log('[MCB-OLD-025] QueryCode: ' . ($response_data['QueryCode'] ?? 'NOT SET'));
+                error_log('[MCB-OLD-026] ✅✅ SYNC SUCCESS ✅✅');
                 return array(
                     'success'   => true,
                     'enquiry_id'=> $response_data['EnquiryID'] ?? '',
@@ -499,6 +531,8 @@ class EduBot_MyClassBoard_Integration {
 
             // Check for duplicate
             if ( strpos( $body, 'already Exists' ) !== false ) {
+                error_log('[MCB-OLD-027] ⚠️  Duplicate detected: "already Exists" found in response');
+                error_log('[MCB-OLD-028] ❌❌ RETURNING FAILURE FOR DUPLICATE ❌❌');
                 return array(
                     'success'   => false,
                     'error'     => 'Duplicate entry',
@@ -509,8 +543,11 @@ class EduBot_MyClassBoard_Integration {
 
             // Success response found
             if ( strpos( $body, 'Thank You' ) !== false ) {
+                error_log('[MCB-OLD-029] ✅ "Thank You" found in response');
                 preg_match( '/EnquiryCode is (.+?)\./', $body, $matches );
                 $query_code = isset( $matches[1] ) ? trim( $matches[1] ) : '';
+                error_log('[MCB-OLD-030] QueryCode extracted: ' . $query_code);
+                error_log('[MCB-OLD-031] ✅✅ SYNC SUCCESS ✅✅');
 
                 return array(
                     'success'   => true,
@@ -520,10 +557,13 @@ class EduBot_MyClassBoard_Integration {
             }
 
             if ( $attempts < $max_attempts ) {
+                error_log('[MCB-OLD-032] Response format not recognized, will retry...');
                 sleep( 2 );
                 continue;
             }
 
+            error_log('[MCB-OLD-033] ❌ Unknown response format (max attempts reached)');
+            error_log('[MCB-OLD-034] First 200 chars: ' . substr( $body, 0, 200 ));
             return array(
                 'success'   => false,
                 'message'   => 'MCB API: Unknown response format',
@@ -531,6 +571,7 @@ class EduBot_MyClassBoard_Integration {
             );
         }
 
+        error_log('[MCB-OLD-035] ❌ Max retry attempts reached');
         return array(
             'success'   => false,
             'message'   => 'Max retry attempts reached',
