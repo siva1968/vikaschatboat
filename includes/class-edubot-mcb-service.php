@@ -75,22 +75,47 @@ class EduBot_MCB_Service {
     public function sync_enquiry($enquiry_id) {
         global $wpdb;
         
+        // ═════════════════════════════════════════════════════════════════
+        error_log('╔════════════════════════════════════════════════════════╗');
+        error_log('║     MCB SYNC ENQUIRY - MASTER LOG START              ║');
+        error_log('╚════════════════════════════════════════════════════════╝');
+        error_log('[SYNC-001] sync_enquiry() called with enquiry_id: ' . $enquiry_id . ' (type: ' . gettype($enquiry_id) . ')');
+        error_log('[SYNC-002] Timestamp: ' . current_time('mysql') . ' | Version: ' . EDUBOT_PRO_VERSION);
+        
+        // Check if MCB sync is enabled
+        error_log('[SYNC-003] Checking if MCB sync is enabled...');
         if (!$this->is_sync_enabled()) {
+            error_log('[SYNC-004] ❌ MCB sync is DISABLED');
+            error_log('[SYNC-005] enabled: ' . ($this->mcb_settings['enabled'] ? 'YES' : 'NO'));
+            error_log('[SYNC-006] sync_enabled: ' . ($this->mcb_settings['sync_enabled'] ? 'YES' : 'NO'));
+            error_log('╔════════════════════════════════════════════════════════╗');
+            error_log('║              SYNC FAILED - MCB DISABLED               ║');
+            error_log('╚════════════════════════════════════════════════════════╝');
             return array(
                 'success' => false,
                 'message' => 'MCB sync is not enabled',
                 'error' => 'MCB_DISABLED'
             );
         }
+        error_log('[SYNC-007] ✅ MCB sync is ENABLED');
         
-        // Get application data first
-        // $enquiry_id is actually the application ID
+        // ═════════════════════════════════════════════════════════════════
+        // STEP 1: Get Application Data
+        error_log('[SYNC-008] ━━━ STEP 1: Fetching Application Data ━━━');
+        error_log('[SYNC-009] Query: SELECT * FROM wp_edubot_applications WHERE id = ' . $enquiry_id);
+        
         $application = $wpdb->get_row(
             $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE id = %d", $enquiry_id),
             ARRAY_A
         );
         
         if (!$application) {
+            error_log('[SYNC-010] ❌ Application NOT FOUND in database');
+            error_log('[SYNC-011] Last SQL: ' . $wpdb->last_query);
+            error_log('[SYNC-012] SQL Error: ' . ($wpdb->last_error ?: 'None'));
+            error_log('╔════════════════════════════════════════════════════════╗');
+            error_log('║          SYNC FAILED - APPLICATION NOT FOUND          ║');
+            error_log('╚════════════════════════════════════════════════════════╝');
             return array(
                 'success' => false,
                 'message' => 'Application not found',
@@ -98,7 +123,18 @@ class EduBot_MCB_Service {
             );
         }
         
-        // Get the enquiry using application_number
+        error_log('[SYNC-013] ✅ Application found');
+        error_log('[SYNC-014] Application ID: ' . $application['id']);
+        error_log('[SYNC-015] Application Number: ' . $application['application_number']);
+        error_log('[SYNC-016] Student Name: ' . ($application['student_name'] ?? 'N/A'));
+        error_log('[SYNC-017] Email: ' . ($application['email'] ?? 'N/A'));
+        error_log('[SYNC-018] Phone: ' . ($application['phone'] ?? 'N/A'));
+        
+        // ═════════════════════════════════════════════════════════════════
+        // STEP 2: Get Enquiry Data
+        error_log('[SYNC-019] ━━━ STEP 2: Fetching Enquiry Data ━━━');
+        error_log('[SYNC-020] Looking up enquiry_number: ' . $application['application_number']);
+        
         $enquiry = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE enquiry_number = %s",
@@ -108,6 +144,12 @@ class EduBot_MCB_Service {
         );
         
         if (!$enquiry) {
+            error_log('[SYNC-021] ❌ Enquiry NOT FOUND');
+            error_log('[SYNC-022] Last SQL: ' . $wpdb->last_query);
+            error_log('[SYNC-023] SQL Error: ' . ($wpdb->last_error ?: 'None'));
+            error_log('╔════════════════════════════════════════════════════════╗');
+            error_log('║          SYNC FAILED - ENQUIRY NOT FOUND              ║');
+            error_log('╚════════════════════════════════════════════════════════╝');
             return array(
                 'success' => false,
                 'message' => 'Enquiry not found',
@@ -115,10 +157,23 @@ class EduBot_MCB_Service {
             );
         }
         
-        // Prepare data for MCB
+        error_log('[SYNC-024] ✅ Enquiry found');
+        error_log('[SYNC-025] Enquiry ID: ' . $enquiry['id']);
+        error_log('[SYNC-026] Enquiry Number: ' . $enquiry['enquiry_number']);
+        error_log('[SYNC-027] Grade: ' . ($enquiry['grade'] ?? 'N/A'));
+        error_log('[SYNC-028] Board: ' . ($enquiry['board'] ?? 'N/A'));
+        
+        // ═════════════════════════════════════════════════════════════════
+        // STEP 3: Prepare MCB Data
+        error_log('[SYNC-029] ━━━ STEP 3: Preparing MCB Data ━━━');
+        
         $mcb_data = $this->prepare_mcb_data($enquiry);
         
         if (!$mcb_data) {
+            error_log('[SYNC-030] ❌ MCB data preparation failed');
+            error_log('╔════════════════════════════════════════════════════════╗');
+            error_log('║        SYNC FAILED - DATA PREPARATION ERROR           ║');
+            error_log('╚════════════════════════════════════════════════════════╝');
             return array(
                 'success' => false,
                 'message' => 'Failed to prepare MCB data',
@@ -126,11 +181,41 @@ class EduBot_MCB_Service {
             );
         }
         
-        // Call MCB API
+        error_log('[SYNC-031] ✅ MCB data prepared successfully');
+        error_log('[SYNC-032] MCB Data Keys: ' . implode(', ', array_keys($mcb_data)));
+        error_log('[SYNC-033] StudentName: ' . ($mcb_data['StudentName'] ?? 'N/A'));
+        error_log('[SYNC-034] FatherEmailID: ' . ($mcb_data['FatherEmailID'] ?? 'N/A'));
+        error_log('[SYNC-035] ClassID: ' . ($mcb_data['ClassID'] ?? 'N/A'));
+        
+        // ═════════════════════════════════════════════════════════════════
+        // STEP 4: Call MCB API
+        error_log('[SYNC-036] ━━━ STEP 4: Calling MCB API ━━━');
+        error_log('[SYNC-037] API URL: ' . ($this->mcb_settings['api_url'] ?? 'NOT SET'));
+        error_log('[SYNC-038] Request payload size: ' . strlen(wp_json_encode($mcb_data)) . ' bytes');
+        error_log('[SYNC-039] Sending request...');
+        
         $api_response = $this->call_mcb_api($mcb_data);
         
-        // Process response and log
+        error_log('[SYNC-040] ✅ API call completed');
+        
+        // ═════════════════════════════════════════════════════════════════
+        // STEP 5: Process Response
+        error_log('[SYNC-041] ━━━ STEP 5: Processing API Response ━━━');
+        
         $sync_result = $this->process_api_response($api_response, $enquiry_id, $mcb_data);
+        
+        if ($sync_result['success']) {
+            error_log('[SYNC-042] ✅✅✅ SYNC SUCCESSFUL ✅✅✅');
+            error_log('[SYNC-043] MCB Enquiry ID: ' . $sync_result['mcb_enquiry_id']);
+            error_log('[SYNC-044] MCB Query Code: ' . $sync_result['mcb_query_code']);
+        } else {
+            error_log('[SYNC-045] ❌❌❌ SYNC FAILED ❌❌❌');
+            error_log('[SYNC-046] Error: ' . $sync_result['message']);
+        }
+        
+        error_log('╔════════════════════════════════════════════════════════╗');
+        error_log('║           MCB SYNC ENQUIRY - END OF LOG               ║');
+        error_log('╚════════════════════════════════════════════════════════╝');
         
         return $sync_result;
     }
@@ -600,9 +685,36 @@ class EduBot_MCB_Service {
      * @param array $data - Data to send to MCB
      * @return array - API response
      */
+    /**
+     * Call MCB API endpoint
+     * 
+     * @param array $data - Data to send to MCB
+     * @return array - API response
+     */
     private function call_mcb_api($data) {
-        $api_url = $this->mcb_settings['api_url'];
+        error_log('[API-001] ╔═══════════════════════════════════════════╗');
+        error_log('[API-002] ║     CALLING MCB API ENDPOINT            ║');
+        error_log('[API-003] ╚═══════════════════════════════════════════╝');
+        
+        $api_url = $this->mcb_settings['api_url'] ?? '';
         $timeout = intval($this->mcb_settings['timeout'] ?? 65);
+        
+        error_log('[API-004] URL: ' . $api_url);
+        error_log('[API-005] Timeout: ' . $timeout . ' seconds');
+        error_log('[API-006] Test Mode: ' . ($this->mcb_settings['test_mode'] ? 'ENABLED' : 'DISABLED'));
+        
+        // If test mode enabled, skip actual API call
+        if (!empty($this->mcb_settings['test_mode'])) {
+            error_log('[API-007] ⚠️  TEST MODE - Skipping actual API call');
+            error_log('[API-008] Request payload would be:');
+            error_log('[API-009] ' . wp_json_encode($data, JSON_PRETTY_PRINT));
+            return array(
+                'test_mode' => true,
+                'body' => json_encode(array('Result' => 'Success', 'Message' => 'Test Mode - No API Call'))
+            );
+        }
+        
+        error_log('[API-010] Preparing request...');
         
         $args = array(
             'method' => 'POST',
@@ -614,7 +726,38 @@ class EduBot_MCB_Service {
             'sslverify' => true
         );
         
+        error_log('[API-011] Headers: ' . wp_json_encode($args['headers']));
+        error_log('[API-012] Body size: ' . strlen($args['body']) . ' bytes');
+        error_log('[API-013] Executing wp_remote_post()...');
+        
+        // Execute API call with error handling
         $response = wp_remote_post($api_url, $args);
+        
+        error_log('[API-014] ✅ wp_remote_post() returned');
+        
+        // Log response details
+        if (is_wp_error($response)) {
+            error_log('[API-015] ❌ WP_ERROR detected');
+            error_log('[API-016] Error Code: ' . $response->get_error_code());
+            error_log('[API-017] Error Message: ' . $response->get_error_message());
+            $error_data = $response->get_error_data();
+            if (!empty($error_data)) {
+                error_log('[API-018] Error Data: ' . wp_json_encode($error_data));
+            }
+        } else {
+            $http_code = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
+            $headers = wp_remote_retrieve_headers($response);
+            
+            error_log('[API-019] HTTP Status Code: ' . $http_code);
+            error_log('[API-020] Response Headers: ' . wp_json_encode($headers->getAll()));
+            error_log('[API-021] Response Body Size: ' . strlen($response_body) . ' bytes');
+            error_log('[API-022] Response Body (first 500 chars): ' . substr($response_body, 0, 500));
+        }
+        
+        error_log('[API-023] ╔═══════════════════════════════════════════╗');
+        error_log('[API-024] ║        MCB API CALL - END               ║');
+        error_log('[API-025] ╚═══════════════════════════════════════════╝');
         
         return $response;
     }
@@ -630,41 +773,115 @@ class EduBot_MCB_Service {
     private function process_api_response($api_response, $enquiry_id, $request_data) {
         global $wpdb;
         
+        error_log('[RESP-001] ╔═══════════════════════════════════════════╗');
+        error_log('[RESP-002] ║   PROCESSING MCB API RESPONSE           ║');
+        error_log('[RESP-003] ╚═══════════════════════════════════════════╝');
+        
         $success = false;
         $error_message = null;
         $response_data = null;
         $mcb_enquiry_id = null;
         $mcb_query_code = null;
         
-        // Check for HTTP errors
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Check for HTTP errors / Network issues
+        error_log('[RESP-004] Checking for WP_Error...');
         if (is_wp_error($api_response)) {
-            $error_message = $api_response->get_error_message();
+            error_log('[RESP-005] ❌ WP_Error found - Network or system level error');
+            $error_code = $api_response->get_error_code();
+            $error_msg = $api_response->get_error_message();
+            $error_data = $api_response->get_error_data();
+            
+            error_log('[RESP-006] WP_Error Code: ' . $error_code);
+            error_log('[RESP-007] WP_Error Message: ' . $error_msg);
+            if (!empty($error_data)) {
+                error_log('[RESP-008] WP_Error Data: ' . wp_json_encode($error_data));
+            }
+            
+            $error_message = 'Network Error: ' . $error_msg . ' (' . $error_code . ')';
             $sync_status = 'failed';
         } else {
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // Check HTTP Status Code
+            error_log('[RESP-009] ✅ Valid response object received');
+            
             $http_code = wp_remote_retrieve_response_code($api_response);
             $response_body = wp_remote_retrieve_body($api_response);
             
+            error_log('[RESP-010] HTTP Status Code: ' . $http_code);
+            error_log('[RESP-011] Response Body Length: ' . strlen($response_body) . ' bytes');
+            error_log('[RESP-012] Response Body: ' . $response_body);
+            
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // Parse JSON Response
             if ($http_code === 200) {
-                $response_data = json_decode($response_body, true);
+                error_log('[RESP-013] ✅ HTTP 200 OK');
                 
-                // Check MCB response for success
-                if (!empty($response_data['Result']) && $response_data['Result'] === 'Success') {
-                    $success = true;
-                    $sync_status = 'synced';
-                    $mcb_enquiry_id = $response_data['QueryCode'] ?? $response_data['EnquiryID'] ?? null;
-                    $mcb_query_code = $response_data['QueryCode'] ?? null;
-                } else {
-                    $error_message = $response_data['Message'] ?? 'Unknown error from MCB API';
+                $response_data = json_decode($response_body, true);
+                $json_error = json_last_error();
+                
+                if ($json_error !== JSON_ERROR_NONE) {
+                    error_log('[RESP-014] ❌ JSON Decode Error: ' . json_last_error_msg());
+                    error_log('[RESP-015] Response was not valid JSON');
+                    $error_message = 'Invalid JSON Response: ' . json_last_error_msg();
                     $sync_status = 'failed';
+                } else {
+                    error_log('[RESP-016] ✅ JSON decoded successfully');
+                    error_log('[RESP-017] Response Data Keys: ' . implode(', ', array_keys($response_data)));
+                    
+                    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    // Check MCB Result Field
+                    error_log('[RESP-018] Checking MCB Result field...');
+                    error_log('[RESP-019] Result: ' . ($response_data['Result'] ?? 'NOT SET'));
+                    error_log('[RESP-020] Message: ' . ($response_data['Message'] ?? 'NOT SET'));
+                    error_log('[RESP-021] QueryCode: ' . ($response_data['QueryCode'] ?? 'NOT SET'));
+                    error_log('[RESP-022] EnquiryID: ' . ($response_data['EnquiryID'] ?? 'NOT SET'));
+                    
+                    if (!empty($response_data['Result']) && $response_data['Result'] === 'Success') {
+                        error_log('[RESP-023] ✅✅ MCB RESULT = SUCCESS ✅✅');
+                        $success = true;
+                        $sync_status = 'synced';
+                        $mcb_enquiry_id = $response_data['QueryCode'] ?? $response_data['EnquiryID'] ?? null;
+                        $mcb_query_code = $response_data['QueryCode'] ?? null;
+                        error_log('[RESP-024] MCB Enquiry ID/QueryCode: ' . $mcb_enquiry_id);
+                    } else {
+                        error_log('[RESP-025] ❌ MCB Result was not Success');
+                        error_log('[RESP-026] MCB Result Value: ' . ($response_data['Result'] ?? 'NULL'));
+                        
+                        // Capture exact MCB error message
+                        $error_message = $response_data['Message'] ?? $response_data['message'] ?? 'Unknown error from MCB API';
+                        error_log('[RESP-027] ❌❌ MCB ERROR MESSAGE: ' . $error_message . ' ❌❌');
+                        
+                        // Log additional error details if present
+                        if (!empty($response_data['ErrorDetails'])) {
+                            error_log('[RESP-028] MCB ErrorDetails: ' . wp_json_encode($response_data['ErrorDetails']));
+                        }
+                        if (!empty($response_data['ErrorCode'])) {
+                            error_log('[RESP-029] MCB ErrorCode: ' . $response_data['ErrorCode']);
+                        }
+                        if (!empty($response_data['Details'])) {
+                            error_log('[RESP-030] MCB Details: ' . wp_json_encode($response_data['Details']));
+                        }
+                        
+                        $sync_status = 'failed';
+                    }
                 }
             } else {
-                $error_message = "HTTP Error: $http_code - $response_body";
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // Non-200 HTTP Status
+                error_log('[RESP-031] ❌ HTTP Error: ' . $http_code);
+                error_log('[RESP-032] Response Body: ' . $response_body);
+                
+                $error_message = "HTTP Error $http_code: " . substr($response_body, 0, 200);
                 $sync_status = 'failed';
             }
         }
         
-        // Log sync attempt to wp_edubot_mcb_sync_log
-        $wpdb->insert(
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Log to Database
+        error_log('[RESP-033] Logging sync attempt to database...');
+        
+        $insert_result = $wpdb->insert(
             "{$wpdb->prefix}edubot_mcb_sync_log",
             array(
                 'enquiry_id' => $enquiry_id,
@@ -679,8 +896,17 @@ class EduBot_MCB_Service {
             array('%d', '%s', '%s', '%d', '%s', '%d', '%s', '%s')
         );
         
-        // Update enquiry MCB status
-        $wpdb->update(
+        if (!$insert_result) {
+            error_log('[RESP-034] ❌ Database insert failed: ' . $wpdb->last_error);
+        } else {
+            error_log('[RESP-035] ✅ Logged to wp_edubot_mcb_sync_log (ID: ' . $wpdb->insert_id . ')');
+        }
+        
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Update Enquiry Status
+        error_log('[RESP-036] Updating enquiry MCB status...');
+        
+        $update_result = $wpdb->update(
             "{$wpdb->prefix}edubot_enquiries",
             array(
                 'mcb_sync_status' => $sync_status,
@@ -691,6 +917,22 @@ class EduBot_MCB_Service {
             array('%s', '%s', '%s'),
             array('%d')
         );
+        
+        if ($update_result === false) {
+            error_log('[RESP-037] ❌ Database update failed: ' . $wpdb->last_error);
+        } else {
+            error_log('[RESP-038] ✅ Updated enquiry status to: ' . $sync_status);
+        }
+        
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Final Result
+        error_log('[RESP-039] ╔═══════════════════════════════════════════╗');
+        if ($success) {
+            error_log('[RESP-040] ║    ✅✅ SYNC SUCCESSFUL ✅✅          ║');
+        } else {
+            error_log('[RESP-041] ║    ❌❌ SYNC FAILED ❌❌              ║');
+        }
+        error_log('[RESP-042] ╚═══════════════════════════════════════════╝');
         
         return array(
             'success' => $success,
