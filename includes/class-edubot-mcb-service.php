@@ -111,6 +111,81 @@ class EduBot_MCB_Service {
     }
     
     /**
+     * Preview MCB sync data WITHOUT submitting to API
+     * 
+     * @param int $enquiry_id - Enquiry ID to preview
+     * @return array - MCB data that would be sent
+     */
+    public function preview_mcb_data($enquiry_id) {
+        global $wpdb;
+        
+        if (!$this->is_sync_enabled()) {
+            return array(
+                'success' => false,
+                'message' => 'MCB sync is not enabled',
+                'mcb_data' => null
+            );
+        }
+        
+        // Get enquiry data
+        $enquiry = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d", $enquiry_id),
+            ARRAY_A
+        );
+        
+        if (!$enquiry) {
+            return array(
+                'success' => false,
+                'message' => 'Enquiry not found',
+                'mcb_data' => null
+            );
+        }
+        
+        // Get application data (for marketing data)
+        $application = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}edubot_applications WHERE application_number = %s",
+                $enquiry['enquiry_number']
+            ),
+            ARRAY_A
+        );
+        
+        // Merge application data if found
+        if ($application) {
+            $enquiry['utm_data'] = $application['utm_data'];
+            $enquiry['gclid'] = $application['gclid'];
+            $enquiry['fbclid'] = $application['fbclid'];
+            $enquiry['click_id_data'] = $application['click_id_data'];
+        }
+        
+        // Prepare data for MCB
+        $mcb_data = $this->prepare_mcb_data($enquiry);
+        
+        if (!$mcb_data) {
+            return array(
+                'success' => false,
+                'message' => 'Failed to prepare MCB data',
+                'mcb_data' => null
+            );
+        }
+        
+        // Return preview without sending
+        return array(
+            'success' => true,
+            'message' => 'MCB data prepared successfully',
+            'enquiry_number' => $enquiry['enquiry_number'],
+            'mcb_data' => $mcb_data,
+            'marketing_data' => array(
+                'utm_source' => $mcb_data['UTMSource'] ?? '',
+                'utm_medium' => $mcb_data['UTMMedium'] ?? '',
+                'utm_campaign' => $mcb_data['UTMCampaign'] ?? '',
+                'gclid' => $mcb_data['GClickID'] ?? '',
+                'fbclid' => $mcb_data['FBClickID'] ?? ''
+            )
+        );
+    }
+    
+    /**
      * Prepare enquiry data for MCB API
      * 
      * @param array $enquiry - Enquiry data from database
@@ -118,54 +193,54 @@ class EduBot_MCB_Service {
      */
     private function prepare_mcb_data($enquiry) {
         try {
-            // Map grade to MCB class ID
-            $class_id = $this->map_grade_to_class_id($enquiry['grade']);
+            // Map board to MCB board ID first
+            $board = isset($enquiry['board']) ? $enquiry['board'] : 'CBSE';
+            $board_id = $this->map_board_to_board_id($board);
             
-            // Map board to MCB board ID
-            $board_id = $this->map_board_to_board_id($enquiry['board']);
+            // Map grade to MCB class ID (board-dependent)
+            $grade = isset($enquiry['grade']) ? $enquiry['grade'] : '';
+            $class_id = $this->map_grade_to_class_id($grade, $board);
             
-            // Map lead source to MCB lead source ID
-            $lead_source = isset($enquiry['source']) ? $enquiry['source'] : 'unknown';
-            $source_id = $this->map_lead_source($lead_source);
+            // Map academic year to MCB academic year ID
+            $academic_year = isset($enquiry['academic_year']) ? $enquiry['academic_year'] : date('Y') . '-' . (date('Y') + 1);
+            $academic_year_id = $this->map_academic_year_to_id($academic_year);
             
             // Extract marketing parameters from utm_data
             $utm_data = !empty($enquiry['utm_data']) ? json_decode($enquiry['utm_data'], true) : array();
             $click_id_data = !empty($enquiry['click_id_data']) ? json_decode($enquiry['click_id_data'], true) : array();
             
-            // Prepare MCB payload with marketing parameters
+            // Priority: Use UTM source if available, otherwise use enquiry source field
+            $utm_source = $utm_data['utm_source'] ?? '';
+            $lead_source = $utm_source ?: (isset($enquiry['source']) ? $enquiry['source'] : '');
+            
+            // Map lead source to MCB lead source ID (with UTM source priority)
+            $source_id = $this->map_lead_source($lead_source);
+            
+            // Build remarks with EnquiryID prefix (as per MCB API requirement)
+            // Include "Chat" prefix to distinguish from website/Ninjaform enquiries
+            $remarks = isset($enquiry['notes']) ? sanitize_textarea_field($enquiry['notes']) : '';
+            $remarks_with_enquiry = 'Chat EnquiryID: ' . $enquiry['enquiry_number'];
+            if (!empty($remarks)) {
+                $remarks_with_enquiry .= ' | ' . $remarks;
+            }
+            
+            // Prepare MCB payload - ONLY fields that MCB API accepts
+            // Based on: https://corp.myclassboard.com/api/EnquiryService/SaveEnquiryDetails
             $mcb_data = array(
-                'OrgID' => $this->mcb_settings['organization_id'],
+                'OrganisationID' => $this->mcb_settings['organization_id'],
                 'BranchID' => $this->mcb_settings['branch_id'],
-                'StudentName' => sanitize_text_field($enquiry['student_name']),
+                'StudentName' => sanitize_text_field($enquiry['student_name'] ?? 'NA'),
                 'ClassID' => $class_id,
-                'BoardID' => $board_id,
-                'ParentName' => sanitize_text_field($enquiry['parent_name'] ?? $enquiry['student_name']),
-                'ParentMobileNo' => sanitize_text_field($enquiry['phone']),
-                'ParentEmailID' => sanitize_email($enquiry['email']),
-                'AcademicYear' => isset($enquiry['academic_year']) ? sanitize_text_field($enquiry['academic_year']) : date('Y') . '-' . (date('Y') + 1),
-                'EnquiryID' => $enquiry['enquiry_number'],
-                'LeadSourceID' => $source_id,
-                'Remarks' => isset($enquiry['notes']) ? sanitize_textarea_field($enquiry['notes']) : '',
-                'Phone' => sanitize_text_field($enquiry['phone']),
-                'Email' => sanitize_email($enquiry['email']),
-                'Gender' => isset($enquiry['gender']) ? sanitize_text_field($enquiry['gender']) : '',
-                'DateOfBirth' => isset($enquiry['date_of_birth']) ? sanitize_text_field($enquiry['date_of_birth']) : '',
-                
-                // Marketing Parameters - UTM Tracking
-                'UTMSource' => sanitize_text_field($utm_data['utm_source'] ?? ''),
-                'UTMMedium' => sanitize_text_field($utm_data['utm_medium'] ?? ''),
-                'UTMCampaign' => sanitize_text_field($utm_data['utm_campaign'] ?? ''),
-                'UTMContent' => sanitize_text_field($utm_data['utm_content'] ?? ''),
-                'UTMTerm' => sanitize_text_field($utm_data['utm_term'] ?? ''),
-                
-                // Click IDs - Google & Facebook Tracking
-                'GClickID' => sanitize_text_field($enquiry['gclid'] ?? $click_id_data['gclid'] ?? ''),
-                'FBClickID' => sanitize_text_field($enquiry['fbclid'] ?? $click_id_data['fbclid'] ?? ''),
-                
-                // Additional tracking
-                'IPAddress' => sanitize_text_field($enquiry['ip_address'] ?? ''),
-                'LeadSource' => sanitize_text_field($lead_source),
-                'CapturedFrom' => 'EduBot Chatbot'
+                'AcademicYearID' => $academic_year_id,
+                'QueryContactSourceID' => $source_id,
+                'FatherName' => !empty($enquiry['parent_name']) ? sanitize_text_field($enquiry['parent_name']) : 'NA',
+                'FatherMobile' => !empty($enquiry['phone']) ? sanitize_text_field($enquiry['phone']) : 'NA',
+                'FatherEmailID' => !empty($enquiry['email']) ? sanitize_email($enquiry['email']) : 'NA',
+                'MotherName' => 'NA',
+                'MotherMobile' => !empty($enquiry['phone']) ? sanitize_text_field($enquiry['phone']) : 'NA',
+                'DOB' => !empty($enquiry['date_of_birth']) ? sanitize_text_field($enquiry['date_of_birth']) : 'NA',
+                'Address1' => 'NA',
+                'Remarks' => $remarks_with_enquiry
             );
             
             return $mcb_data;
@@ -182,55 +257,164 @@ class EduBot_MCB_Service {
      * @param string $grade - Grade/Class name
      * @return string - MCB Class ID
      */
-    private function map_grade_to_class_id($grade) {
+    private function map_grade_to_class_id($grade, $board = 'CBSE') {
         $grade = strtolower(trim($grade));
+        $board = strtoupper(trim($board));
         
-        // Grade to Class ID mapping
-        $mapping = array(
-            'nursery' => '1',
-            'pp1' => '2',
-            'pp2' => '3',
-            'lkg' => '4',
-            'ukg' => '5',
-            'grade 1' => '6',
-            'class 1' => '6',
-            '1' => '6',
-            'grade 2' => '7',
-            'class 2' => '7',
-            '2' => '7',
-            'grade 3' => '8',
-            'class 3' => '8',
-            '3' => '8',
-            'grade 4' => '9',
-            'class 4' => '9',
-            '4' => '9',
-            'grade 5' => '10',
-            'class 5' => '10',
-            '5' => '10',
-            'grade 6' => '11',
-            'class 6' => '11',
-            '6' => '11',
-            'grade 7' => '12',
-            'class 7' => '12',
-            '7' => '12',
-            'grade 8' => '13',
-            'class 8' => '13',
-            '8' => '13',
-            'grade 9' => '14',
-            'class 9' => '14',
-            '9' => '14',
-            'grade 10' => '15',
-            'class 10' => '15',
-            '10' => '15',
-            'grade 11' => '16',
-            'class 11' => '16',
-            '11' => '16',
-            'grade 12' => '17',
-            'class 12' => '17',
-            '12' => '17'
-        );
+        // MCB System Grade/Class ID mapping - BOARD DEPENDENT
+        // Different boards have different class IDs for the same grade
         
-        return isset($mapping[$grade]) ? $mapping[$grade] : '10'; // Default to Grade 5
+        if ($board === 'CBSE') {
+            // CBSE Board Mapping
+            $mapping = array(
+                'i' => '943',
+                'ii' => '944',
+                'iii' => '945',
+                'iv' => '946',
+                'v' => '947',
+                'vi' => '903',
+                'vii' => '904',
+                'viii' => '894',
+                'ix' => '895',
+                'x' => '896',
+                'xi' => '943',  // Class XI CBSE (same as I CBSE for higher secondary)
+                'xii' => '944', // Class XII CBSE (same as II CBSE for higher secondary)
+                'grade 1' => '943',
+                'class 1' => '943',
+                '1' => '943',
+                'grade 2' => '944',
+                'class 2' => '944',
+                '2' => '944',
+                'grade 3' => '945',
+                'class 3' => '945',
+                '3' => '945',
+                'grade 4' => '946',
+                'class 4' => '946',
+                '4' => '946',
+                'grade 5' => '947',
+                'class 5' => '947',
+                '5' => '947',
+                'grade 6' => '903',
+                'class 6' => '903',
+                '6' => '903',
+                'grade 7' => '904',
+                'class 7' => '904',
+                '7' => '904',
+                'grade 8' => '894',
+                'class 8' => '894',
+                '8' => '894',
+                'grade 9' => '895',
+                'class 9' => '895',
+                '9' => '895',
+                'grade 10' => '896',
+                'class 10' => '896',
+                '10' => '896',
+                'grade 11' => '943',
+                'class 11' => '943',
+                '11' => '943',
+                'grade 12' => '944',
+                'class 12' => '944',
+                '12' => '944'
+            );
+        } elseif ($board === 'CAIE' || $board === 'CAMBRIDGE') {
+            // CAIE/Cambridge Board Mapping
+            $mapping = array(
+                'pre nursery' => '787',
+                'nursery' => '273',
+                'pp1' => '274',
+                'pp2' => '275',
+                'grade 1' => '276',
+                'class 1' => '276',
+                '1' => '276',
+                'grade 2' => '277',
+                'class 2' => '277',
+                '2' => '277',
+                'grade 3' => '278',
+                'class 3' => '278',
+                '3' => '278',
+                'grade 4' => '279',
+                'class 4' => '279',
+                '4' => '279',
+                'grade 5' => '280',
+                'class 5' => '280',
+                '5' => '280',
+                'grade 6' => '281',
+                'class 6' => '281',
+                '6' => '281',
+                'grade 7' => '282',
+                'class 7' => '282',
+                '7' => '282',
+                'grade 8' => '283',
+                'class 8' => '283',
+                '8' => '283',
+                'grade 9' => '315',
+                'class 9' => '315',
+                '9' => '315',
+                'grade 10' => '631',
+                'class 10' => '631',
+                '10' => '631',
+                'grade 11' => '910',
+                'grade 11 mpc' => '910',
+                'grade 11 mbipc' => '911',
+                'grade 11 bipc' => '912',
+                'grade 11 comm' => '913',
+                'class 11' => '910',
+                '11' => '910',
+                'grade 12' => '914',
+                'grade 12 mpc' => '914',
+                'grade 12 mbipc' => '915',
+                'grade 12 bipc' => '916',
+                'grade 12 comm' => '917',
+                'class 12' => '914',
+                '12' => '914'
+            );
+        } else {
+            // Default mapping (fallback to CAIE)
+            $mapping = array(
+                'pre nursery' => '787',
+                'nursery' => '273',
+                'pp1' => '274',
+                'pp2' => '275',
+                'grade 1' => '276',
+                'class 1' => '276',
+                '1' => '276',
+                'grade 2' => '277',
+                'class 2' => '277',
+                '2' => '277',
+                'grade 3' => '278',
+                'class 3' => '278',
+                '3' => '278',
+                'grade 4' => '279',
+                'class 4' => '279',
+                '4' => '279',
+                'grade 5' => '280',
+                'class 5' => '280',
+                '5' => '280',
+                'grade 6' => '281',
+                'class 6' => '281',
+                '6' => '281',
+                'grade 7' => '282',
+                'class 7' => '282',
+                '7' => '282',
+                'grade 8' => '283',
+                'class 8' => '283',
+                '8' => '283',
+                'grade 9' => '315',
+                'class 9' => '315',
+                '9' => '315',
+                'grade 10' => '631',
+                'class 10' => '631',
+                '10' => '631',
+                'grade 11' => '910',
+                'class 11' => '910',
+                '11' => '910',
+                'grade 12' => '914',
+                'class 12' => '914',
+                '12' => '914'
+            );
+        }
+        
+        return isset($mapping[$grade]) ? $mapping[$grade] : '280'; // Default to Grade 5
     }
     
     /**
@@ -255,6 +439,30 @@ class EduBot_MCB_Service {
     }
     
     /**
+     * Map academic year to MCB academic year ID
+     * 
+     * @param string $academic_year - Academic year (e.g., "2025-26")
+     * @return string - MCB Academic Year ID
+     */
+    private function map_academic_year_to_id($academic_year) {
+        $academic_year = strtoupper(trim($academic_year));
+        
+        // MCB Academic Year ID mapping
+        $mapping = array(
+            '2020-21' => '11',
+            '2021-22' => '12',
+            '2022-23' => '13',
+            '2023-24' => '14',
+            '2024-25' => '15',
+            '2025-26' => '16',
+            '2026-27' => '17',
+            '2027-28' => '18'
+        );
+        
+        return isset($mapping[$academic_year]) ? $mapping[$academic_year] : '16'; // Default to 2025-26
+    }
+    
+    /**
      * Map lead source to MCB lead source ID
      * 
      * @param string $source - Lead source name
@@ -262,14 +470,41 @@ class EduBot_MCB_Service {
      */
     private function map_lead_source($source) {
         $source = strtolower(trim($source));
-        $mcb_settings = get_option('edubot_mcb_settings', array());
         
-        if (!isset($mcb_settings['lead_source_mapping'])) {
-            return '280'; // Default to organic
+        // MCB Lead Source ID mapping - from MyClassBoard system
+        $mapping = array(
+            'news paper' => '84',
+            'hoardings' => '85',
+            'existing parent' => '232',
+            'others' => '233',
+            'events' => '234',
+            'walkin' => '250',
+            'website' => '231',
+            'facebook' => '272',
+            'facebook lead' => '271',
+            'google display' => '270',
+            'google search' => '269',
+            'instagram' => '268',
+            'ebook' => '274',
+            'linkedin' => '267',
+            'chat bot' => '273',
+            'google call ads' => '275',
+            'leaflets' => '86',
+            'organic' => '280',
+            'friends' => '92',
+            'youtube' => '446',
+            'news letter' => '447',
+            'word of mouth' => '448',
+            'email' => '286',
+            'how did you hear about us?' => '280'
+        );
+        
+        // If source is empty or not found, default to Organic (280)
+        if (empty($source) || !isset($mapping[$source])) {
+            return '280'; // Default to Organic
         }
         
-        $mapping = $mcb_settings['lead_source_mapping'];
-        return isset($mapping[$source]) ? $mapping[$source] : $mapping['default'];
+        return $mapping[$source];
     }
     
     /**
