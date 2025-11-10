@@ -201,13 +201,17 @@ class EduBot_MCB_Admin {
         
         error_log('✅ User has manage_options');
         
-        // Get enquiry ID
-        $enquiry_id = isset($_POST['enquiry_id']) ? intval($_POST['enquiry_id']) : 0;
-        error_log('enquiry_id received: ' . $enquiry_id . ' (type: integer)');
+        // Get enquiry ID - may come with prefix like 'enq_41' or plain '41'
+        $enquiry_id_raw = isset($_POST['enquiry_id']) ? $_POST['enquiry_id'] : 0;
+        error_log('enquiry_id received (raw): ' . $enquiry_id_raw);
+        
+        // Strip prefix if present (e.g., 'enq_41' -> '41')
+        $enquiry_id = intval(preg_replace('/[^0-9]/', '', $enquiry_id_raw));
+        error_log('enquiry_id after extraction: ' . $enquiry_id . ' (type: integer)');
         
         if (!$enquiry_id) {
-            error_log('❌ enquiry_id is invalid or empty');
-            wp_send_json_error(array('message' => 'Invalid enquiry ID'));
+            error_log('❌ enquiry_id is invalid or empty after extraction');
+            wp_send_json_error(array('message' => 'Invalid enquiry ID: ' . $enquiry_id_raw));
         }
         
         error_log('✅ enquiry_id is valid: ' . $enquiry_id);
