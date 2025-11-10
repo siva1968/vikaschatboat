@@ -6,6 +6,24 @@
 jQuery(document).ready(function($) {
     'use strict';
     
+    // DEBUG: Check if everything is loaded
+    console.log('🔵 === EduBot MCB Admin JS Initialized ===');
+    console.log('✅ jQuery loaded:', typeof $ === 'function');
+    console.log('✅ Document ready fired');
+    console.log('📍 Page URL:', window.location.href);
+    console.log('📍 edubot_mcb object:', typeof edubot_mcb !== 'undefined' ? 'EXISTS' : 'MISSING!');
+    if (typeof edubot_mcb !== 'undefined') {
+        console.log('  - ajax_url:', edubot_mcb.ajax_url);
+        console.log('  - nonce exists:', !!edubot_mcb.nonce);
+    }
+    console.log('🔍 Found MCB preview buttons:', $('.mcb-preview-btn').length);
+    $('.mcb-preview-btn').each(function(i) {
+        console.log('  Button ' + i + ':', {
+            'data-enquiry-id': $(this).data('enquiry-id'),
+            'html': $(this).html()
+        });
+    });
+    
     // Handle MCB sync button click
     $(document).on('click', '.mcb-sync-btn', function(e) {
         e.preventDefault();
@@ -114,9 +132,13 @@ jQuery(document).ready(function($) {
     
     // Handle MCB preview button click
     $(document).on('click', '.mcb-preview-btn', function(e) {
+        console.log('🔵 MCB PREVIEW BUTTON CLICKED - Event firing correctly');
         e.preventDefault();
         
         var enquiryId = $(this).data('enquiry-id');
+        console.log('📍 Enquiry ID extracted:', enquiryId);
+        console.log('⚙️ AJAX URL:', edubot_mcb.ajax_url);
+        console.log('🔐 Nonce exists:', !!edubot_mcb.nonce);
         
         // Make AJAX request to get MCB preview data
         $.ajax({
@@ -128,15 +150,18 @@ jQuery(document).ready(function($) {
                 nonce: edubot_mcb.nonce
             },
             success: function(response) {
+                console.log('✅ AJAX Success Response:', response);
                 if (response.success) {
-                    console.log('MCB Preview Data:', response.data);
+                    console.log('✅ MCB Preview Data:', response.data);
                     showMCBPreviewModal(response.data);
                 } else {
+                    console.error('❌ Response not successful:', response);
                     showNotification('error', response.data.message || 'Failed to load MCB preview');
                 }
             },
             error: function(xhr, status, error) {
-                console.error('Preview failed:', error);
+                console.error('❌ Preview AJAX failed:', error, 'Status:', status);
+                console.error('❌ XHR Response:', xhr.responseText);
                 showNotification('error', 'Failed to load MCB preview data');
             }
         });
@@ -146,6 +171,13 @@ jQuery(document).ready(function($) {
      * Display MCB preview modal
      */
     function showMCBPreviewModal(data) {
+        // Debug: Log the full response
+        console.log('=== MCB Preview Modal Data ===');
+        console.log('Full data object:', data);
+        console.log('MCB data object:', data.mcb_data);
+        console.log('Enquiry source data:', data.enquiry_source_data);
+        console.log('MCB settings:', data.mcb_settings);
+        
         var html = '<div class="mcb-preview-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">';
         html += '<div style="background: white; border-radius: 8px; max-width: 1000px; max-height: 90vh; overflow: auto; padding: 30px; box-shadow: 0 5px 40px rgba(0,0,0,0.3);">';
         html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #0073aa; padding-bottom: 15px;">';

@@ -62,7 +62,7 @@ class EduBot_MCB_Service {
     /**
      * Sync an enquiry to MCB
      * 
-     * @param int $enquiry_id - Enquiry ID to sync
+     * @param int $enquiry_id - Application ID to sync (from the applications table)
      * @return array - Sync result with status and message
      */
     public function sync_enquiry($enquiry_id) {
@@ -76,9 +76,27 @@ class EduBot_MCB_Service {
             );
         }
         
-        // Get enquiry data
+        // Get application data first
+        // $enquiry_id is actually the application ID
+        $application = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE id = %d", $enquiry_id),
+            ARRAY_A
+        );
+        
+        if (!$application) {
+            return array(
+                'success' => false,
+                'message' => 'Application not found',
+                'error' => 'APPLICATION_NOT_FOUND'
+            );
+        }
+        
+        // Get the enquiry using application_number
         $enquiry = $wpdb->get_row(
-            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d", $enquiry_id),
+            $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE enquiry_number = %s",
+                $application['application_number']
+            ),
             ARRAY_A
         );
         
@@ -119,7 +137,13 @@ class EduBot_MCB_Service {
     public function preview_mcb_data($enquiry_id) {
         global $wpdb;
         
+        error_log('═════════════════════════════════════════════════════');
+        error_log('═══ preview_mcb_data() CALLED (v' . EDUBOT_PRO_VERSION . ') ═══');
+        error_log('═════════════════════════════════════════════════════');
+        error_log('  Input enquiry_id: ' . $enquiry_id . ' (type: ' . gettype($enquiry_id) . ')');
+        
         if (!$this->is_sync_enabled()) {
+            error_log('❌ MCB sync is NOT enabled');
             return array(
                 'success' => false,
                 'message' => 'MCB sync is not enabled',
@@ -127,41 +151,74 @@ class EduBot_MCB_Service {
             );
         }
         
-        // Get enquiry data
-        $enquiry = $wpdb->get_row(
-            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d", $enquiry_id),
+        error_log('✅ MCB sync is enabled');
+        
+        // $enquiry_id is actually the enquiry_number/application_number (passed from button)
+        // The button passes enquiry_number which matches application_number
+        // First find the application by its application_number
+        error_log('✓ Looking for application with application_number = ' . $enquiry_id);
+        
+        $application = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE application_number = %s", $enquiry_id),
             ARRAY_A
         );
         
-        if (!$enquiry) {
+        if (!$application) {
+            error_log('❌ Application NOT FOUND for application_number=' . $enquiry_id);
+            error_log('  Last query: ' . $wpdb->last_query);
+            error_log('  Last error: ' . ($wpdb->last_error ?? 'None'));
             return array(
                 'success' => false,
-                'message' => 'Enquiry not found',
+                'message' => 'Application not found for this enquiry number',
                 'mcb_data' => null
             );
         }
         
-        // Get application data (for marketing data)
-        $application = $wpdb->get_row(
+        error_log('✅ Application FOUND: id=' . $application['id']);
+        error_log('  Application number: ' . $application['application_number']);
+        
+        // Now get the enquiry data using the application_number
+        error_log('✓ Querying enquiries table for enquiry_number = "' . $application['application_number'] . '"');
+        error_log('  Query: SELECT * FROM ' . $wpdb->prefix . 'edubot_enquiries WHERE enquiry_number = "' . $application['application_number'] . '"');
+        
+        $enquiry = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}edubot_applications WHERE application_number = %s",
-                $enquiry['enquiry_number']
+                "SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE enquiry_number = %s",
+                $application['application_number']
             ),
             ARRAY_A
         );
         
-        // Merge application data if found
+        if (!$enquiry) {
+            error_log('❌ Enquiry NOT FOUND for enquiry_number=' . $application['application_number']);
+            error_log('  Last query: ' . $wpdb->last_query);
+            error_log('  Last error: ' . ($wpdb->last_error ?? 'None'));
+            return array(
+                'success' => false,
+                'message' => 'Enquiry not found for this application',
+                'mcb_data' => null
+            );
+        }
+        
+        error_log('✅ Enquiry FOUND: id=' . $enquiry['id'] . ', number=' . $enquiry['enquiry_number']);
+        
+        // Merge application data with enquiry data
+        error_log('✓ Merging application data into enquiry data');
         if ($application) {
             $enquiry['utm_data'] = $application['utm_data'];
             $enquiry['gclid'] = $application['gclid'];
             $enquiry['fbclid'] = $application['fbclid'];
             $enquiry['click_id_data'] = $application['click_id_data'];
+            error_log('  ✅ Data merged');
         }
         
         // Prepare data for MCB
+        error_log('✓ Calling prepare_mcb_data()...');
         $mcb_data = $this->prepare_mcb_data($enquiry);
+        error_log('  Result: ' . ($mcb_data ? 'SUCCESS' : 'FAILED'));
         
         if (!$mcb_data) {
+            error_log('❌ MCB data preparation failed');
             return array(
                 'success' => false,
                 'message' => 'Failed to prepare MCB data',
@@ -171,6 +228,10 @@ class EduBot_MCB_Service {
         
         // Extract marketing data from enquiry utm_data for display
         $utm_data = !empty($enquiry['utm_data']) ? json_decode($enquiry['utm_data'], true) : array();
+        
+        error_log('✅ preview_mcb_data() RETURNING SUCCESS');
+        error_log('  Enquiry number: ' . $enquiry['enquiry_number']);
+        error_log('  MCB Data keys: ' . implode(', ', array_keys($mcb_data ?? array())));
         
         // Return preview without sending
         return array(

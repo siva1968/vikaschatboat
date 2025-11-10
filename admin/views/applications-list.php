@@ -443,5 +443,250 @@ jQuery(document).ready(function($) {
         // Export functionality would go here
         alert('Export functionality will be implemented in the next update.');
     });
+    
+    // ============================================================================
+    // MCB PREVIEW FUNCTIONALITY - INLINED FOR GUARANTEED LOADING
+    // ============================================================================
+    
+    console.log('🔵 === MCB Admin JS (INLINED VERSION) Initialized ===');
+    console.log('✅ jQuery loaded:', typeof $ === 'function');
+    console.log('📍 Found MCB preview buttons:', $('.mcb-preview-btn').length);
+    
+    // Ensure edubot_mcb object exists with proper values
+    if (typeof edubot_mcb === 'undefined') {
+        console.warn('⚠️ edubot_mcb object not found, creating with proper values');
+        window.edubot_mcb = {
+            ajax_url: <?php echo json_encode(admin_url('admin-ajax.php')); ?>,
+            nonce: <?php echo json_encode(wp_create_nonce('edubot_mcb_sync')); ?>,
+            sync_text: 'Syncing to MCB...',
+            sync_success: 'Successfully synced to MCB!',
+            sync_failed: 'Failed to sync. Check error logs.',
+            sync_already: 'Already synced to MCB'
+        };
+    }
+    
+    console.log('📍 Using AJAX URL:', edubot_mcb.ajax_url);
+    console.log('✅ Nonce available:', !!edubot_mcb.nonce);
+    
+    // Handle MCB preview button click
+    $(document).on('click', '.mcb-preview-btn', function(e) {
+        e.preventDefault();
+        console.log('🔵 MCB PREVIEW BUTTON CLICKED');
+        
+        var $btn = $(this);
+        
+        // Use direct attribute access to get the ID (it's a string like 'enq_40')
+        var enquiryId = $btn.attr('data-enquiry-id');
+        console.log('📍 Enquiry ID from attribute:', enquiryId);
+        console.log('📊 Button element:', {
+            'tag': $btn.prop('tagName'),
+            'class': $btn.attr('class'),
+            'data-enquiry-id': enquiryId,
+            'html': $btn.prop('outerHTML').substring(0, 200)
+        });
+        
+        // Check if ID is valid
+        console.log('📊 ID type:', typeof enquiryId, '| Length:', enquiryId ? enquiryId.length : 0);
+        
+        // Don't parse to integer - the ID could be string or integer
+        // Just validate that it's not empty
+        if (!enquiryId) {
+            console.error('❌ No enquiry ID found or invalid:', enquiryId);
+            alert('Error: No enquiry ID found on button');
+            return;
+        }
+        
+        console.log('✅ Valid enquiry ID:', enquiryId, '(type:', typeof enquiryId + ')');
+        console.log('📤 Sending AJAX with data:', {
+            action: 'edubot_mcb_preview_data',
+            enquiry_id: enquiryId,
+            nonce: 'PRESENT: ' + (!!edubot_mcb.nonce)
+        });
+        
+        $.ajax({
+            url: edubot_mcb.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'edubot_mcb_preview_data',
+                enquiry_id: enquiryId,
+                nonce: edubot_mcb.nonce || ''
+            },
+            success: function(response) {
+                console.log('✅ AJAX Success:', response);
+                console.log('📊 Response details:', {
+                    'success': response.success,
+                    'has_data': !!response.data,
+                    'message': response.data?.message || 'N/A'
+                });
+                if (response.success && response.data) {
+                    console.log('✅ Success! Showing modal...');
+                    showMCBPreviewModal(response.data);
+                } else {
+                    console.error('❌ Response error:', response);
+                    const errorMsg = response.data?.message || 'Unknown error';
+                    console.error('Error Message:', errorMsg);
+                    alert('Failed to load preview: ' + errorMsg);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ AJAX Error:', error, xhr.responseText);
+                alert('Failed to load MCB preview');
+            }
+        });
+    });
+    
+    // Display MCB preview modal
+    function showMCBPreviewModal(data) {
+        console.log('📋 Showing MCB Preview Modal');
+        console.log('   Data:', data);
+        
+        var html = '<div class="mcb-preview-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">';
+        html += '<div style="background: white; border-radius: 8px; max-width: 1200px; max-height: 95vh; overflow: auto; padding: 40px; box-shadow: 0 5px 40px rgba(0,0,0,0.3); font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;">';
+        
+        // Header
+        html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 3px solid #0073aa; padding-bottom: 20px;">';
+        html += '<h2 style="margin: 0; color: #0073aa; font-size: 24px;">📋 MCB Data Preview</h2>';
+        html += '<button type="button" style="background: none; border: none; font-size: 28px; cursor: pointer; color: #999; padding: 0; width: 30px; height: 30px;">&times;</button>';
+        html += '</div>';
+        
+        // Enquiry Header
+        html += '<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #0073aa;">';
+        html += '<p style="margin: 5px 0; font-size: 14px;"><strong>Enquiry #:</strong> ' + escapeHtml(data.enquiry_number || 'N/A') + '</p>';
+        html += '</div>';
+        
+        // ====== SECTION 1: MCB Configuration (Settings) ======
+        if (data.mcb_settings) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">⚙️ MCB Configuration (Settings)</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRow('Organization ID', data.mcb_settings.organization_id);
+            html += createTableRow('Branch ID', data.mcb_settings.branch_id);
+            html += createTableRow('Sync Enabled', data.mcb_settings.sync_enabled ? '✅ YES' : '❌ NO');
+            html += '</table>';
+        }
+        
+        // ====== SECTION 2: Source Data (What Was Collected) ======
+        if (data.enquiry_source_data) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">📥 Data Collected from Enquiry (Source)</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRowWithStatus('Student Name', data.enquiry_source_data.student_name);
+            html += createTableRowWithStatus('Parent Name', data.enquiry_source_data.parent_name);
+            html += createTableRowWithStatus('Email', data.enquiry_source_data.email);
+            html += createTableRowWithStatus('Phone', data.enquiry_source_data.phone);
+            html += createTableRowWithStatus('Date of Birth', data.enquiry_source_data.date_of_birth);
+            html += createTableRowWithStatus('Grade', data.enquiry_source_data.grade);
+            html += createTableRowWithStatus('Board', data.enquiry_source_data.board);
+            html += createTableRowWithStatus('Academic Year', data.enquiry_source_data.academic_year);
+            html += createTableRowWithStatus('Source', data.enquiry_source_data.source);
+            html += '</table>';
+        }
+        
+        // ====== SECTION 3: MCB Payload - Student Information ======
+        if (data.mcb_data) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">👤 Student Information (What MCB Will Receive)</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRowWithStatus('Student Name', data.mcb_data.StudentName);
+            html += createTableRowWithStatus('Father Name', data.mcb_data.FatherName);
+            html += createTableRowWithStatus('Father Email', data.mcb_data.FatherEmailID);
+            html += createTableRowWithStatus('Father Mobile', data.mcb_data.FatherMobile);
+            html += createTableRowWithStatus('Mother Name', data.mcb_data.MotherName);
+            html += createTableRowWithStatus('Mother Mobile', data.mcb_data.MotherMobile);
+            html += createTableRowWithStatus('Date of Birth', data.mcb_data.DOB);
+            html += createTableRowWithStatus('Address', data.mcb_data.Address1);
+            html += '</table>';
+        }
+        
+        // ====== SECTION 4: Academic Information ======
+        if (data.mcb_data) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">🎓 Academic Information</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRowWithStatus('Class ID', data.mcb_data.ClassID);
+            html += createTableRowWithStatus('Academic Year ID', data.mcb_data.AcademicYearID);
+            html += '</table>';
+        }
+        
+        // ====== SECTION 5: MCB API Configuration ======
+        if (data.mcb_data) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">📋 MCB API Configuration</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRowWithStatus('Organization ID (MCB)', data.mcb_data.OrganisationID);
+            html += createTableRowWithStatus('Branch ID (MCB)', data.mcb_data.BranchID);
+            html += createTableRowWithStatus('Lead Source ID', data.mcb_data.QueryContactSourceID);
+            html += '</table>';
+        }
+        
+        // ====== SECTION 6: Marketing Attribution ======
+        if (data.marketing_data) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">📊 Marketing Attribution Data</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fafafa;">';
+            html += createTableRowWithStatus('utm_source', data.marketing_data.utm_source);
+            html += createTableRowWithStatus('utm_medium', data.marketing_data.utm_medium);
+            html += createTableRowWithStatus('utm_campaign', data.marketing_data.utm_campaign);
+            html += createTableRowWithStatus('gclid (Google)', data.marketing_data.gclid);
+            html += createTableRowWithStatus('fbclid (Facebook)', data.marketing_data.fbclid);
+            html += '</table>';
+        }
+        
+        // ====== SECTION 7: Remarks ======
+        if (data.mcb_data && data.mcb_data.Remarks) {
+            html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">📝 Remarks</h3>';
+            html += '<div style="background: #fafafa; padding: 15px; border-left: 3px solid #0073aa; border-radius: 3px; margin-bottom: 20px; word-break: break-word;">';
+            html += escapeHtml(data.mcb_data.Remarks);
+            html += '</div>';
+        }
+        
+        // ====== SECTION 8: Complete JSON Payload ======
+        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 25px; margin-bottom: 15px; font-size: 16px;">📦 Complete JSON Payload (for API)</h3>';
+        html += '<pre style="background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; line-height: 1.4; margin-bottom: 20px;">';
+        html += escapeHtml(JSON.stringify(data.mcb_data, null, 2));
+        html += '</pre>';
+        
+        html += '</div></div>';
+        
+        var $modal = $(html);
+        
+        // Close on button click
+        $modal.find('button').on('click', function() {
+            $modal.remove();
+        });
+        
+        // Close on background click
+        $modal.on('click', function(e) {
+            if (e.target === this || $(e.target).closest('.mcb-preview-modal').length) {
+                if ($(e.target).is('.mcb-preview-modal')) {
+                    $modal.remove();
+                }
+            }
+        });
+        
+        $('body').append($modal);
+    }
+    
+    // Helper function: Create table row with HTML safe values
+    function createTableRow(label, value) {
+        var displayValue = (value === null || value === undefined || value === '') ? '<span style="color: #999; font-style: italic;">Not set</span>' : escapeHtml(String(value));
+        return '<tr style="border-bottom: 1px solid #e0e0e0;">' +
+               '<td style="padding: 12px; font-weight: bold; color: #0073aa; min-width: 160px; background: #f0f7ff;">' + label + '</td>' +
+               '<td style="padding: 12px; color: #333;">' + displayValue + '</td>' +
+               '</tr>';
+    }
+    
+    // Helper function: Create table row with status indicator
+    function createTableRowWithStatus(label, value) {
+        var hasValue = (value && value !== 'NA' && value !== '' && value !== null && value !== undefined);
+        var status = hasValue ? '<span style="color: green; font-weight: bold; margin-right: 8px;">✅</span>' : '<span style="color: #dc3545; font-weight: bold; margin-right: 8px;">⚠️</span>';
+        var displayValue = (value && value !== 'NA') ? escapeHtml(String(value)) : '<span style="color: #999; font-style: italic;">N/A</span>';
+        
+        return '<tr style="border-bottom: 1px solid #e0e0e0;">' +
+               '<td style="padding: 12px; font-weight: bold; color: #0073aa; min-width: 160px; background: #f0f7ff;">' + label + '</td>' +
+               '<td style="padding: 12px; color: #333;">' + status + displayValue + '</td>' +
+               '</tr>';
+    }
+    
+    // Escape HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        return $('<div/>').text(text).html();
+    }
 });
+
 </script>
