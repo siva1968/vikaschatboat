@@ -16,7 +16,7 @@
  * Plugin Name:       EduBot Pro
  * Plugin URI:        https://example.com/edubot-pro
  * Description:       Advanced AI-powered educational chatbot for WordPress with enhanced conversational flow and multi-institutional support.
- * Version:           1.5.3
+ * Version:           1.5.4
  * Author:            Your Name
  * Author URI:        https://example.com
  * License:           GPL-2.0+
