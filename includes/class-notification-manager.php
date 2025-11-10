@@ -121,26 +121,42 @@ class EduBot_Notification_Manager {
             return false;
         }
 
+        // Determine which code to use in notifications
+        // Priority: MCB code > Local Application Number
+        $enquiry_code = !empty($user_data['mcb_enquiry_code']) 
+            ? $user_data['mcb_enquiry_code'] 
+            : $application['application_number'];
+        
+        error_log('[NOTIF-001] 📌 Using enquiry code for notifications: ' . $enquiry_code);
+        if (!empty($user_data['mcb_enquiry_code'])) {
+            error_log('[NOTIF-002] ✅ Using MCB EnquiryCode: ' . $enquiry_code);
+        } else {
+            error_log('[NOTIF-003] ℹ️ MCB code not available, using local Enquiry ID: ' . $enquiry_code);
+        }
+
         // Prepare message variables
         $variables = array_merge($user_data, array(
-            'application_number' => $application['application_number'],
+            'application_number' => $enquiry_code,  // Use the determined code
             'submission_date' => date('F j, Y', strtotime($application['created_at']))
         ));
 
         // Send email notification
         if ($notification_settings['email_enabled'] && !empty($user_data['email'])) {
+            error_log('[NOTIF-004] 📧 Sending email to: ' . $user_data['email']);
             $this->send_parent_email($user_data['email'], $variables);
             $this->database_manager->update_notification_status($application_id, 'email');
         }
 
         // Send WhatsApp notification
         if ($notification_settings['whatsapp_enabled'] && !empty($user_data['phone'])) {
+            error_log('[NOTIF-005] 💬 Sending WhatsApp to: ' . $user_data['phone']);
             $this->send_parent_whatsapp($user_data['phone'], $variables);
             $this->database_manager->update_notification_status($application_id, 'whatsapp');
         }
 
         // Send SMS notification
         if ($notification_settings['sms_enabled'] && !empty($user_data['phone'])) {
+            error_log('[NOTIF-006] 📱 Sending SMS to: ' . $user_data['phone']);
             $this->send_parent_sms($user_data['phone'], $variables);
             $this->database_manager->update_notification_status($application_id, 'sms');
         }

@@ -1047,7 +1047,7 @@ class EduBot_Chatbot_Engine {
         $database_manager = new EduBot_Database_Manager();
         $notification_manager = new EduBot_Notification_Manager();
         
-        // Generate application number
+        // Generate application number (local Enquiry ID)
         $application_number = $this->security_manager->generate_application_number();
         
         // Save application to database
@@ -1061,7 +1061,24 @@ class EduBot_Chatbot_Engine {
         ));
 
         if ($application_id) {
-            // Send notifications
+            error_log('[SUBMIT-APP-001] 📝 Application created with ID: ' . $application_id . ', Number: ' . $application_number);
+            
+            // Step 1: Immediately sync to MCB API to get MCB code
+            error_log('[SUBMIT-APP-002] 🔄 Attempting MCB sync immediately after application creation...');
+            $mcb_code = $this->sync_to_mcb_immediately($application_id, $application_number, $session['user_data']);
+            
+            if (!empty($mcb_code)) {
+                error_log('[SUBMIT-APP-003] ✅ MCB sync successful! EnquiryCode: ' . $mcb_code);
+                // Store MCB code in user data for notifications
+                $session['user_data']['mcb_enquiry_code'] = $mcb_code;
+            } else {
+                error_log('[SUBMIT-APP-004] ❌ MCB sync failed. Will use local Enquiry ID in notifications');
+                // Fallback: use local application number
+                $session['user_data']['mcb_enquiry_code'] = $application_number;
+            }
+            
+            // Step 2: Send notifications with MCB code (or local ID as fallback)
+            error_log('[SUBMIT-APP-005] 📧 Sending notifications with code: ' . $session['user_data']['mcb_enquiry_code']);
             $notification_manager->send_application_notifications($application_id, $session['user_data']);
             
             // Update session
@@ -1397,5 +1414,95 @@ class EduBot_Chatbot_Engine {
         }
         
         return null;
+    }
+
+    /**
+     * Sync to MCB API immediately after application creation
+     * This is called synchronously before sending notifications
+     * 
+     * @param int $application_id The application ID
+     * @param string $application_number The local Enquiry ID (ENQ...)
+     * @param array $user_data The user/student data
+     * @return string MCB EnquiryCode if successful, empty string if failed
+     */
+    private function sync_to_mcb_immediately($application_id, $application_number, $user_data) {
+        error_log('[SUBMIT-APP-010] 🔄 Starting immediate MCB sync for application ' . $application_number);
+        
+        try {
+            // Check if MCB integration is enabled
+            $school_config = EduBot_School_Config::getInstance();
+            $config = $school_config->get_config();
+            
+            if (empty($config['mcb_settings']['enabled']) || empty($config['mcb_settings']['sync_enabled'])) {
+                error_log('[SUBMIT-APP-011] ⚠️ MCB integration not enabled in settings');
+                return '';
+            }
+            
+            // Get MCB integration class
+            if (!class_exists('EduBot_MyClassBoard_Integration')) {
+                error_log('[SUBMIT-APP-012] ⚠️ MCB integration class not found');
+                return '';
+            }
+            
+            $mcb_integration = new EduBot_MyClassBoard_Integration();
+            
+            // Prepare enquiry data from user data
+            $enquiry_data = array(
+                'student_name'     => $user_data['student_name'] ?? 'N/A',
+                'parent_name'      => $user_data['parent_name'] ?? 'N/A',
+                'email'            => $user_data['email'] ?? '',
+                'phone'            => $user_data['phone'] ?? '',
+                'grade'            => $user_data['grade'] ?? '',
+                'board'            => $user_data['board'] ?? '',
+                'academic_year'    => $user_data['academic_year'] ?? '',
+                'date_of_birth'    => $user_data['date_of_birth'] ?? '',
+                'address'          => $user_data['address'] ?? '',
+                'gender'           => $user_data['gender'] ?? '',
+                'enquiry_number'   => $application_number
+            );
+            
+            error_log('[SUBMIT-APP-013] 📤 Sending to MCB API: ' . wp_json_encode($enquiry_data));
+            
+            // Call MCB API
+            $mcb_response = $mcb_integration->send_to_mcb($enquiry_data, $config['mcb_settings']);
+            
+            error_log('[SUBMIT-APP-014] 📨 MCB API Response: ' . wp_json_encode($mcb_response));
+            
+            if (!isset($mcb_response['success']) || !$mcb_response['success']) {
+                error_log('[SUBMIT-APP-015] ❌ MCB API returned failure: ' . ($mcb_response['message'] ?? 'Unknown error'));
+                return '';
+            }
+            
+            // Extract MCB code from response
+            $mcb_code = $mcb_response['query_code'] ?? '';
+            
+            if (empty($mcb_code)) {
+                error_log('[SUBMIT-APP-016] ⚠️ MCB API success but no EnquiryCode in response');
+                return '';
+            }
+            
+            error_log('[SUBMIT-APP-017] ✅ MCB sync successful! EnquiryCode: ' . $mcb_code);
+            
+            // Update application with MCB data in database
+            global $wpdb;
+            $wpdb->update(
+                $wpdb->prefix . 'edubot_applications',
+                array(
+                    'mcb_sync_status' => 'synced',
+                    'mcb_enquiry_id'  => $mcb_code,
+                ),
+                array('id' => $application_id),
+                array('%s', '%s'),
+                array('%d')
+            );
+            
+            error_log('[SUBMIT-APP-018] 💾 Updated application database with MCB code');
+            
+            return $mcb_code;
+            
+        } catch (Exception $e) {
+            error_log('[SUBMIT-APP-019] ❌ Exception during MCB sync: ' . $e->getMessage());
+            return '';
+        }
     }
 }
