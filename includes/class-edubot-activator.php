@@ -333,6 +333,13 @@ class EduBot_Activator {
             $wpdb->query("ALTER TABLE {$applications_table} ADD COLUMN mcb_enquiry_id VARCHAR(100) AFTER mcb_sync_status");
             $migrations[] = 'Added mcb_enquiry_id column to applications table';
         }
+
+        // Add mcb_query_code column if it doesn't exist
+        $has_mcb_query_code = $wpdb->get_var("SHOW COLUMNS FROM {$applications_table} LIKE 'mcb_query_code'");
+        if (!$has_mcb_query_code) {
+            $wpdb->query("ALTER TABLE {$applications_table} ADD COLUMN mcb_query_code VARCHAR(100) AFTER mcb_enquiry_id");
+            $migrations[] = 'Added mcb_query_code column to applications table';
+        }
         
         return $migrations;
     }

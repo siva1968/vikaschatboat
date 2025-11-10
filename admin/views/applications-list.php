@@ -44,6 +44,7 @@ if (!defined('ABSPATH')) {
                         <th class="manage-column">Phone</th>
                         <th class="manage-column">Date</th>
                         <th class="manage-column">Status</th>
+                        <th class="manage-column">EnquiryCode</th>
                         <th class="manage-column">Actions</th>
                     </tr>
                 </thead>
@@ -90,6 +91,15 @@ if (!defined('ABSPATH')) {
                                 <span class="status status-<?php echo esc_attr($app['status']); ?>">
                                     <?php echo esc_html(ucfirst($app['status'])); ?>
                                 </span>
+                            </td>
+                            <td>
+                                <?php if (!empty($app['mcb_query_code'])): ?>
+                                    <span class="mcb-enquiry-code" style="background: #fff3cd; padding: 4px 8px; border-radius: 3px; font-weight: bold; font-family: monospace; font-size: 12px;">
+                                        <?php echo esc_html($app['mcb_query_code']); ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span style="color: #999;">—</span>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php

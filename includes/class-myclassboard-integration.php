@@ -437,14 +437,16 @@ class EduBot_MyClassBoard_Integration {
                     array(
                         'mcb_sync_status' => 'synced',
                         'mcb_enquiry_id'  => $mcb_enquiry_id,
+                        'mcb_query_code'  => $mcb_query_code,
                     ),
                     array( 'application_number' => $enquiry['enquiry_number'] ),
-                    array( '%s', '%s' ),
+                    array( '%s', '%s', '%s' ),
                     array( '%s' )
                 );
 
                 if ( $apps_updated > 0 ) {
                     error_log( '[MCB-OLD-039] ✅ Updated ' . $apps_updated . ' row(s) in wp_edubot_applications table' );
+                    error_log( '[MCB-OLD-044] 📌 Stored MCB EnquiryCode: ' . $mcb_query_code );
                 } else {
                     error_log( '[MCB-OLD-040] ⚠️ No rows updated in wp_edubot_applications table (may not exist for chatbot submissions)' );
                 }
