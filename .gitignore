@@ -1,0 +1,57 @@
+# Test Files
+test_*.php
+debug_*.php
+check_*.php
+verify_*.php
+temporary-debug-code.php
+quick_debug.php
+simple_test.php
+deep_debug_button.php
+
+# Documentation (local only)
+*.md
+!README.md
+!readme.txt
+
+# Check/diagnostic files
+check_*.php
+check_*.sql
+
+# Deployment/setup files
+setup-*.php
+activate-*.php
+
+# Log files
+*.log
+*.txt
+log_*.txt
+
+# Database backups
+*.sql
+*.sql.gz
+
+# Node modules and build
+node_modules/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# PHP
+*.phar
+
+# Cache
+cache/
+tmp/
+temp/
