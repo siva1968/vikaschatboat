@@ -697,6 +697,103 @@ jQuery(document).ready(function($) {
         if (!text) return '';
         return $('<div/>').text(text).html();
     }
+    
+    // ============================================================================
+    // MCB SYNC BUTTON HANDLER - INLINE FOR GUARANTEED TRIGGERING
+    // ============================================================================
+    
+    console.log('🔵 === MCB Sync Button Handler Registered ===');
+    
+    // Handle MCB sync button click
+    $(document).on('click', '.mcb-sync-btn', function(e) {
+        e.preventDefault();
+        console.log('🔵 MCB SYNC BUTTON CLICKED');
+        
+        var $btn = $(this);
+        var enquiryId = $btn.data('enquiry-id');
+        var originalText = $btn.text();
+        var originalClass = $btn.attr('class');
+        
+        console.log('📍 Enquiry ID from button:', enquiryId);
+        console.log('📊 Button details:', {
+            'data-enquiry-id': enquiryId,
+            'text': originalText,
+            'class': originalClass
+        });
+        
+        // Validate ID
+        if (!enquiryId) {
+            console.error('❌ No enquiry ID found on button');
+            alert('Error: No enquiry ID found on button');
+            return;
+        }
+        
+        console.log('✅ Valid enquiry ID:', enquiryId);
+        
+        // Disable button and show loading state
+        $btn.prop('disabled', true)
+            .addClass('loading')
+            .text('Syncing to MCB...')
+            .css('pointer-events', 'none');
+        
+        console.log('📤 Sending AJAX request:');
+        console.log('  - URL:', edubot_mcb.ajax_url);
+        console.log('  - Action: edubot_mcb_manual_sync');
+        console.log('  - Enquiry ID:', enquiryId);
+        console.log('  - Nonce present:', !!edubot_mcb.nonce);
+        
+        // Make AJAX request
+        $.ajax({
+            url: edubot_mcb.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'edubot_mcb_manual_sync',
+                enquiry_id: enquiryId,
+                nonce: edubot_mcb.nonce
+            },
+            success: function(response) {
+                console.log('✅ AJAX Success:', response);
+                if (response.success) {
+                    console.log('✅ Sync successful! MCB ID:', response.data.mcb_id);
+                    
+                    // Update button state
+                    $btn.removeClass(originalClass)
+                        .addClass('mcb-sync-btn synced')
+                        .text('✓ Synced')
+                        .css('color', '#28a745');
+                    
+                    // Show success message
+                    alert('Successfully synced to MCB!');
+                    
+                    // Reload page to show updated data
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    console.error('❌ Response indicates failure:', response);
+                    alert('Failed to sync: ' + (response.data?.message || 'Unknown error'));
+                    $btn.prop('disabled', false)
+                        .removeClass('loading')
+                        .text(originalText)
+                        .css('pointer-events', 'auto');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ AJAX Error:', error);
+                console.error('❌ Status:', status);
+                console.error('❌ XHR Response:', xhr.responseText);
+                alert('Failed to sync. Check error logs.');
+                
+                // Reset button
+                $btn.prop('disabled', false)
+                    .removeClass('loading')
+                    .text(originalText)
+                    .css('pointer-events', 'auto');
+            }
+        });
+    });
+    
+    console.log('✅ MCB Sync Button Handler: Ready to respond to clicks');
 });
 
 </script>
