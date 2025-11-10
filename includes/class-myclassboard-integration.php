@@ -500,8 +500,9 @@ class EduBot_MyClassBoard_Integration {
             // Check for duplicate
             if ( strpos( $body, 'already Exists' ) !== false ) {
                 return array(
-                    'success'   => true,
-                    'message'   => 'MCB: Enquiry already exists (duplicate)',
+                    'success'   => false,
+                    'error'     => 'Duplicate entry',
+                    'message'   => 'MCB: Enquiry already exists (cannot create duplicate)',
                     'status'    => 'duplicate',
                 );
             }

@@ -696,6 +696,13 @@ class EduBot_MCB_Service {
         error_log('[API-002] ║     CALLING MCB API ENDPOINT            ║');
         error_log('[API-003] ╚═══════════════════════════════════════════╝');
         
+        // LOG COMPLETE MCB PAYLOAD BEFORE SENDING
+        error_log('[API-PRE-001] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        error_log('[API-PRE-002] 📦 COMPLETE MCB PAYLOAD (will be sent to API):');
+        error_log('[API-PRE-003] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        error_log('[API-PRE-004] ' . wp_json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        error_log('[API-PRE-005] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
         $api_url = $this->mcb_settings['api_url'] ?? '';
         $timeout = intval($this->mcb_settings['timeout'] ?? 65);
         
@@ -863,7 +870,9 @@ class EduBot_MCB_Service {
                             error_log('[RESP-030] MCB Details: ' . wp_json_encode($response_data['Details']));
                         }
                         
+                        // CRITICAL: Set status to FAILED when MCB returns error
                         $sync_status = 'failed';
+                        error_log('[RESP-031-CRITICAL] ⚠️  Status set to: FAILED (because MCB returned error)');
                     }
                 }
             } else {
