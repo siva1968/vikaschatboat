@@ -152,14 +152,44 @@ jQuery(document).ready(function($) {
         html += '<button type="button" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</button>';
         html += '</div>';
         
+        // Source Data Section (Diagnostic)
+        if (data.enquiry_source_data) {
+            html += '<h3 style="color: #666; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 20px; font-size: 0.9em;">📥 Data from Enquiry (Source)</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9em; background: #f9f9f9;">';
+            html += tableRow('Student Name', data.enquiry_source_data.student_name);
+            html += tableRow('Parent Name', data.enquiry_source_data.parent_name);
+            html += tableRow('Email', data.enquiry_source_data.email);
+            html += tableRow('Phone', data.enquiry_source_data.phone);
+            html += tableRow('DOB', data.enquiry_source_data.date_of_birth);
+            html += tableRow('Grade', data.enquiry_source_data.grade);
+            html += tableRow('Board', data.enquiry_source_data.board);
+            html += tableRow('Academic Year', data.enquiry_source_data.academic_year);
+            html += tableRow('Source', data.enquiry_source_data.source);
+            html += '</table>';
+        }
+        
+        // MCB Settings Section (Diagnostic)
+        if (data.mcb_settings) {
+            html += '<h3 style="color: #666; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 20px; font-size: 0.9em;">⚙️ MCB Configuration (Settings)</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9em; background: #f9f9f9;">';
+            html += tableRow('Organization ID', data.mcb_settings.organization_id);
+            html += tableRow('Branch ID', data.mcb_settings.branch_id);
+            html += tableRow('Sync Enabled', data.mcb_settings.sync_enabled ? 'YES ✓' : 'NO ✗');
+            html += '</table>';
+        }
+        
         // Student Information Section
-        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">👤 Student Information</h3>';
+        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">👤 Student Information (MCB)</h3>';
         html += '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
         html += tableRow('Student Name', data.mcb_data.StudentName || 'N/A');
         html += tableRow('Parent Name', data.mcb_data.FatherName || 'N/A');
         html += tableRow('Parent Email', data.mcb_data.FatherEmailID || 'N/A');
         html += tableRow('Parent Phone', data.mcb_data.FatherMobile || 'N/A');
+        html += tableRow('Mother Name', data.mcb_data.MotherName || 'N/A');
+        html += tableRow('Mother Phone', data.mcb_data.MotherMobile || 'N/A');
         html += tableRow('Date of Birth', data.mcb_data.DOB || 'N/A');
+        html += tableRow('Address', data.mcb_data.Address1 || 'N/A');
+        html += tableRow('Remarks', data.mcb_data.Remarks || 'N/A');
         html += '</table>';
         
         // Academic Information Section
@@ -170,7 +200,7 @@ jQuery(document).ready(function($) {
         html += '</table>';
         
         // MCB Configuration Section
-        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">⚙️ MCB Configuration</h3>';
+        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">📋 MCB API Payload</h3>';
         html += '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
         html += tableRow('Organization ID', data.mcb_data.OrganisationID || 'N/A');
         html += tableRow('Branch ID', data.mcb_data.BranchID || 'N/A');

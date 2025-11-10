@@ -177,6 +177,22 @@ class EduBot_MCB_Service {
             'success' => true,
             'message' => 'MCB data prepared successfully',
             'enquiry_number' => $enquiry['enquiry_number'],
+            'enquiry_source_data' => array(
+                'student_name' => $enquiry['student_name'] ?? 'Not provided',
+                'parent_name' => $enquiry['parent_name'] ?? 'Not provided',
+                'email' => $enquiry['email'] ?? 'Not provided',
+                'phone' => $enquiry['phone'] ?? 'Not provided',
+                'date_of_birth' => $enquiry['date_of_birth'] ?? 'Not provided',
+                'grade' => $enquiry['grade'] ?? 'Not provided',
+                'board' => $enquiry['board'] ?? 'Not provided',
+                'academic_year' => $enquiry['academic_year'] ?? 'Not provided',
+                'source' => $enquiry['source'] ?? 'chatbot'
+            ),
+            'mcb_settings' => array(
+                'organization_id' => $this->mcb_settings['organization_id'] ?? 'Not configured',
+                'branch_id' => $this->mcb_settings['branch_id'] ?? 'Not configured',
+                'sync_enabled' => $this->is_sync_enabled()
+            ),
             'mcb_data' => $mcb_data,
             'marketing_data' => array(
                 'utm_source' => $utm_data['utm_source'] ?? '',
