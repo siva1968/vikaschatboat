@@ -834,45 +834,64 @@ class EduBot_MCB_Service {
                     $sync_status = 'failed';
                 } else {
                     error_log('[RESP-016] ✅ JSON decoded successfully');
-                    error_log('[RESP-017] Response Data Keys: ' . implode(', ', array_keys($response_data)));
                     
-                    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    // Check MCB Result Field
-                    error_log('[RESP-018] Checking MCB Result field...');
-                    error_log('[RESP-019] Result: ' . ($response_data['Result'] ?? 'NOT SET'));
-                    error_log('[RESP-020] Message: ' . ($response_data['Message'] ?? 'NOT SET'));
-                    error_log('[RESP-021] QueryCode: ' . ($response_data['QueryCode'] ?? 'NOT SET'));
-                    error_log('[RESP-022] EnquiryID: ' . ($response_data['EnquiryID'] ?? 'NOT SET'));
-                    
-                    if (!empty($response_data['Result']) && $response_data['Result'] === 'Success') {
-                        error_log('[RESP-023] ✅✅ MCB RESULT = SUCCESS ✅✅');
-                        $success = true;
-                        $sync_status = 'synced';
-                        $mcb_enquiry_id = $response_data['QueryCode'] ?? $response_data['EnquiryID'] ?? null;
-                        $mcb_query_code = $response_data['QueryCode'] ?? null;
-                        error_log('[RESP-024] MCB Enquiry ID/QueryCode: ' . $mcb_enquiry_id);
+                    // Check if response is actually an array, not a scalar value
+                    if (!is_array($response_data)) {
+                        error_log('[RESP-016B] ⚠️  Response is not an array, got: ' . gettype($response_data));
+                        error_log('[RESP-016C] Response value: ' . (is_string($response_data) ? $response_data : wp_json_encode($response_data)));
+                        
+                        // If MCB returns a plain string, treat it as an error message
+                        if (is_string($response_data)) {
+                            error_log('[RESP-016D] Response is a plain string, treating as MCB message');
+                            $error_message = $response_data;
+                            $sync_status = 'failed';
+                        } else {
+                            error_log('[RESP-016E] Response is not array or string, unexpected type');
+                            $error_message = 'Unexpected MCB response format';
+                            $sync_status = 'failed';
+                        }
                     } else {
-                        error_log('[RESP-025] ❌ MCB Result was not Success');
-                        error_log('[RESP-026] MCB Result Value: ' . ($response_data['Result'] ?? 'NULL'));
+                        // Response IS an array, proceed with normal processing
+                        error_log('[RESP-017] Response Data Keys: ' . implode(', ', array_keys($response_data)));
                         
-                        // Capture exact MCB error message
-                        $error_message = $response_data['Message'] ?? $response_data['message'] ?? 'Unknown error from MCB API';
-                        error_log('[RESP-027] ❌❌ MCB ERROR MESSAGE: ' . $error_message . ' ❌❌');
+                        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                        // Check MCB Result Field
+                        error_log('[RESP-018] Checking MCB Result field...');
+                        error_log('[RESP-019] Result: ' . ($response_data['Result'] ?? 'NOT SET'));
+                        error_log('[RESP-020] Message: ' . ($response_data['Message'] ?? 'NOT SET'));
+                        error_log('[RESP-021] QueryCode: ' . ($response_data['QueryCode'] ?? 'NOT SET'));
+                        error_log('[RESP-022] EnquiryID: ' . ($response_data['EnquiryID'] ?? 'NOT SET'));
                         
-                        // Log additional error details if present
-                        if (!empty($response_data['ErrorDetails'])) {
-                            error_log('[RESP-028] MCB ErrorDetails: ' . wp_json_encode($response_data['ErrorDetails']));
+                        if (!empty($response_data['Result']) && $response_data['Result'] === 'Success') {
+                            error_log('[RESP-023] ✅✅ MCB RESULT = SUCCESS ✅✅');
+                            $success = true;
+                            $sync_status = 'synced';
+                            $mcb_enquiry_id = $response_data['QueryCode'] ?? $response_data['EnquiryID'] ?? null;
+                            $mcb_query_code = $response_data['QueryCode'] ?? null;
+                            error_log('[RESP-024] MCB Enquiry ID/QueryCode: ' . $mcb_enquiry_id);
+                        } else {
+                            error_log('[RESP-025] ❌ MCB Result was not Success');
+                            error_log('[RESP-026] MCB Result Value: ' . ($response_data['Result'] ?? 'NULL'));
+                            
+                            // Capture exact MCB error message
+                            $error_message = $response_data['Message'] ?? $response_data['message'] ?? 'Unknown error from MCB API';
+                            error_log('[RESP-027] ❌❌ MCB ERROR MESSAGE: ' . $error_message . ' ❌❌');
+                            
+                            // Log additional error details if present
+                            if (!empty($response_data['ErrorDetails'])) {
+                                error_log('[RESP-028] MCB ErrorDetails: ' . wp_json_encode($response_data['ErrorDetails']));
+                            }
+                            if (!empty($response_data['ErrorCode'])) {
+                                error_log('[RESP-029] MCB ErrorCode: ' . $response_data['ErrorCode']);
+                            }
+                            if (!empty($response_data['Details'])) {
+                                error_log('[RESP-030] MCB Details: ' . wp_json_encode($response_data['Details']));
+                            }
+                            
+                            // CRITICAL: Set status to FAILED when MCB returns error
+                            $sync_status = 'failed';
+                            error_log('[RESP-031-CRITICAL] ⚠️  Status set to: FAILED (because MCB returned error)');
                         }
-                        if (!empty($response_data['ErrorCode'])) {
-                            error_log('[RESP-029] MCB ErrorCode: ' . $response_data['ErrorCode']);
-                        }
-                        if (!empty($response_data['Details'])) {
-                            error_log('[RESP-030] MCB Details: ' . wp_json_encode($response_data['Details']));
-                        }
-                        
-                        // CRITICAL: Set status to FAILED when MCB returns error
-                        $sync_status = 'failed';
-                        error_log('[RESP-031-CRITICAL] ⚠️  Status set to: FAILED (because MCB returned error)');
                     }
                 }
             } else {
