@@ -129,6 +129,7 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
+                    console.log('MCB Preview Data:', response.data);
                     showMCBPreviewModal(response.data);
                 } else {
                     showNotification('error', response.data.message || 'Failed to load MCB preview');
@@ -178,18 +179,32 @@ jQuery(document).ready(function($) {
             html += '</table>';
         }
         
-        // Student Information Section
-        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">👤 Student Information (MCB)</h3>';
+        // Student Information Section - RENAMED from Source to MCB Data
+        html += '<h3 style="color: #0073aa; border-bottom: 2px solid #0073aa; padding-bottom: 10px; margin-top: 20px;">👤 Student Information (What MCB Will Receive)</h3>';
         html += '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
-        html += tableRow('Student Name', data.mcb_data.StudentName || 'N/A');
-        html += tableRow('Parent Name', data.mcb_data.FatherName || 'N/A');
-        html += tableRow('Parent Email', data.mcb_data.FatherEmailID || 'N/A');
-        html += tableRow('Parent Phone', data.mcb_data.FatherMobile || 'N/A');
-        html += tableRow('Mother Name', data.mcb_data.MotherName || 'N/A');
-        html += tableRow('Mother Phone', data.mcb_data.MotherMobile || 'N/A');
-        html += tableRow('Date of Birth', data.mcb_data.DOB || 'N/A');
-        html += tableRow('Address', data.mcb_data.Address1 || 'N/A');
-        html += tableRow('Remarks', data.mcb_data.Remarks || 'N/A');
+        
+        // Map MCB fields with status indicators
+        var mcbFieldsMapped = [
+            { label: 'Student Name', value: data.mcb_data.StudentName, field: 'StudentName' },
+            { label: 'Parent Name (Father)', value: data.mcb_data.FatherName, field: 'FatherName' },
+            { label: 'Parent Email', value: data.mcb_data.FatherEmailID, field: 'FatherEmailID' },
+            { label: 'Parent Phone', value: data.mcb_data.FatherMobile, field: 'FatherMobile' },
+            { label: 'Mother Name', value: data.mcb_data.MotherName, field: 'MotherName' },
+            { label: 'Mother Phone', value: data.mcb_data.MotherMobile, field: 'MotherMobile' },
+            { label: 'Date of Birth', value: data.mcb_data.DOB, field: 'DOB' },
+            { label: 'Address', value: data.mcb_data.Address1, field: 'Address1' },
+            { label: 'Remarks', value: data.mcb_data.Remarks, field: 'Remarks' }
+        ];
+        
+        mcbFieldsMapped.forEach(function(field) {
+            var status = (field.value && field.value !== 'NA' && field.value !== '') ? '✅' : '⚠️';
+            var displayValue = field.value || 'N/A';
+            html += '<tr style="border-bottom: 1px solid #e0e0e0;">' +
+                    '<td style="padding: 12px; font-weight: bold; color: #0073aa; min-width: 180px;">' + field.label + ' (' + field.field + ')</td>' +
+                    '<td style="padding: 12px; color: #333;">' + status + ' ' + escapeHtml(displayValue) + '</td>' +
+                    '</tr>';
+        });
+        
         html += '</table>';
         
         // Academic Information Section
