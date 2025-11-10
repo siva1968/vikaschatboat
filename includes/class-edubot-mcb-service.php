@@ -848,25 +848,29 @@ class EduBot_MCB_Service {
                             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                             // SPECIAL CASE: "Student details already Exists"
                             // This means the student/enquiry already exists in MCB
-                            // We should treat this as SUCCESS (not failure) since the enquiry is in MCB
+                            // MCB will NOT provide us a new enquiry ID
+                            // We should use our local enquiry ID for notifications
                             if (stripos($response_data, 'Student details already Exists') !== false || 
                                 stripos($response_data, 'already exists') !== false) {
                                 error_log('[RESP-016F] 📌 SPECIAL CASE: Student already exists in MCB');
-                                error_log('[RESP-016G] 🟢 Treating as SUCCESS - enquiry is in MCB system');
+                                error_log('[RESP-016G] � MCB will NOT provide new enquiry ID');
+                                error_log('[RESP-016H] 🔄 Using our local enquiry_id for notifications');
                                 
-                                // Mark as synced (success case)
+                                // Mark as already_exists (not synced, not failed)
                                 $success = true;
-                                $sync_status = 'synced';
+                                $sync_status = 'already_exists';
                                 
                                 // Use the enquiry_id we sent as the MCB enquiry ID
+                                // (MCB doesn't provide a new ID in this case)
                                 $mcb_enquiry_id = $enquiry_id;
                                 $mcb_query_code = $enquiry_id;
                                 
-                                error_log('[RESP-016H] Marked as SYNCED with enquiry_id: ' . $enquiry_id);
+                                error_log('[RESP-016I] Marked as ALREADY_EXISTS with enquiry_id: ' . $enquiry_id);
+                                error_log('[RESP-016J] Will send notifications using local enquiry_id');
                             } else {
                                 // Regular error message
                                 $sync_status = 'failed';
-                                error_log('[RESP-016I] Regular MCB error, marking as FAILED');
+                                error_log('[RESP-016K] Regular MCB error, marking as FAILED');
                             }
                         } else {
                             error_log('[RESP-016E] Response is not array or string, unexpected type');
