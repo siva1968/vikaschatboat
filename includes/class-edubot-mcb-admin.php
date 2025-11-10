@@ -24,6 +24,10 @@ class EduBot_MCB_Admin {
         add_action('wp_ajax_edubot_mcb_manual_sync', array(__CLASS__, 'handle_manual_sync'));
         add_action('wp_ajax_nopriv_edubot_mcb_manual_sync', array(__CLASS__, 'handle_manual_sync'));
         
+        // Add AJAX handler for MCB data preview
+        add_action('wp_ajax_edubot_mcb_preview_data', array(__CLASS__, 'handle_preview_mcb_data'));
+        add_action('wp_ajax_nopriv_edubot_mcb_preview_data', array(__CLASS__, 'handle_preview_mcb_data'));
+        
         // Add admin scripts and styles
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_admin_assets'));
         
@@ -107,6 +111,12 @@ class EduBot_MCB_Admin {
                 $sync_class,
                 $application_id,
                 $sync_text
+            );
+            
+            // Add preview button
+            $actions['mcb_preview'] = sprintf(
+                '<a href="#" class="mcb-preview-btn" data-enquiry-id="%d" title="Preview MCB data that will be sent">👁️ Preview</a>',
+                $application_id
             );
         }
         
@@ -197,6 +207,57 @@ class EduBot_MCB_Admin {
             wp_send_json_error(array(
                 'message' => $result['message'],
                 'error' => $result['error'] ?? ''
+            ));
+        }
+    }
+    
+    /**
+     * Handle AJAX preview MCB sync data (WITHOUT submitting to MCB)
+     * Shows exactly what data will be sent when sync button is clicked
+     */
+    public static function handle_preview_mcb_data() {
+        // Verify nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'edubot_mcb_sync')) {
+            wp_send_json_error(array('message' => 'Security verification failed'));
+        }
+        
+        // Check capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+        
+        // Get enquiry ID
+        $enquiry_id = isset($_POST['enquiry_id']) ? intval($_POST['enquiry_id']) : 0;
+        
+        if (!$enquiry_id) {
+            wp_send_json_error(array('message' => 'Invalid enquiry ID'));
+        }
+        
+        // Get MCB service
+        if (!class_exists('EduBot_MCB_Service')) {
+            wp_send_json_error(array('message' => 'MCB service not available'));
+        }
+        
+        $mcb_service = EduBot_MCB_Service::get_instance();
+        
+        // Check if MCB is enabled
+        if (!$mcb_service->is_sync_enabled()) {
+            wp_send_json_error(array('message' => 'MCB sync is not enabled'));
+        }
+        
+        // Get preview data WITHOUT submitting to API
+        $result = $mcb_service->preview_mcb_data($enquiry_id);
+        
+        if ($result['success']) {
+            wp_send_json_success(array(
+                'message' => $result['message'],
+                'enquiry_number' => $result['enquiry_number'],
+                'mcb_data' => $result['mcb_data'],
+                'marketing_data' => $result['marketing_data']
+            ));
+        } else {
+            wp_send_json_error(array(
+                'message' => $result['message']
             ));
         }
     }

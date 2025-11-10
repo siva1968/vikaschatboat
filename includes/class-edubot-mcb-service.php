@@ -169,6 +169,9 @@ class EduBot_MCB_Service {
             );
         }
         
+        // Extract marketing data from enquiry utm_data for display
+        $utm_data = !empty($enquiry['utm_data']) ? json_decode($enquiry['utm_data'], true) : array();
+        
         // Return preview without sending
         return array(
             'success' => true,
@@ -176,11 +179,11 @@ class EduBot_MCB_Service {
             'enquiry_number' => $enquiry['enquiry_number'],
             'mcb_data' => $mcb_data,
             'marketing_data' => array(
-                'utm_source' => $mcb_data['UTMSource'] ?? '',
-                'utm_medium' => $mcb_data['UTMMedium'] ?? '',
-                'utm_campaign' => $mcb_data['UTMCampaign'] ?? '',
-                'gclid' => $mcb_data['GClickID'] ?? '',
-                'fbclid' => $mcb_data['FBClickID'] ?? ''
+                'utm_source' => $utm_data['utm_source'] ?? '',
+                'utm_medium' => $utm_data['utm_medium'] ?? '',
+                'utm_campaign' => $utm_data['utm_campaign'] ?? '',
+                'gclid' => $utm_data['gclid'] ?? '',
+                'fbclid' => $utm_data['fbclid'] ?? ''
             )
         );
     }
