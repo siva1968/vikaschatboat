@@ -8,10 +8,11 @@ quick_debug.php
 simple_test.php
 deep_debug_button.php
 
-# Documentation (local only)
+# Documentation (local only) - keep in docs/ folder
 *.md
 !README.md
 !readme.txt
+docs/
 
 # Check/diagnostic files
 check_*.php
