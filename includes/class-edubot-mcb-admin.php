@@ -94,12 +94,15 @@ class EduBot_MCB_Admin {
         }
         error_log('═════════════════════════════════════════════════════');
         
-        // Use 'id' from applications table (primary key)
-        // NOTE: $application['id'] is a string like 'enq_40', not an integer
-        $application_id = isset($application['id']) ? $application['id'] : 0;
+        // Get actual application/enquiry ID (integer) for sync operations
+        // The $application['id'] is prefixed string like 'enq_40', but we need the integer ID
+        // Extract the numeric ID from the prefixed ID
+        $prefixed_id = isset($application['id']) ? $application['id'] : 0;
+        $actual_id = is_numeric($prefixed_id) ? intval($prefixed_id) : (int) preg_replace('/[^0-9]/', '', $prefixed_id);
+        
         $mcb_status = isset($application['mcb_sync_status']) ? $application['mcb_sync_status'] : '';
         
-        if ($application_id) {
+        if ($actual_id) {
             $sync_text = 'Sync MCB';
             $sync_class = 'sync-mcb';
             
@@ -111,10 +114,11 @@ class EduBot_MCB_Admin {
                 $sync_class = 'retry-mcb';
             }
             
+            // Sync button: Send actual integer ID for database lookup
             $actions['mcb_sync'] = sprintf(
-                '<a href="#" class="mcb-sync-btn %s" data-enquiry-id="%s" title="Sync this enquiry to MyClassBoard">%s</a>',
+                '<a href="#" class="mcb-sync-btn %s" data-enquiry-id="%d" title="Sync this enquiry to MyClassBoard">%s</a>',
                 $sync_class,
-                esc_attr($application_id),
+                $actual_id,
                 $sync_text
             );
             
@@ -175,45 +179,78 @@ class EduBot_MCB_Admin {
      * Handle AJAX manual sync request
      */
     public static function handle_manual_sync() {
+        // Log entry point
+        error_log('═════════════════════════════════════════════════════');
+        error_log('🔵 === MCB MANUAL SYNC AJAX HANDLER CALLED ===');
+        error_log('═════════════════════════════════════════════════════');
+        error_log('POST data keys: ' . implode(', ', array_keys($_POST)));
+        
         // Verify nonce
         if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'edubot_mcb_sync')) {
+            error_log('❌ Nonce verification failed');
             wp_send_json_error(array('message' => 'Security verification failed'));
         }
         
+        error_log('✅ Nonce verified');
+        
         // Check capabilities
         if (!current_user_can('manage_options')) {
+            error_log('❌ User lacks manage_options capability');
             wp_send_json_error(array('message' => 'Insufficient permissions'));
         }
         
+        error_log('✅ User has manage_options');
+        
         // Get enquiry ID
         $enquiry_id = isset($_POST['enquiry_id']) ? intval($_POST['enquiry_id']) : 0;
+        error_log('enquiry_id received: ' . $enquiry_id . ' (type: integer)');
         
         if (!$enquiry_id) {
+            error_log('❌ enquiry_id is invalid or empty');
             wp_send_json_error(array('message' => 'Invalid enquiry ID'));
         }
         
+        error_log('✅ enquiry_id is valid: ' . $enquiry_id);
+        
         // Get MCB service
+        error_log('✓ Checking if EduBot_MCB_Service exists...');
         if (!class_exists('EduBot_MCB_Service')) {
+            error_log('❌ EduBot_MCB_Service class not found!');
             wp_send_json_error(array('message' => 'MCB service not available'));
         }
         
+        error_log('✅ EduBot_MCB_Service found');
         $mcb_service = EduBot_MCB_Service::get_instance();
+        error_log('✅ MCB Service instance obtained');
         
         // Check if MCB is enabled
-        if (!$mcb_service->is_sync_enabled()) {
+        error_log('✓ Checking if MCB sync is enabled...');
+        $is_enabled = $mcb_service->is_sync_enabled();
+        error_log('  Result: ' . ($is_enabled ? 'YES' : 'NO'));
+        
+        if (!$is_enabled) {
+            error_log('❌ MCB sync is NOT enabled');
             wp_send_json_error(array('message' => 'MCB sync is not enabled'));
         }
         
+        error_log('✅ MCB sync is enabled');
+        
         // Trigger sync
+        error_log('✓ Calling sync_enquiry(' . $enquiry_id . ')...');
         $result = $mcb_service->sync_enquiry($enquiry_id);
+        error_log('✓ sync_enquiry returned:');
+        error_log('  - success: ' . ($result['success'] ? 'true' : 'false'));
+        error_log('  - message: ' . ($result['message'] ?? 'N/A'));
         
         if ($result['success']) {
+            error_log('✅ SUCCESS - Sync completed');
             wp_send_json_success(array(
                 'message' => $result['message'],
                 'status' => $result['status'],
                 'mcb_id' => $result['mcb_enquiry_id'] ?? ''
             ));
         } else {
+            error_log('❌ FAILED - Error: ' . ($result['message'] ?? 'Unknown error'));
             wp_send_json_error(array(
                 'message' => $result['message'],
                 'error' => $result['error'] ?? ''

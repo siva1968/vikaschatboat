@@ -107,6 +107,7 @@ class EduBot_MyClassBoard_Integration {
             'sync_updates'          => false,
             'auto_sync'             => true,
             'test_mode'             => false,
+            'debug_mode'            => false,
             'timeout'               => 65,
             'retry_attempts'        => 3,
             'lead_source_mapping'   => $this->get_default_lead_source_mapping(),

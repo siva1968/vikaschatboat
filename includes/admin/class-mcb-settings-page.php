@@ -358,7 +358,7 @@ class EduBot_MCB_Settings_Page {
                                         <label class="switch">
                                             <input type="checkbox" name="edubot_mcb_settings[debug_mode]" 
                                                    id="edubot_mcb_debug_mode" value="1" 
-                                                   <?php checked( $settings['debug_mode'], 1 ); ?>>
+                                                   <?php checked( isset( $settings['debug_mode'] ) ? $settings['debug_mode'] : 0, 1 ); ?>>
                                             <span class="slider"></span>
                                         </label>
                                         <p class="description">Enable debug mode to show MCB preview button in applications list</p>

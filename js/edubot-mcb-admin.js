@@ -27,17 +27,39 @@ jQuery(document).ready(function($) {
     // Handle MCB sync button click
     $(document).on('click', '.mcb-sync-btn', function(e) {
         e.preventDefault();
+        console.log('🔵 MCB SYNC BUTTON CLICKED');
         
         var $btn = $(this);
         var enquiryId = $btn.data('enquiry-id');
         var originalText = $btn.text();
         var originalClass = $btn.attr('class');
         
+        console.log('📍 Enquiry ID from button:', enquiryId);
+        console.log('📊 Button data attributes:', {
+            'data-enquiry-id': enquiryId,
+            'class': originalClass
+        });
+        
+        // Validate ID
+        if (!enquiryId) {
+            console.error('❌ No enquiry ID found on button');
+            alert('Error: No enquiry ID found on button');
+            return;
+        }
+        
+        console.log('✅ Valid enquiry ID:', enquiryId);
+        
         // Disable button and show loading state
         $btn.prop('disabled', true)
             .addClass('loading')
             .text(edubot_mcb.sync_text)
             .css('pointer-events', 'none');
+        
+        console.log('📤 Sending AJAX request:');
+        console.log('  - URL:', edubot_mcb.ajax_url);
+        console.log('  - Action: edubot_mcb_manual_sync');
+        console.log('  - Enquiry ID:', enquiryId);
+        console.log('  - Nonce present:', !!edubot_mcb.nonce);
         
         // Make AJAX request
         $.ajax({
@@ -49,7 +71,9 @@ jQuery(document).ready(function($) {
                 nonce: edubot_mcb.nonce
             },
             success: function(response) {
+                console.log('✅ AJAX Success:', response);
                 if (response.success) {
+                    console.log('✅ Sync successful! MCB ID:', response.data.mcb_id);
                     // Update button state
                     $btn.removeClass(originalClass)
                         .addClass('mcb-sync-btn synced')
@@ -68,6 +92,7 @@ jQuery(document).ready(function($) {
                             .css('pointer-events', 'auto');
                     }, 3000);
                 } else {
+                    console.error('❌ Response indicates failure:', response);
                     // Handle error
                     showNotification('error', response.data.message);
                     $btn.prop('disabled', false)
@@ -77,7 +102,9 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
-                console.error('Sync failed:', error);
+                console.error('❌ AJAX Error:', error);
+                console.error('❌ Status:', status);
+                console.error('❌ XHR Response:', xhr.responseText);
                 showNotification('error', edubot_mcb.sync_failed);
                 
                 // Reset button
