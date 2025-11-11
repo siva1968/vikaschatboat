@@ -33,6 +33,9 @@ class EduBot_Notification_Manager {
         $this->api_integrations = new EduBot_API_Integrations();
         $this->database_manager = new EduBot_Database_Manager();
         $this->security_manager = new EduBot_Security_Manager();
+        
+        // Hook to send notifications after manual MCB sync (e.g., for "already_exists" case)
+        add_action('edubot_send_manual_notification', array($this, 'handle_manual_notification'), 10, 3);
     }
 
     /**
@@ -109,7 +112,45 @@ class EduBot_Notification_Manager {
     }
 
     /**
+     * Handle manual notification sending (triggered after MCB sync with status 'already_exists')
+     * 
+     * @param int $application_id Application ID
+     * @param array $user_data User data including email, phone, mcb_enquiry_code
+     * @param string $trigger_reason Reason for notification (e.g., 'already_exists')
+     */
+    public function handle_manual_notification($application_id, $user_data, $trigger_reason = '') {
+        error_log('[NOTIF-MANUAL-001] 🔔 Manual notification handler called');
+        error_log('[NOTIF-MANUAL-002] Application ID: ' . $application_id);
+        error_log('[NOTIF-MANUAL-003] Trigger reason: ' . $trigger_reason);
+        error_log('[NOTIF-MANUAL-004] Enquiry code to send: ' . ($user_data['mcb_enquiry_code'] ?? 'N/A'));
+        
+        if (empty($application_id) || !is_array($user_data)) {
+            error_log('[NOTIF-MANUAL-005] ❌ Invalid parameters');
+            return false;
+        }
+        
+        // Sanitize user data
+        $user_data = $this->sanitize_user_data($user_data);
+        
+        $config = $this->school_config->get_config();
+        $notification_settings = isset($config['notification_settings']) ? $config['notification_settings'] : array();
+        
+        // Send notifications
+        try {
+            error_log('[NOTIF-MANUAL-006] 📤 Sending parent notifications...');
+            $this->send_parent_notifications($application_id, $user_data);
+            error_log('[NOTIF-MANUAL-007] ✅ Parent notifications sent');
+            
+            return true;
+        } catch (Exception $e) {
+            error_log('[NOTIF-MANUAL-008] ❌ Error sending manual notifications: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Send notifications to parents
+
      */
     private function send_parent_notifications($application_id, $user_data) {
         $config = $this->school_config->get_config();

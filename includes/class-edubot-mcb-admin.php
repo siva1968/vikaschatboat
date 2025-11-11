@@ -248,6 +248,43 @@ class EduBot_MCB_Admin {
         
         if ($result['success']) {
             error_log('✅ SUCCESS - Sync completed');
+            
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // If status is 'already_exists', send notifications with local enquiry_id
+            if (!empty($result['status']) && $result['status'] === 'already_exists') {
+                error_log('📌 Status is "already_exists" - Triggering notification send with local enquiry_id');
+                
+                // Get application data to send notifications
+                global $wpdb;
+                $application = $wpdb->get_row(
+                    $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE id = %d", $enquiry_id),
+                    ARRAY_A
+                );
+                
+                if ($application) {
+                    error_log('✅ Application found - Preparing to send notifications');
+                    
+                    // Prepare user data with local enquiry_id for notifications
+                    $user_data = array(
+                        'name' => $application['student_name'] ?? 'Student',
+                        'email' => $application['email'] ?? '',
+                        'phone' => $application['phone'] ?? '',
+                        // Use the local enquiry_id (stored as mcb_enquiry_id from sync result)
+                        'mcb_enquiry_code' => $result['mcb_enquiry_id'] ?? $application['application_number']
+                    );
+                    
+                    error_log('[NOTIF-ALT-001] 📌 Will send notifications with code: ' . ($user_data['mcb_enquiry_code'] ?? 'N/A'));
+                    
+                    // Trigger notification send via WordPress action
+                    // This allows other plugins/code to hook in and send notifications
+                    do_action('edubot_send_manual_notification', $enquiry_id, $user_data, 'already_exists');
+                    
+                    error_log('[NOTIF-ALT-002] ✅ Notification action triggered');
+                } else {
+                    error_log('❌ Application not found for notification sending');
+                }
+            }
+            
             wp_send_json_success(array(
                 'message' => $result['message'],
                 'status' => $result['status'],
