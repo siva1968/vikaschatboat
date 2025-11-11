@@ -256,6 +256,61 @@ class EduBot_Activator {
                 }
             }
 
+            // 16. WhatsApp Ad Campaigns (Campaign management for ads)
+            $ad_campaigns = $wpdb->prefix . 'edubot_ad_campaigns';
+            if (!self::table_exists($ad_campaigns)) {
+                $sql = self::sql_ad_campaigns();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "ad_campaigns: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'ad_campaigns';
+                }
+            }
+
+            // 17. WhatsApp Sessions (User session tracking for WhatsApp)
+            $whatsapp_sessions = $wpdb->prefix . 'edubot_whatsapp_sessions';
+            if (!self::table_exists($whatsapp_sessions)) {
+                $sql = self::sql_whatsapp_sessions();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "whatsapp_sessions: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'whatsapp_sessions';
+                }
+            }
+
+            // 18. Contacts (Contact management for WhatsApp)
+            $contacts = $wpdb->prefix . 'edubot_contacts';
+            if (!self::table_exists($contacts)) {
+                $sql = self::sql_contacts();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "contacts: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'contacts';
+                }
+            }
+
+            // 19. WhatsApp Messages (Message history for conversations)
+            $whatsapp_messages = $wpdb->prefix . 'edubot_whatsapp_messages';
+            if (!self::table_exists($whatsapp_messages)) {
+                $sql = self::sql_whatsapp_messages();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "whatsapp_messages: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'whatsapp_messages';
+                }
+            }
+
+            // 20. Ad Link Metadata (Link analytics for ad campaigns)
+            $ad_link_metadata = $wpdb->prefix . 'edubot_ad_link_metadata';
+            if (!self::table_exists($ad_link_metadata)) {
+                $sql = self::sql_ad_link_metadata();
+                if ($wpdb->query($sql) === false) {
+                    $errors[] = "ad_link_metadata: " . $wpdb->last_error;
+                } else {
+                    $tables_created[] = 'ad_link_metadata';
+                }
+            }
+
         } catch (Exception $e) {
             $errors[] = "Exception: " . $e->getMessage();
         }
@@ -1299,6 +1354,147 @@ class EduBot_Activator {
             KEY whatsapp_provider (whatsapp_provider),
             KEY email_provider (email_provider),
             KEY sms_provider (sms_provider)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: WhatsApp Ad Campaigns
+     * Stores campaign information for ad-driven users
+     */
+    private static function sql_ad_campaigns() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_ad_campaigns';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            name varchar(255) NOT NULL,
+            source varchar(100) NOT NULL,
+            grades longtext,
+            whatsapp_link longtext,
+            status varchar(50) DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_source (source),
+            KEY idx_status (status),
+            KEY idx_created (created_at)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: WhatsApp Sessions
+     * Tracks user sessions from WhatsApp ads
+     */
+    private static function sql_whatsapp_sessions() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_whatsapp_sessions';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            session_id varchar(255) NOT NULL UNIQUE,
+            contact_id bigint(20),
+            phone varchar(20) NOT NULL,
+            campaign_id bigint(20),
+            source varchar(100),
+            campaign varchar(255),
+            medium varchar(100),
+            utm_source varchar(255),
+            utm_medium varchar(255),
+            utm_campaign varchar(255),
+            state varchar(50) DEFAULT 'greeting',
+            data longtext,
+            ip_address varchar(45),
+            user_agent longtext,
+            started_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            completed_at datetime,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_session_id (session_id),
+            KEY idx_phone (phone),
+            KEY idx_contact_id (contact_id),
+            KEY idx_campaign_id (campaign_id),
+            KEY idx_source (source),
+            KEY idx_completed (completed_at),
+            KEY idx_created (started_at)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: Contacts
+     * Contact management for WhatsApp users
+     */
+    private static function sql_contacts() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_contacts';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            phone varchar(20) NOT NULL UNIQUE,
+            name varchar(255),
+            email varchar(255),
+            source varchar(100),
+            status varchar(50) DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            last_contacted_at datetime,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_phone (phone),
+            KEY idx_email (email),
+            KEY idx_source (source),
+            KEY idx_created (created_at)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: WhatsApp Messages
+     * Message history for conversations
+     */
+    private static function sql_whatsapp_messages() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_whatsapp_messages';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            session_id varchar(255) NOT NULL,
+            sender varchar(50) NOT NULL,
+            message longtext NOT NULL,
+            message_id varchar(255),
+            delivery_status varchar(50),
+            delivery_timestamp datetime,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_session_id (session_id),
+            KEY idx_sender (sender),
+            KEY idx_created (created_at),
+            KEY idx_message_id (message_id)
+        ) $charset_collate;";
+    }
+
+    /**
+     * SQL: Ad Link Metadata
+     * Link analytics for ad campaigns
+     */
+    private static function sql_ad_link_metadata() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edubot_ad_link_metadata';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        return "CREATE TABLE IF NOT EXISTS $table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            source varchar(100),
+            campaign varchar(255),
+            medium varchar(100),
+            content varchar(255),
+            grades longtext,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_source (source),
+            KEY idx_campaign (campaign),
+            KEY idx_created (created_at)
         ) $charset_collate;";
     }
 }

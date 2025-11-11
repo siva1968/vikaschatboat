@@ -227,3 +227,49 @@ if (!is_admin() || (is_admin() && !wp_doing_ajax())) {
 } else {
     run_edubot_pro();
 }
+
+/**
+ * Register WhatsApp Ad Integration REST endpoints
+ * 
+ * @since 2.0.0
+ */
+add_action('rest_api_init', function() {
+    // WhatsApp Webhook Receiver endpoint
+    register_rest_route('edubot/v1', '/whatsapp-webhook', array(
+        'methods' => array('GET', 'POST'),
+        'callback' => function($request) {
+            // Load the webhook receiver class
+            if (!class_exists('EduBot_WhatsApp_Webhook_Receiver')) {
+                require_once plugin_dir_path(__FILE__) . 'includes/class-whatsapp-webhook-receiver.php';
+            }
+            
+            $receiver = new EduBot_WhatsApp_Webhook_Receiver();
+            
+            // Handle GET requests (webhook verification from Meta)
+            if ($request->get_method() === 'GET') {
+                return $receiver->verify_webhook_get($request);
+            }
+            
+            // Handle POST requests (incoming messages)
+            return $receiver->handle_webhook($request);
+        },
+        'permission_callback' => '__return_true' // Webhook needs to be public
+    ));
+    
+    // Generate WhatsApp Link endpoint
+    register_rest_route('edubot/v1', '/whatsapp-generate-link', array(
+        'methods' => 'POST',
+        'callback' => function($request) {
+            // Load the link generator class
+            if (!class_exists('EduBot_WhatsApp_Ad_Link_Generator')) {
+                require_once plugin_dir_path(__FILE__) . 'includes/class-whatsapp-ad-link-generator.php';
+            }
+            
+            $generator = new EduBot_WhatsApp_Ad_Link_Generator();
+            $params = $request->get_json_params();
+            
+            return $generator->generate_whatsapp_link($params);
+        },
+        'permission_callback' => 'is_user_logged_in' // Only for authenticated users
+    ));
+});

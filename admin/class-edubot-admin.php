@@ -32,6 +32,10 @@ class EduBot_Admin {
         add_action('wp_ajax_edubot_test_api', array($this, 'test_api_connection'));
         add_action('wp_ajax_edubot_get_dashboard_stats', array($this, 'get_dashboard_stats_ajax'));
         
+        // WhatsApp Ad Integration AJAX handlers (New v2.0.0)
+        add_action('wp_ajax_edubot_generate_whatsapp_link', array($this, 'generate_whatsapp_link_ajax'));
+        add_action('wp_ajax_edubot_generate_webhook_token', array($this, 'generate_webhook_token_ajax'));
+        
         // System status AJAX handlers
         add_action('wp_ajax_edubot_clear_error_logs', array($this, 'clear_error_logs_ajax'));
         add_action('wp_ajax_edubot_run_migration', array($this, 'run_migration_ajax'));
@@ -302,6 +306,15 @@ class EduBot_Admin {
             'manage_options',
             'edubot-system-status',
             array($this, 'display_system_status_page')
+        );
+
+        add_submenu_page(
+            'edubot-pro',
+            __('WhatsApp Ad Integration', 'edubot-pro'),
+            __('WhatsApp Ads', 'edubot-pro'),
+            'manage_options',
+            'edubot-whatsapp-ads',
+            array($this, 'display_whatsapp_ads_page')
         );
     }
 
@@ -3627,4 +3640,118 @@ class EduBot_Admin {
         // This prevents the 400 errors while keeping the autosave functionality
         wp_send_json_success('Autosave completed');
     }
+
+    /**
+     * Generate WhatsApp Ad Integration Link via AJAX
+     * 
+     * @since 2.0.0
+     */
+    public function generate_whatsapp_link_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+            return;
+        }
+
+        try {
+            // Load the link generator class
+            if (!class_exists('EduBot_WhatsApp_Ad_Link_Generator')) {
+                require_once plugin_dir_path(__FILE__) . '../includes/class-whatsapp-ad-link-generator.php';
+            }
+
+            // Get parameters from AJAX request
+            $params = array(
+                'campaign_name' => sanitize_text_field($_POST['campaign_name'] ?? ''),
+                'platform' => sanitize_text_field($_POST['platform'] ?? 'facebook'),
+                'phone_number' => sanitize_text_field($_POST['phone_number'] ?? ''),
+                'initial_message' => sanitize_textarea_field($_POST['initial_message'] ?? ''),
+                'target_grades' => isset($_POST['target_grades']) ? array_map('sanitize_text_field', $_POST['target_grades']) : array(),
+                'attribution_data' => json_decode(stripslashes($_POST['attribution_data'] ?? '{}'), true)
+            );
+
+            // Validate required fields
+            if (empty($params['phone_number'])) {
+                wp_send_json_error(array('message' => 'Phone number is required'));
+                return;
+            }
+
+            // Generate the link
+            $generator = new EduBot_WhatsApp_Ad_Link_Generator();
+            $result = $generator->generate_whatsapp_link($params);
+
+            wp_send_json_success(array(
+                'link' => $result['link'] ?? '',
+                'campaign_id' => $result['campaign_id'] ?? '',
+                'message' => 'WhatsApp link generated successfully'
+            ));
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error generating link: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Generate Webhook Token via AJAX
+     * 
+     * @since 2.0.0
+     */
+    public function generate_webhook_token_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_admin_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+            return;
+        }
+
+        try {
+            // Generate a random token for webhook verification
+            $token = bin2hex(random_bytes(32));
+            
+            // Store in options for verification
+            update_option('edubot_whatsapp_webhook_token', $token);
+            update_option('edubot_whatsapp_webhook_token_created', current_time('mysql'));
+
+            wp_send_json_success(array(
+                'token' => $token,
+                'webhook_url' => rest_url('edubot/v1/whatsapp-webhook'),
+                'message' => 'Webhook token generated successfully'
+            ));
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error generating token: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Display WhatsApp Ad Integration admin page
+     * 
+     * @since 2.0.0
+     */
+    public function display_whatsapp_ads_page() {
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_die('Insufficient permissions');
+        }
+
+        // Load the WhatsApp Ad Integration admin page
+        $page_file = plugin_dir_path(__FILE__) . 'pages/whatsapp-ad-integration.php';
+        
+        if (file_exists($page_file)) {
+            include $page_file;
+        } else {
+            echo '<div class="notice notice-error"><p>' . 
+                 esc_html__('WhatsApp Ad Integration page file not found.', 'edubot-pro') . 
+                 '</p></div>';
+        }
+    }
 }
+
