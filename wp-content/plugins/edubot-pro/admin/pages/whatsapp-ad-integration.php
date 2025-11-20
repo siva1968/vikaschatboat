@@ -54,6 +54,7 @@ class EduBot_WhatsApp_Ad_Integration_Page {
             
             <div class="edubot-columns">
                 <div class="edubot-column-left">
+                    <?php self::render_simple_link_generator(); ?>
                     <?php self::render_campaign_generator(); ?>
                     <?php self::render_active_campaigns(); ?>
                 </div>
@@ -246,6 +247,160 @@ class EduBot_WhatsApp_Ad_Integration_Page {
         <?php
     }
     
+    /**
+     * Render simple link generator (Backend Interface)
+     */
+    private static function render_simple_link_generator() {
+        ?>
+        <div class="edubot-card" style="border-left: 4px solid #28a745;">
+            <h2>⚡ Quick Link Generator</h2>
+            <p style="color: #666; margin-bottom: 15px;">
+                Simple interface for generating WhatsApp ad links. Just enter campaign name like "Admission Drive - Google" and select platform.
+            </p>
+            
+            <form id="simple-link-form">
+                <table class="form-table">
+                    <tr>
+                        <th scope="row" style="width: 200px;">
+                            <label for="simple_campaign">Campaign Name *</label>
+                        </th>
+                        <td>
+                            <input 
+                                type="text" 
+                                id="simple_campaign"
+                                style="width: 100%; max-width: 400px;"
+                                required
+                                placeholder="Admission Drive - Google"
+                            />
+                            <p class="description">Simple campaign description (e.g., "Admission Drive - Google")</p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="simple_source">Platform *</label>
+                        </th>
+                        <td>
+                            <select id="simple_source" style="width: 100%; max-width: 400px;" required>
+                                <option value="">-- Select Platform --</option>
+                                <option value="facebook_ads">📘 Facebook Ads</option>
+                                <option value="instagram_ads">📷 Instagram Ads</option>
+                                <option value="google_ads">🔴 Google Ads</option>
+                                <option value="tiktok_ads">🎵 TikTok Ads</option>
+                                <option value="linkedin_ads">💼 LinkedIn Ads</option>
+                                <option value="twitter_ads">🐦 Twitter Ads</option>
+                            </select>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="simple_grades">Target Grades</label>
+                        </th>
+                        <td>
+                            <input 
+                                type="text" 
+                                id="simple_grades"
+                                style="width: 100%; max-width: 400px;"
+                                placeholder="Nursery,KG,Grade 1,Grade 2"
+                            />
+                            <p class="description">Optional: Comma-separated list of grades (e.g., "Nursery,KG,Grade 1")</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="button-group">
+                    <button type="button" class="button button-primary button-large" onclick="generateSimpleLink()">
+                        🚀 Generate WhatsApp Link
+                    </button>
+                </div>
+            </form>
+            
+            <div id="simple-link-result" style="display: none; margin-top: 20px; padding: 15px; background: #f0f8f0; border: 1px solid #28a745; border-radius: 4px;">
+                <h4>🎉 Generated WhatsApp Link:</h4>
+                <div style="background: #fff; padding: 10px; border-radius: 3px; margin: 10px 0;">
+                    <code id="simple_generated_link" style="word-break: break-all; display: block;"></code>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="button" onclick="copySimpleLink()">
+                        📋 Copy Link
+                    </button>
+                    <button type="button" class="button" onclick="testSimpleLink()">
+                        🧪 Test Link
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            function generateSimpleLink() {
+                const campaign = document.getElementById('simple_campaign').value;
+                const source = document.getElementById('simple_source').value;
+                const grades = document.getElementById('simple_grades').value;
+                
+                if (!campaign || !source) {
+                    alert('Please fill in campaign name and select platform');
+                    return;
+                }
+                
+                jQuery.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'edubot_simple_whatsapp_link',
+                        campaign: campaign,
+                        source: source,
+                        grades: grades,
+                        nonce: '<?php echo wp_create_nonce( 'edubot_whatsapp_nonce' ); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            document.getElementById('simple_generated_link').textContent = response.data.link;
+                            document.getElementById('simple-link-result').style.display = 'block';
+                            
+                            // Show success message
+                            const notice = document.createElement('div');
+                            notice.className = 'notice notice-success is-dismissible';
+                            notice.innerHTML = '<p><strong>Success!</strong> WhatsApp link generated successfully. Campaign ID: ' + response.data.campaign_id + '</p>';
+                            document.querySelector('.wrap h1').after(notice);
+                        } else {
+                            alert('Error: ' + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert('Error generating link. Please try again.');
+                    }
+                });
+            }
+            
+            function copySimpleLink() {
+                const link = document.getElementById('simple_generated_link').textContent;
+                navigator.clipboard.writeText(link).then(function() {
+                    alert('✅ Link copied to clipboard!\\n\\nThis link includes:\\n• Platform tracking\\n• Campaign attribution\\n• Automatic welcome message');
+                }).catch(function(err) {
+                    // Fallback for older browsers
+                    const textarea = document.createElement('textarea');
+                    textarea.value = link;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    alert('✅ Link copied to clipboard!');
+                });
+            }
+            
+            function testSimpleLink() {
+                const link = document.getElementById('simple_generated_link').textContent;
+                if (link) {
+                    window.open(link, '_blank');
+                } else {
+                    alert('Please generate a link first');
+                }
+            }
+        </script>
+        <?php
+    }
+
     /**
      * Render campaign generator section
      */

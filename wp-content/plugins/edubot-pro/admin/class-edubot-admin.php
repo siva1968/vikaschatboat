@@ -36,6 +36,7 @@ class EduBot_Admin {
         
         // WhatsApp Ad Integration AJAX handlers (New v2.0.0)
         add_action('wp_ajax_edubot_generate_whatsapp_link', array($this, 'generate_whatsapp_link_ajax'));
+        add_action('wp_ajax_edubot_simple_whatsapp_link', array($this, 'generate_simple_whatsapp_link_ajax'));
         add_action('wp_ajax_edubot_generate_webhook_token', array($this, 'generate_webhook_token_ajax'));
         
         // System status AJAX handlers
@@ -2194,6 +2195,19 @@ class EduBot_Admin {
             
         } catch (Exception $e) {
             error_log('EduBot: Error saving AI settings: ' . $e->getMessage());
+            
+            // Log exception
+            self::log_api_request_to_db(
+                'system',
+                'save_ai_settings',
+                array('exception' => $e->getMessage()),
+                null,
+                false,
+                500,
+                'Exception while saving AI settings: ' . $e->getMessage(),
+                0
+            );
+            
             wp_send_json_error(array('message' => 'Failed to save AI settings. Please try again.'));
         }
     }
@@ -4065,33 +4079,142 @@ class EduBot_Admin {
                 require_once plugin_dir_path(__FILE__) . '../includes/class-whatsapp-ad-link-generator.php';
             }
 
-            // Get parameters from AJAX request
-            $params = array(
-                'campaign_name' => sanitize_text_field($_POST['campaign_name'] ?? ''),
-                'platform' => sanitize_text_field($_POST['platform'] ?? 'facebook'),
-                'phone_number' => sanitize_text_field($_POST['phone_number'] ?? ''),
-                'initial_message' => sanitize_textarea_field($_POST['initial_message'] ?? ''),
-                'target_grades' => isset($_POST['target_grades']) ? array_map('sanitize_text_field', $_POST['target_grades']) : array(),
-                'attribution_data' => json_decode(stripslashes($_POST['attribution_data'] ?? '{}'), true)
-            );
+            // Support both simple and complex parameter formats
+            $simple_campaign = sanitize_text_field($_POST['campaign'] ?? '');
+            $simple_source = sanitize_text_field($_POST['source'] ?? '');
+            $simple_grades = sanitize_text_field($_POST['grades'] ?? '');
+            
+            // Check if using simple format (like "Admission Drive - Google")
+            if (!empty($simple_campaign) && !empty($simple_source)) {
+                $params = array(
+                    'source' => $simple_source,
+                    'campaign' => $simple_campaign,
+                    'grades' => $simple_grades
+                );
+            } else {
+                // Complex format
+                $params = array(
+                    'campaign_name' => sanitize_text_field($_POST['campaign_name'] ?? ''),
+                    'platform' => sanitize_text_field($_POST['platform'] ?? 'facebook'),
+                    'phone_number' => sanitize_text_field($_POST['phone_number'] ?? ''),
+                    'initial_message' => sanitize_textarea_field($_POST['initial_message'] ?? ''),
+                    'target_grades' => isset($_POST['target_grades']) ? array_map('sanitize_text_field', $_POST['target_grades']) : array(),
+                    'attribution_data' => json_decode(stripslashes($_POST['attribution_data'] ?? '{}'), true)
+                );
+            }
 
-            // Validate required fields
-            if (empty($params['phone_number'])) {
-                wp_send_json_error(array('message' => 'Phone number is required'));
-                return;
+            // Validate required fields based on format
+            if (isset($params['source'])) {
+                // Simple format validation
+                if (empty($params['campaign']) || empty($params['source'])) {
+                    wp_send_json_error(array('message' => 'Campaign name and source are required'));
+                    return;
+                }
+            } else {
+                // Complex format validation
+                if (empty($params['phone_number'])) {
+                    wp_send_json_error(array('message' => 'Phone number is required'));
+                    return;
+                }
             }
 
             // Generate the link
             $generator = new EduBot_WhatsApp_Ad_Link_Generator();
             $result = $generator->generate_whatsapp_link($params);
+            
+            $response = array();
+            
+            if (isset($params['source'])) {
+                // Simple format - return link as string and create campaign record
+                $link = is_string($result) ? $result : ($result['link'] ?? '');
+                
+                // Create campaign record in database
+                $campaign_id = EduBot_WhatsApp_Ad_Link_Generator::create_campaign(array(
+                    'name' => $params['campaign'],
+                    'source' => $params['source'],
+                    'grades' => $params['grades'],
+                    'link' => $link
+                ));
+                
+                $response = array(
+                    'link' => $link,
+                    'campaign_id' => $campaign_id,
+                    'message' => 'Simple WhatsApp link generated successfully'
+                );
+            } else {
+                // Complex format
+                $response = array(
+                    'link' => $result['link'] ?? '',
+                    'campaign_id' => $result['campaign_id'] ?? '',
+                    'message' => 'WhatsApp link generated successfully'
+                );
+            }
 
-            wp_send_json_success(array(
-                'link' => $result['link'] ?? '',
-                'campaign_id' => $result['campaign_id'] ?? '',
-                'message' => 'WhatsApp link generated successfully'
-            ));
+            wp_send_json_success($response);
         } catch (Exception $e) {
             wp_send_json_error(array('message' => 'Error generating link: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Generate Simple WhatsApp Link via AJAX (for backend interface)
+     * 
+     * Simple format: Just pass campaign name like "Admission Drive - Google" and source
+     * 
+     * @since 2.0.1
+     */
+    public function generate_simple_whatsapp_link_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'edubot_whatsapp_nonce')) {
+            wp_send_json_error('Nonce verification failed', 403);
+            return;
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied', 403);
+            return;
+        }
+
+        try {
+            // Load the link generator class
+            if (!class_exists('EduBot_WhatsApp_Ad_Link_Generator')) {
+                require_once plugin_dir_path(__FILE__) . '../includes/class-whatsapp-ad-link-generator.php';
+            }
+
+            // Get simple parameters
+            $campaign = sanitize_text_field($_POST['campaign'] ?? '');
+            $source = sanitize_text_field($_POST['source'] ?? '');
+            $grades = sanitize_text_field($_POST['grades'] ?? '');
+
+            // Validate required fields
+            if (empty($campaign) || empty($source)) {
+                wp_send_json_error('Missing required parameters');
+                return;
+            }
+
+            // Generate link using legacy format
+            $link = EduBot_WhatsApp_Ad_Link_Generator::generate_whatsapp_link(array(
+                'source' => $source,
+                'campaign' => $campaign,
+                'grades' => $grades
+            ));
+
+            // Create campaign record in database
+            $campaign_id = EduBot_WhatsApp_Ad_Link_Generator::create_campaign(array(
+                'name' => $campaign,
+                'source' => $source,
+                'grades' => $grades,
+                'link' => $link
+            ));
+
+            wp_send_json_success(array(
+                'link' => $link,
+                'campaign_id' => $campaign_id
+            ));
+
+        } catch (Exception $e) {
+            wp_send_json_error('Error generating link: ' . $e->getMessage());
         }
     }
 
