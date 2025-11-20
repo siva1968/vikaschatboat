@@ -788,22 +788,61 @@ class EduBot_API_Integrations {
      * Send WhatsApp message
      */
     public function send_whatsapp($phone, $message) {
+        $start_time = microtime(true);
         $api_keys = $this->school_config->get_api_keys();
         
         if (empty($api_keys['whatsapp_provider']) || empty($api_keys['whatsapp_token'])) {
+            // Log missing configuration
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_config_missing',
+                'POST',
+                'send_whatsapp',
+                array('phone' => $phone, 'message_length' => strlen($message)),
+                array(),
+                400,
+                'error',
+                'WhatsApp provider or token not configured'
+            );
             return false;
         }
 
-        switch ($api_keys['whatsapp_provider']) {
+        $provider = $api_keys['whatsapp_provider'];
+        error_log("EduBot API Integrations: Sending WhatsApp via {$provider} to {$phone}");
+
+        switch ($provider) {
             case 'meta':
-                return $this->send_meta_whatsapp($phone, $message, $api_keys);
+                $result = $this->send_meta_whatsapp($phone, $message, $api_keys);
+                break;
                 
             case 'twilio':
-                return $this->send_twilio_whatsapp($phone, $message, $api_keys);
+                $result = $this->send_twilio_whatsapp($phone, $message, $api_keys);
+                break;
                 
             default:
-                return $this->send_generic_whatsapp($phone, $message, $api_keys);
+                $result = $this->send_generic_whatsapp($phone, $message, $api_keys);
+                break;
         }
+        
+        $duration = round((microtime(true) - $start_time) * 1000, 2);
+        
+        // Log the result
+        EduBot_Admin::log_api_request_to_db(
+            'whatsapp_send',
+            'POST',
+            $provider . '_whatsapp_api',
+            array(
+                'phone' => $phone, 
+                'provider' => $provider,
+                'message_length' => strlen($message),
+                'duration_ms' => $duration
+            ),
+            $result ? array('success' => true, 'result' => $result) : array(),
+            $result ? 200 : 500,
+            $result ? 'success' : 'error',
+            $result ? 'WhatsApp message sent successfully' : 'WhatsApp message send failed'
+        );
+        
+        return $result;
     }
 
     /**

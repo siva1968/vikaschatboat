@@ -1,3 +1,12 @@
+# WordPress Core Files (exclude everything except plugin)
+*
+!wp-content/
+wp-content/*
+!wp-content/plugins/
+wp-content/plugins/*
+!wp-content/plugins/edubot-pro/
+!wp-content/plugins/edubot-pro/**
+
 # Test Files
 test_*.php
 debug_*.php

@@ -247,7 +247,7 @@ class EduBot_WhatsApp_Session_Manager {
     }
     
     /**
-     * Store message in session
+     * Store message in session with API logging
      */
     public static function store_message( $session_id, $sender, $message, $message_id = '' ) {
         global $wpdb;
@@ -257,10 +257,25 @@ class EduBot_WhatsApp_Session_Manager {
         // Check if table exists
         if ( $wpdb->get_var( "SHOW TABLES LIKE '$table'" ) != $table ) {
             error_log( 'EduBot: Messages table does not exist' );
+            
+            // Log missing table error
+            if ( class_exists( 'EduBot_Admin' ) ) {
+                EduBot_Admin::log_api_request_to_db(
+                    'whatsapp_table_missing',
+                    'POST',
+                    'whatsapp_store_message',
+                    array( 'table' => $table ),
+                    array(),
+                    500,
+                    'error',
+                    'WhatsApp messages table does not exist'
+                );
+            }
+            
             return false;
         }
         
-        $wpdb->insert(
+        $result = $wpdb->insert(
             $table,
             array(
                 'session_id' => $session_id,
@@ -271,6 +286,41 @@ class EduBot_WhatsApp_Session_Manager {
             ),
             array( '%s', '%s', '%s', '%s', '%s' )
         );
+        
+        if ( $result && class_exists( 'EduBot_Admin' ) ) {
+            // Log successful message storage
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_message_stored',
+                'POST',
+                'whatsapp_store_message',
+                array( 
+                    'session_id' => $session_id, 
+                    'sender' => $sender,
+                    'message_length' => strlen( $message ),
+                    'has_message_id' => !empty( $message_id )
+                ),
+                array( 'insert_id' => $wpdb->insert_id ),
+                200,
+                'success',
+                'WhatsApp message stored successfully'
+            );
+        } elseif ( !$result && class_exists( 'EduBot_Admin' ) ) {
+            // Log storage error
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_message_store_error',
+                'POST',
+                'whatsapp_store_message',
+                array( 
+                    'session_id' => $session_id, 
+                    'sender' => $sender,
+                    'error' => $wpdb->last_error
+                ),
+                array(),
+                500,
+                'error',
+                'Failed to store WhatsApp message: ' . $wpdb->last_error
+            );
+        }
         
         return $wpdb->insert_id;
     }

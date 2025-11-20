@@ -21,20 +21,55 @@ class EduBot_Workflow_Manager {
     }
     
     /**
-     * Process user input with enhanced error handling
+     * Check if session is from WhatsApp
+     */
+    private function is_whatsapp_session($session_id) {
+        global $wpdb;
+        
+        // Check if session exists in WhatsApp sessions table
+        $whatsapp_session = $wpdb->get_var($wpdb->prepare(
+            "SELECT session_id FROM {$wpdb->prefix}edubot_whatsapp_sessions WHERE session_id = %s",
+            $session_id
+        ));
+        
+        return !empty($whatsapp_session);
+    }
+    
+    /**
+     * Process user input with enhanced error handling and WhatsApp support
      */
     public function process_user_input($message, $session_id) {
         try {
             // Sanitize input
             $message = trim($message);
             if (empty($message)) {
-                return $this->get_help_message();
+                return $this->get_help_message($session_id);
             }
+            
+            // Log workflow processing for API monitoring
+            EduBot_Admin::log_api_request_to_db(
+                'workflow_process',
+                'POST',
+                'workflow_manager',
+                array('session_id' => $session_id, 'message' => substr($message, 0, 100)),
+                array(),
+                200,
+                'processing',
+                'Processing user input through workflow'
+            );
+            
+            // Check if this is a WhatsApp session
+            $is_whatsapp_session = $this->is_whatsapp_session($session_id);
             
             // Get or create session
             $session_data = $this->session_manager->get_session($session_id);
             if (!$session_data) {
                 $session_data = $this->session_manager->init_session($session_id, 'admission');
+                
+                // If WhatsApp session, mark it appropriately
+                if ($is_whatsapp_session) {
+                    $this->session_manager->update_session_data($session_id, '_platform', 'whatsapp');
+                }
             }
             
             // Determine current state and next action
@@ -69,7 +104,7 @@ class EduBot_Workflow_Manager {
                     return $this->handle_final_submission($session_id);
                     
                 default:
-                    return $this->handle_general_query($message, $session_id);
+                    return $this->handle_general_query($message, $session_id, $is_whatsapp_session);
             }
             
         } catch (Exception $e) {
@@ -467,7 +502,7 @@ class EduBot_Workflow_Manager {
                 return $this->handle_final_submission($session_id);
                 
             default:
-                return $this->get_help_message();
+                return $this->get_help_message($session_id);
         }
     }
     
@@ -1575,29 +1610,164 @@ class EduBot_Workflow_Manager {
     }
     
     /**
-     * Handle general queries
+     * Handle general queries with AI integration for WhatsApp
      */
-    private function handle_general_query($message, $session_id) {
-        return "I'm here to help with your admission enquiry. " .
-               "Let's collect your information step by step.\n\n" .
-               $this->get_next_step_message($session_id);
+    private function handle_general_query($message, $session_id, $is_whatsapp = false) {
+        // Check for common keywords first
+        $message_lower = strtolower(trim($message));
+        
+        // Handle quick start commands for WhatsApp
+        if ($is_whatsapp && in_array($message_lower, ['start', 'begin', 'admission', 'enquiry', 'apply'])) {
+            return $this->get_help_message($session_id);
+        }
+        
+        // Handle info requests
+        if (preg_match('/\b(info|information|about|school|details)\b/i', $message)) {
+            return $this->get_school_info_message($is_whatsapp);
+        }
+        
+        // Handle fees requests
+        if (preg_match('/\b(fees?|cost|price|tuition|charges?)\b/i', $message)) {
+            return $this->get_fees_info_message($is_whatsapp);
+        }
+        
+        // Try AI-powered response for complex queries
+        if (get_option('edubot_ai_enabled', 0) && strlen($message) > 10) {
+            try {
+                $ai_response = $this->get_ai_response($message, $session_id);
+                if (!empty($ai_response)) {
+                    return $ai_response . "\n\n---\n\n" . 
+                           "Would you like to start your admission enquiry? Just provide your student's name to begin! 👶";
+                }
+            } catch (Exception $e) {
+                error_log('EduBot AI Error: ' . $e->getMessage());
+            }
+        }
+        
+        // Default response
+        $response = "I'm here to help with your admission enquiry. ";
+        if ($is_whatsapp) {
+            $response .= "Let me guide you through the process! 🎯\n\n";
+        }
+        
+        return $response . $this->get_next_step_message($session_id);
     }
     
     /**
-     * Get help message
+     * Get AI-powered response using OpenAI
      */
-    private function get_help_message() {
+    private function get_ai_response($message, $session_id) {
+        if (!class_exists('EduBot_API_Integrations')) {
+            require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
+        }
+        
+        $api_integrations = new EduBot_API_Integrations();
+        
+        $school_context = "You are a helpful admission assistant for Epistemo Vikas Leadership School. " .
+                         "We offer education from Nursery to Grade 12 with CBSE and CAIE (Cambridge) boards. " .
+                         "Keep responses concise, friendly, and focused on admissions. " .
+                         "If asked about fees, mention they vary by grade and to contact us for details.";
+        
+        $result = $api_integrations->make_openai_request(
+            $school_context . "\n\nUser question: " . $message,
+            array(
+                'max_tokens' => 150,
+                'temperature' => 0.7
+            )
+        );
+        
+        if ($result && isset($result['choices'][0]['message']['content'])) {
+            return trim($result['choices'][0]['message']['content']);
+        }
+        
+        return '';
+    }
+    
+    /**
+     * Get school information message
+     */
+    private function get_school_info_message($is_whatsapp = false) {
+        $message = "🏫 **About Epistemo Vikas Leadership School**\n\n" .
+                  "✨ Premium education from Nursery to Grade 12\n" .
+                  "📚 Dual boards: CBSE & CAIE (Cambridge)\n" .
+                  "🌟 Focus on leadership & holistic development\n" .
+                  "🎯 Modern facilities & experienced faculty\n\n";
+        
+        if ($is_whatsapp) {
+            $message .= "💬 **Get More Info:**\n" .
+                       "• Type 'fees' for fee structure\n" .
+                       "• Type 'admission' to apply\n" .
+                       "• Call: 7702800800 / 9248111448\n\n";
+        }
+        
+        $message .= "Ready to start your admission enquiry? Let's begin! 🚀";
+        
+        return $message;
+    }
+    
+    /**
+     * Get fees information message
+     */
+    private function get_fees_info_message($is_whatsapp = false) {
+        $message = "💰 **Fee Structure Information**\n\n" .
+                  "Our fees vary by grade and board selection:\n" .
+                  "• Nursery - Grade 2: Competitive rates\n" .
+                  "• Grade 3 - 10: CBSE & CAIE options\n" .
+                  "• Grade 11 - 12: Specialized programs\n\n" .
+                  "📞 **For exact fees, please contact:**\n" .
+                  "Call: 7702800800 / 9248111448\n" .
+                  "Email: admissions@epistemo.in\n\n";
+        
+        if ($is_whatsapp) {
+            $message .= "🎯 **Quick Action:**\n" .
+                       "Start your admission enquiry now for personalized fee information!\n\n";
+        }
+        
+        $message .= "Shall we start your admission enquiry? Just provide the student's name! 👶";
+        
+        return $message;
+    }
+    
+    /**
+     * Get help message with platform awareness
+     */
+    private function get_help_message($session_id = null) {
         $school_config = EduBot_School_Config::getInstance();
         $available_years = $school_config->get_available_academic_years();
         $years_text = implode(' & ', $available_years);
         
-        return "👋 **Welcome to Epistemo Vikas Leadership School!**\n\n" .
-               "I'll help you with your admission enquiry for **AY {$years_text}**.\n\n" .
-               "Please provide:\n" .
-               "👶 Student Name\n" .
-               "📧 Email Address\n" .
-               "📱 Phone Number\n\n" .
-               "You can start by typing the student's name, or provide multiple details at once.";
+        // Check if this is a WhatsApp session for platform-specific messaging
+        $is_whatsapp = false;
+        if ($session_id) {
+            $is_whatsapp = $this->is_whatsapp_session($session_id);
+        }
+        
+        $welcome_message = "👋 **Welcome to Epistemo Vikas Leadership School!**\n\n" .
+                          "I'll help you with your admission enquiry for **AY {$years_text}**.\n\n";
+        
+        if ($is_whatsapp) {
+            $welcome_message .= "🔥 **Quick Start Options:**\n" .
+                               "• Type 'admission' to start enquiry\n" .
+                               "• Type 'info' for school information\n" .
+                               "• Type 'fees' for fee structure\n" .
+                               "• Or just start with student's name\n\n";
+        }
+        
+        $welcome_message .= "**Required Information:**\n" .
+                           "👶 Student Name\n" .
+                           "📧 Email Address\n" .
+                           "📱 Phone Number\n" .
+                           "🎓 Grade/Class\n" .
+                           "📚 Educational Board (CBSE/CAIE)\n\n";
+        
+        if ($is_whatsapp) {
+            $welcome_message .= "💡 **Pro Tip:** You can provide multiple details in one message!\n" .
+                               "Example: \"John Smith, john@email.com, 9876543210, Grade 5, CBSE\"\n\n";
+        }
+        
+        $welcome_message .= "Let's get started! 🚀";
+        
+        return $welcome_message;
     }
     
     /**

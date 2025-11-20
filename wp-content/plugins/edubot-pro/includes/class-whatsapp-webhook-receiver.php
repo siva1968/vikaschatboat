@@ -226,6 +226,45 @@ class EduBot_WhatsApp_Webhook_Receiver {
     }
     
     /**
+     * Extract platform data from message metadata
+     */
+    private function extract_platform_data( $message_data ) {
+        $data = array(
+            'platform_source' => 'whatsapp_direct',
+            'campaign_name' => 'unknown',
+            'utm_source' => '',
+            'utm_campaign' => ''
+        );
+        
+        // Check for webhook context or referrer data
+        if ( isset( $message_data['context'] ) ) {
+            $context = $message_data['context'];
+            
+            // Extract referrer information if available
+            if ( isset( $context['referred_product'] ) ) {
+                $data['platform_source'] = 'whatsapp_business_discovery';
+                $data['campaign_name'] = 'business_discovery';
+            }
+            
+            if ( isset( $context['forwarded'] ) && $context['forwarded'] ) {
+                $data['platform_source'] = 'whatsapp_forwarded';
+                $data['campaign_name'] = 'forwarded_message';
+            }
+        }
+        
+        // Check message text for tracking codes
+        $message_text = $this->extract_message_content( $message_data, $message_data['type'] ?? 'text' );
+        if ( !empty( $message_text ) ) {
+            $tracking_data = $this->extract_tracking_data( $message_text );
+            if ( !empty( $tracking_data['platform_source'] ) && $tracking_data['platform_source'] !== 'unknown' ) {
+                $data = array_merge( $data, $tracking_data );
+            }
+        }
+        
+        return $data;
+    }
+    
+    /**
      * Get or create session for phone number
      */
     private function get_or_create_session( $phone, $platform_data = array() ) {
@@ -274,67 +313,149 @@ class EduBot_WhatsApp_Webhook_Receiver {
     }
     
     /**
-     * Get chatbot response for user message
+     * Get chatbot response for user message using same workflow as web chatbot
      */
     private function get_chatbot_response( $session_id, $message_text, $phone ) {
         try {
-            // Get current session state
-            $session_data = EduBot_WhatsApp_Session_Manager::get_session_data( $session_id );
-            
-            // Use existing chatbot engine or workflow manager
-            $chatbot_engine = new EduBot_Chatbot_Engine();
-            
-            // Process message
-            $response_data = $chatbot_engine->process_message(
-                $message_text,
-                $session_id,
-                $phone
+            // Log API request for WhatsApp interaction
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_incoming',
+                'POST',
+                'whatsapp_webhook',
+                array('phone' => $phone, 'message' => substr($message_text, 0, 100)),
+                array('session_id' => $session_id),
+                200,
+                'success',
+                'WhatsApp message received'
             );
             
-            if ( is_wp_error( $response_data ) ) {
-                error_log( 'EduBot: Chatbot error: ' . $response_data->get_error_message() );
-                return 'Sorry, I encountered an error. Please try again.';
+            // Load workflow manager - same as web chatbot
+            if (!class_exists('EduBot_Workflow_Manager')) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-workflow-manager.php';
             }
             
-            // Update session state if provided
-            if ( isset( $response_data['session_data'] ) ) {
-                EduBot_WhatsApp_Session_Manager::update_session_data( $session_id, $response_data['session_data'] );
+            $workflow_manager = new EduBot_Workflow_Manager();
+            
+            // Process message through workflow manager (includes AI validation)
+            $workflow_response = $workflow_manager->process_user_input($message_text, $session_id);
+            
+            if (empty($workflow_response)) {
+                error_log('EduBot WhatsApp: Empty response from workflow manager');
+                $workflow_response = 'Thank you for your message. Our team will get back to you soon!';
             }
             
-            // Return message
-            return $response_data['message'] ?? $response_data['response'] ?? '';
+            // Log successful response
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_outgoing',
+                'POST',
+                'whatsapp_response',
+                array('phone' => $phone, 'response' => substr($workflow_response, 0, 100)),
+                array('session_id' => $session_id),
+                200,
+                'success',
+                'WhatsApp response sent'
+            );
+            
+            return $workflow_response;
             
         } catch ( Exception $e ) {
-            error_log( 'EduBot: Exception getting chatbot response: ' . $e->getMessage() );
+            error_log( 'EduBot: Exception getting WhatsApp chatbot response: ' . $e->getMessage() );
+            
+            // Log error
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_error',
+                'POST',
+                'whatsapp_response',
+                array('phone' => $phone, 'error' => $e->getMessage()),
+                array(),
+                500,
+                'error',
+                'WhatsApp response error: ' . $e->getMessage()
+            );
+            
             return 'Thank you for your message. Our team will get back to you soon!';
         }
     }
     
     /**
-     * Send response back to user via WhatsApp
+     * Send response back to user via WhatsApp with comprehensive logging
      */
     private function send_whatsapp_response( $phone, $message, $session_id ) {
         try {
             // Get API integrations
+            if ( !class_exists( 'EduBot_API_Integrations' ) ) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-api-integrations.php';
+            }
             $api_integrations = new EduBot_API_Integrations();
             
-            // Split long messages
+            // Split long messages for WhatsApp limits
             $messages = $this->split_long_messages( $message );
             
-            foreach ( $messages as $msg ) {
+            $success_count = 0;
+            $total_messages = count( $messages );
+            
+            foreach ( $messages as $index => $msg ) {
+                $message_num = $index + 1;
+                error_log( "EduBot WhatsApp: Sending message {$message_num}/{$total_messages} to {$phone}" );
+                
                 $result = $api_integrations->send_whatsapp( $phone, $msg );
                 
                 if ( !$result ) {
-                    error_log( "EduBot: Failed to send WhatsApp response to {$phone}" );
+                    error_log( "EduBot: Failed to send WhatsApp message {$message_num} to {$phone}" );
+                    
+                    // Log failed message
+                    EduBot_Admin::log_api_request_to_db(
+                        'whatsapp_send_failed',
+                        'POST',
+                        'meta_whatsapp_api',
+                        array('phone' => $phone, 'message' => substr($msg, 0, 100)),
+                        array(),
+                        500,
+                        'error',
+                        'Failed to send WhatsApp message'
+                    );
                 } else {
-                    error_log( "EduBot: WhatsApp message sent to {$phone}" );
+                    $success_count++;
+                    error_log( "EduBot: WhatsApp message {$message_num} sent successfully to {$phone}" );
+                    
                     // Store outgoing message
                     EduBot_WhatsApp_Session_Manager::store_message( $session_id, 'bot', $msg );
+                    
+                    // Log successful message
+                    EduBot_Admin::log_api_request_to_db(
+                        'whatsapp_send_success',
+                        'POST',
+                        'meta_whatsapp_api',
+                        array('phone' => $phone, 'message' => substr($msg, 0, 100)),
+                        $result,
+                        200,
+                        'success',
+                        'WhatsApp message sent successfully'
+                    );
+                }
+                
+                // Add small delay between messages to avoid rate limiting
+                if ( $index < $total_messages - 1 ) {
+                    usleep( 500000 ); // 0.5 second delay
                 }
             }
             
+            error_log( "EduBot WhatsApp: Sent {$success_count}/{$total_messages} messages successfully to {$phone}" );
+            
         } catch ( Exception $e ) {
             error_log( 'EduBot: Exception sending WhatsApp response: ' . $e->getMessage() );
+            
+            // Log exception
+            EduBot_Admin::log_api_request_to_db(
+                'whatsapp_exception',
+                'POST',
+                'whatsapp_send',
+                array('phone' => $phone, 'error' => $e->getMessage()),
+                array(),
+                500,
+                'error',
+                'WhatsApp send exception: ' . $e->getMessage()
+            );
         }
     }
     
