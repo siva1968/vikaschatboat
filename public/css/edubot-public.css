@@ -1,0 +1,761 @@
+/**
+ * EduBot Pro - Public Styles
+ * Frontend chatbot widget and form styling
+ */
+
+/* Reset and base styles */
+.edubot-chatbot-widget,
+.edubot-chatbot-widget * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* CSS Variables for theming - Updated with your database colors */
+.edubot-chatbot-widget {
+    --edubot-primary-color: #74a211;
+    --edubot-secondary-color: #113b02;
+    --edubot-gradient: linear-gradient(135deg, #74a211 0%, #113b02 100%);
+    --edubot-shadow: 0 4px 20px rgba(116, 162, 17, 0.3);
+    --edubot-border-radius: 12px;
+    --edubot-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Chat Widget Toggle Button */
+.edubot-chat-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--edubot-gradient);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 15px 20px;
+    cursor: pointer;
+    box-shadow: var(--edubot-shadow);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--edubot-font-family);
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 999998;
+    min-width: 60px;
+    max-width: 200px;
+    overflow: hidden;
+}
+
+.edubot-chat-toggle:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 25px rgba(79, 172, 254, 0.4);
+}
+
+.edubot-chat-toggle:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.edubot-chat-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.edubot-chat-label {
+    white-space: nowrap;
+    opacity: 0;
+    width: 0;
+    transition: all 0.3s ease;
+}
+
+.edubot-chat-toggle:hover .edubot-chat-label {
+    opacity: 1;
+    width: auto;
+    margin-left: 8px;
+}
+
+/* Chat Container */
+.edubot-chat-container {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    width: 380px;
+    height: 500px;
+    background: white;
+    border-radius: var(--edubot-border-radius);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 999999;
+    font-family: var(--edubot-font-family);
+    animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Chat Header */
+.edubot-chat-header {
+    background: var(--edubot-gradient);
+    color: white;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.edubot-header-info {
+    flex: 1;
+}
+
+.edubot-header-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.edubot-header-subtitle {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.edubot-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.edubot-minimize-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.edubot-minimize-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Chat Messages Area */
+.edubot-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #fafbfc;
+    scroll-behavior: smooth;
+}
+
+.edubot-chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.edubot-chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.edubot-chat-messages::-webkit-scrollbar-thumb {
+    background: #e1e5e9;
+    border-radius: 3px;
+}
+
+.edubot-chat-messages::-webkit-scrollbar-thumb:hover {
+    background: #c1c7cd;
+}
+
+/* Welcome Message */
+.edubot-welcome-message {
+    margin-bottom: 20px;
+}
+
+/* Message Bubbles */
+.edubot-bot-message,
+.edubot-user-message {
+    margin-bottom: 15px;
+    max-width: 85%;
+    animation: messageSlide 0.3s ease-out;
+}
+
+@keyframes messageSlide {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.edubot-bot-message {
+    align-self: flex-start;
+}
+
+.edubot-user-message {
+    align-self: flex-end;
+    margin-left: auto;
+}
+
+.edubot-message-content {
+    padding: 12px 16px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.edubot-bot-message .edubot-message-content {
+    background: white;
+    color: #2c3e50;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid var(--edubot-primary-color);
+}
+
+.edubot-user-message .edubot-message-content {
+    background: var(--edubot-gradient);
+    color: white;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+/* Quick Reply Options */
+.edubot-chat-options {
+    padding: 0 20px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edubot-option-btn {
+    background: transparent;
+    border: 2px solid var(--edubot-primary-color);
+    color: var(--edubot-primary-color);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.edubot-option-btn:hover {
+    background: var(--edubot-gradient);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+/* Special styling for educational board options */
+.edubot-option-btn[data-value="cbse"],
+.edubot-option-btn[data-value="icse"],
+.edubot-option-btn[data-value="ib"],
+.edubot-option-btn[data-value="cambridge"],
+.edubot-option-btn[data-value="state_board"] {
+    border-width: 1px;
+    font-weight: 600;
+    position: relative;
+    padding: 10px 16px;
+}
+
+.edubot-option-btn[data-value="need_guidance"] {
+    background: #f8f9fa;
+    border-color: #6c757d;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.edubot-option-btn[data-value="need_guidance"]:hover {
+    background: #6c757d;
+    color: white;
+}
+
+/* Board selection specific icons - using CSS content */
+.edubot-option-btn[data-value="cbse"]::before {
+    content: "🇮🇳 ";
+}
+
+.edubot-option-btn[data-value="icse"]::before {
+    content: "📚 ";
+}
+
+.edubot-option-btn[data-value="ib"]::before {
+    content: "🌍 ";
+}
+
+.edubot-option-btn[data-value="cambridge"]::before {
+    content: "🇬🇧 ";
+}
+
+.edubot-option-btn[data-value="state_board"]::before {
+    content: "🏛️ ";
+}
+
+.edubot-option-btn[data-value="need_guidance"]::before {
+    content: "🤔 ";
+}
+
+/* Typing Indicator */
+.edubot-typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--edubot-primary-color);
+    font-size: 14px;
+    padding: 12px 16px;
+    margin-bottom: 15px;
+}
+
+.edubot-typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.edubot-typing-dots span {
+    width: 6px;
+    height: 6px;
+    background-color: var(--edubot-primary-color);
+    border-radius: 50%;
+    animation: typingPulse 1.4s infinite;
+}
+
+.edubot-typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.edubot-typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingPulse {
+    0%, 60%, 100% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    30% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+/* Chat Input Area */
+.edubot-chat-input-area {
+    background: white;
+    border-top: 1px solid #e1e5e9;
+}
+
+.edubot-chat-input-container {
+    display: flex;
+    padding: 20px;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.edubot-chat-input {
+    flex: 1;
+    border: 2px solid #e1e5e9;
+    border-radius: 20px;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-family: var(--edubot-font-family);
+    outline: none;
+    transition: border-color 0.2s ease;
+    resize: none;
+    min-height: 44px;
+    max-height: 100px;
+}
+
+.edubot-chat-input:focus {
+    border-color: var(--edubot-primary-color);
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+}
+
+.edubot-send-btn {
+    background: var(--edubot-gradient);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.edubot-send-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+.edubot-send-btn:active {
+    transform: scale(0.95);
+}
+
+.edubot-send-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Application Form Styles */
+.edubot-application-form {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 30px;
+    font-family: var(--edubot-font-family);
+}
+
+.edubot-application-form h2 {
+    color: var(--edubot-primary-color);
+    margin-bottom: 30px;
+    text-align: center;
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.edubot-fieldset {
+    border: 2px solid var(--edubot-primary-color);
+    border-radius: 12px;
+    padding: 25px;
+    margin: 25px 0;
+    background: white;
+}
+
+.edubot-fieldset legend {
+    color: var(--edubot-primary-color);
+    font-weight: 600;
+    font-size: 18px;
+    padding: 0 15px;
+    background: white;
+}
+
+.edubot-form-row {
+    margin-bottom: 20px;
+}
+
+.edubot-form-row label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.edubot-form-row input,
+.edubot-form-row select,
+.edubot-form-row textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: var(--edubot-font-family);
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.edubot-form-row input:focus,
+.edubot-form-row select:focus,
+.edubot-form-row textarea:focus {
+    border-color: var(--edubot-primary-color);
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+    outline: none;
+}
+
+.edubot-form-row textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.edubot-form-submit {
+    text-align: center;
+    margin-top: 30px;
+}
+
+.edubot-submit-btn {
+    background: var(--edubot-gradient);
+    border: none;
+    color: white;
+    padding: 15px 40px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--edubot-font-family);
+}
+
+.edubot-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+}
+
+.edubot-submit-btn:active {
+    transform: translateY(0);
+}
+
+.edubot-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Inline Chat Styles */
+.edubot-inline-chat {
+    border: 2px solid var(--edubot-primary-color);
+    border-radius: 12px;
+    overflow: hidden;
+    font-family: var(--edubot-font-family);
+    max-width: 600px;
+    margin: 20px auto;
+    background: white;
+}
+
+.edubot-inline-header {
+    background: var(--edubot-gradient);
+    color: white;
+    padding: 20px;
+}
+
+.edubot-inline-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.edubot-inline-messages {
+    height: 300px;
+    overflow-y: auto;
+    padding: 20px;
+    background: #fafbfc;
+}
+
+.edubot-inline-input {
+    display: flex;
+    padding: 20px;
+    gap: 10px;
+    background: white;
+    border-top: 1px solid #e1e5e9;
+}
+
+.edubot-inline-input-field {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e1e5e9;
+    border-radius: 20px;
+    outline: none;
+    font-family: var(--edubot-font-family);
+}
+
+.edubot-inline-input-field:focus {
+    border-color: var(--edubot-primary-color);
+}
+
+.edubot-inline-send-btn {
+    background: var(--edubot-gradient);
+    border: none;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: var(--edubot-font-family);
+}
+
+/* Loading States */
+.edubot-loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.edubot-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top: 2px solid var(--edubot-primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    transform: translate(-50%, -50%);
+}
+
+@keyframes spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .edubot-chat-container {
+        width: 320px !important;
+        height: 450px !important;
+        position: fixed !important;
+        bottom: 80px !important;
+        left: 20px !important;
+        right: auto !important;
+        top: auto !important;
+        border-radius: var(--edubot-border-radius) !important;
+        max-width: calc(100vw - 40px) !important;
+        max-height: calc(100vh - 100px) !important;
+    }
+    
+    /* Mobile: Position chatbot toggle at bottom-left for easier thumb access */
+    .edubot-chat-toggle {
+        bottom: 20px;
+        left: 20px;
+        right: auto;
+    }
+    
+    .edubot-application-form {
+        padding: 20px;
+    }
+    
+    .edubot-fieldset {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .edubot-chat-container {
+        width: 300px !important;
+        height: 400px !important;
+        left: 10px !important;
+        bottom: 80px !important;
+        max-width: calc(100vw - 20px) !important;
+        max-height: calc(100vh - 100px) !important;
+    }
+    
+    .edubot-chat-toggle {
+        padding: 12px 16px;
+        font-size: 12px;
+        /* Maintain bottom-left position on smaller screens */
+        bottom: 20px;
+        left: 10px;
+        right: auto;
+    }
+    
+    .edubot-chat-input-container {
+        padding: 15px;
+    }
+    
+    .edubot-chat-messages {
+        padding: 15px;
+    }
+    
+    .edubot-application-form {
+        padding: 15px;
+    }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .edubot-chat-container {
+        border: 3px solid #000;
+    }
+    
+    .edubot-bot-message .edubot-message-content {
+        border: 2px solid #000;
+    }
+    
+    .edubot-chat-input {
+        border: 2px solid #000;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .edubot-chat-messages {
+        background: #1a1a1a;
+    }
+    
+    .edubot-bot-message .edubot-message-content {
+        background: #2d2d2d;
+        color: #ffffff;
+    }
+    
+    .edubot-chat-container {
+        background: #1a1a1a;
+    }
+    
+    .edubot-chat-input-area {
+        background: #1a1a1a;
+        border-top-color: #404040;
+    }
+    
+    .edubot-chat-input {
+        background: #2d2d2d;
+        color: #ffffff;
+        border-color: #404040;
+    }
+}
+
+/* Quick Action Buttons - Your Database Colors */
+.edubot-quick-actions {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edubot-quick-action {
+    background: #74a211 !important;
+    border: 1px solid #74a211 !important;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.3s ease;
+    color: white !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edubot-quick-action:hover {
+    background: linear-gradient(135deg, #74a211 0%, #113b02 100%) !important;
+    border-color: #74a211 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(116, 162, 17, 0.25);
+}
+
+.edubot-quick-action:active {
+    transform: translateY(0);
+}
+
+.edubot-quick-action:focus {
+    outline: 2px solid #74a211;
+    outline-offset: 2px;
+}

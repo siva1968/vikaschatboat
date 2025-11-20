@@ -1,0 +1,3 @@
+# This file ensures the sql-backups directory is tracked in git
+# Even though actual backup files are in .gitignore
+# This allows other developers to create and manage backups locally
