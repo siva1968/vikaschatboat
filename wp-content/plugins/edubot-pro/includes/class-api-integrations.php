@@ -846,49 +846,56 @@ class EduBot_API_Integrations {
     }
 
     /**
-     * Send Meta WhatsApp Business message
+     * Send Meta WhatsApp Business message (v24.0)
+     * Supports interactive messages, media, templates, and enhanced security
      */
     public function send_meta_whatsapp($phone, $message, $api_keys) {
         $phone_id = $api_keys['whatsapp_phone_id'] ?? get_option('edubot_whatsapp_phone_id', '');
         $access_token = $api_keys['whatsapp_token'] ?? get_option('edubot_whatsapp_token', '');
+        $app_secret = $api_keys['whatsapp_app_secret'] ?? get_option('edubot_whatsapp_app_secret', '');
         
         if (empty($phone_id) || empty($access_token)) {
             error_log('EduBot WhatsApp Error: Missing phone ID or access token');
             return false;
         }
         
-        $url = "https://graph.facebook.com/v22.0/{$phone_id}/messages";
+        // Updated to Meta Business API v24.0
+        $url = "https://graph.facebook.com/v24.0/{$phone_id}/messages";
         
-        // Handle both template messages and text messages
-        if (is_array($message) && isset($message['type']) && $message['type'] === 'template') {
-            // Business API template message
-            $data = array(
-                'messaging_product' => 'whatsapp',
-                'to' => $phone,
-                'type' => 'template',
-                'template' => $message['template']
-            );
-            error_log('EduBot WhatsApp: Sending template message: ' . wp_json_encode($data));
-        } else {
-            // Free-form text message
-            $data = array(
-                'messaging_product' => 'whatsapp',
-                'to' => $phone,
-                'type' => 'text',
-                'text' => array(
-                    'body' => is_string($message) ? $message : (string) $message
-                )
-            );
-            error_log('EduBot WhatsApp: Sending text message to ' . $phone);
+        // Format phone number (ensure international format)
+        $formatted_phone = $this->format_whatsapp_phone($phone);
+        if (!$formatted_phone) {
+            error_log('EduBot WhatsApp Error: Invalid phone number format: ' . $phone);
+            return false;
+        }
+        
+        // Handle different message types (v24.0 supports more formats)
+        $data = $this->prepare_whatsapp_message_data($formatted_phone, $message);
+        if (!$data) {
+            error_log('EduBot WhatsApp Error: Failed to prepare message data');
+            return false;
         }
 
+        // Enhanced headers for v24.0 with security features
+        $headers = array(
+            'Authorization' => 'Bearer ' . $access_token,
+            'Content-Type' => 'application/json',
+            'User-Agent' => 'EduBot-WhatsApp-Client/2.0',
+            'X-WhatsApp-Client-Version' => '24.0'
+        );
+        
+        // Add webhook signature if app secret is available (security enhancement)
+        if (!empty($app_secret)) {
+            $payload = wp_json_encode($data);
+            $signature = 'sha256=' . hash_hmac('sha256', $payload, $app_secret);
+            $headers['X-Hub-Signature-256'] = $signature;
+        }
+        
         $response = wp_remote_post($url, array(
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $access_token,
-                'Content-Type' => 'application/json'
-            ),
+            'headers' => $headers,
             'body' => wp_json_encode($data),
-            'timeout' => 30
+            'timeout' => 30,
+            'sslverify' => true
         ));
 
         if (is_wp_error($response)) {
@@ -909,9 +916,181 @@ class EduBot_API_Integrations {
             }
         }
         
-        // Log error response for debugging
-        error_log("EduBot WhatsApp Error: HTTP {$status_code} - {$response_body}");
+        // Enhanced error handling for v24.0
+        $this->handle_whatsapp_error_response($status_code, $response_body);
         return false;
+    }
+
+    /**
+     * Format WhatsApp phone number to international format (v24.0 requirement)
+     */
+    private function format_whatsapp_phone($phone) {
+        // Remove all non-digits
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        
+        // Must start with country code (no leading +)
+        if (strlen($phone) < 10) {
+            return false;
+        }
+        
+        // If doesn't start with country code, assume India (+91)
+        if (!preg_match('/^(1|44|33|49|81|86|91|55|61|7|39|34|31|46|47|45|358|351|420|48|40|30|90|966|971|60|65|852|886|82)/', $phone)) {
+            // Default to India if 10 digits
+            if (strlen($phone) == 10) {
+                $phone = '91' . $phone;
+            }
+        }
+        
+        return $phone;
+    }
+
+    /**
+     * Prepare WhatsApp message data for v24.0 API
+     * Supports text, interactive buttons, lists, media, and templates
+     */
+    private function prepare_whatsapp_message_data($phone, $message) {
+        $base_data = array(
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $phone
+        );
+        
+        // Handle different message types
+        if (is_array($message)) {
+            return $this->prepare_structured_message($base_data, $message);
+        } else {
+            // Simple text message with interactive buttons for common responses
+            return $this->prepare_smart_text_message($base_data, $message);
+        }
+    }
+
+    /**
+     * Prepare structured message (templates, interactive, media)
+     */
+    private function prepare_structured_message($base_data, $message) {
+        switch ($message['type'] ?? 'text') {
+            case 'template':
+                return array_merge($base_data, array(
+                    'type' => 'template',
+                    'template' => $message['template']
+                ));
+                
+            case 'interactive':
+                return array_merge($base_data, array(
+                    'type' => 'interactive',
+                    'interactive' => $message['interactive']
+                ));
+                
+            case 'media':
+                return $this->prepare_media_message($base_data, $message);
+                
+            default:
+                return array_merge($base_data, array(
+                    'type' => 'text',
+                    'text' => array('body' => $message['text'] ?? '')
+                ));
+        }
+    }
+
+    /**
+     * Prepare smart text message with contextual quick replies
+     */
+    private function prepare_smart_text_message($base_data, $message_text) {
+        // Check if message suggests interactive elements
+        if ($this->should_add_quick_replies($message_text)) {
+            return array_merge($base_data, array(
+                'type' => 'interactive',
+                'interactive' => array(
+                    'type' => 'button',
+                    'body' => array('text' => $message_text),
+                    'action' => array(
+                        'buttons' => array(
+                            array('type' => 'reply', 'reply' => array('id' => 'more_info', 'title' => 'More Info')),
+                            array('type' => 'reply', 'reply' => array('id' => 'talk_human', 'title' => 'Talk to Human')),
+                            array('type' => 'reply', 'reply' => array('id' => 'main_menu', 'title' => 'Main Menu'))
+                        )
+                    )
+                )
+            ));
+        }
+        
+        // Simple text message
+        return array_merge($base_data, array(
+            'type' => 'text',
+            'text' => array('body' => $message_text)
+        ));
+    }
+
+    /**
+     * Prepare media message (images, documents, audio, video)
+     */
+    private function prepare_media_message($base_data, $message) {
+        $media_type = $message['media_type'] ?? 'document';
+        $media_data = array(
+            'type' => $media_type,
+            $media_type => array(
+                'id' => $message['media_id'] ?? '',
+                'caption' => $message['caption'] ?? ''
+            )
+        );
+        
+        return array_merge($base_data, $media_data);
+    }
+
+    /**
+     * Determine if message should include quick reply buttons
+     */
+    private function should_add_quick_replies($message_text) {
+        $triggers = array(
+            'information', 'details', 'help', 'options', 'choose', 'select',
+            'admission', 'fees', 'contact', 'visit', 'schedule', 'application'
+        );
+        
+        $message_lower = strtolower($message_text);
+        foreach ($triggers as $trigger) {
+            if (strpos($message_lower, $trigger) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Enhanced error handling for Meta Business API v24.0
+     */
+    private function handle_whatsapp_error_response($status_code, $response_body) {
+        $error_data = json_decode($response_body, true);
+        
+        if (isset($error_data['error'])) {
+            $error = $error_data['error'];
+            $error_message = "Meta WhatsApp API Error [{$status_code}]: ";
+            $error_message .= $error['message'] ?? 'Unknown error';
+            
+            if (isset($error['error_subcode'])) {
+                $error_message .= " (Subcode: {$error['error_subcode']})";
+            }
+            
+            // Log specific error types with solutions
+            switch ($error['code'] ?? 0) {
+                case 100: // API_UNKNOWN
+                    error_log($error_message . " - Check API version and endpoint");
+                    break;
+                case 190: // ACCESS_TOKEN_ERROR
+                    error_log($error_message . " - Invalid or expired access token");
+                    break;
+                case 131031: // RATE_LIMITED
+                    error_log($error_message . " - Rate limited, implement retry logic");
+                    break;
+                case 131026: // MESSAGE_UNDELIVERABLE
+                    error_log($error_message . " - Phone number may be invalid or blocked");
+                    break;
+                default:
+                    error_log($error_message);
+            }
+        } else {
+            error_log("EduBot WhatsApp Error: HTTP {$status_code} - {$response_body}");
+        }
     }
 
     /**

@@ -25,6 +25,19 @@ class EduBot_WhatsApp_Session_Manager {
     }
     
     /**
+     * Create WhatsApp session with specific session ID (for unified session management)
+     * 
+     * @param string $session_id Specific session ID to use
+     * @param string $phone User's phone number  
+     * @param array $ad_params Ad attribution parameters
+     * @return string Session ID
+     */
+    public static function create_session_with_id( $session_id, $phone, $ad_params = array() ) {
+        $instance = new self();
+        return $instance->_create_session_with_id( $session_id, $phone, $ad_params );
+    }
+    
+    /**
      * Internal session creation
      */
     private function _create_session( $phone, $ad_params ) {
@@ -64,6 +77,49 @@ class EduBot_WhatsApp_Session_Manager {
         );
         
         error_log( "EduBot: Created WhatsApp session {$session_id} for phone {$phone}" );
+        
+        return $session_id;
+    }
+    
+    /**
+     * Internal session creation with specific ID (for unified sessions)
+     */
+    private function _create_session_with_id( $session_id, $phone, $ad_params ) {
+        global $wpdb;
+        
+        $formatted_phone = $this->format_phone( $phone );
+        
+        // Get or create contact
+        $contact_id = $this->get_or_create_contact( $formatted_phone );
+        
+        // Determine campaign ID
+        $campaign_id = $this->get_campaign_id_from_params( $ad_params );
+        
+        // Store session with provided ID
+        $sessions_table = $wpdb->prefix . 'edubot_whatsapp_sessions';
+        
+        $wpdb->insert(
+            $sessions_table,
+            array(
+                'session_id' => $session_id,
+                'contact_id' => $contact_id,
+                'phone' => $formatted_phone,
+                'campaign_id' => $campaign_id,
+                'source' => sanitize_text_field( $ad_params['source'] ?? 'direct' ),
+                'campaign' => sanitize_text_field( $ad_params['campaign'] ?? '' ),
+                'medium' => sanitize_text_field( $ad_params['medium'] ?? 'whatsapp' ),
+                'utm_source' => sanitize_text_field( $ad_params['utm_source'] ?? '' ),
+                'utm_medium' => sanitize_text_field( $ad_params['utm_medium'] ?? '' ),
+                'utm_campaign' => sanitize_text_field( $ad_params['utm_campaign'] ?? '' ),
+                'state' => 'greeting',
+                'ip_address' => $this->get_client_ip(),
+                'user_agent' => 'WhatsApp-Unified-Session',
+                'started_at' => current_time( 'mysql' )
+            ),
+            array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+        );
+        
+        error_log( "EduBot: Created unified WhatsApp session {$session_id} for phone {$phone}" );
         
         return $session_id;
     }
