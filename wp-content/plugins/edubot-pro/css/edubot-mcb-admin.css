@@ -1,0 +1,182 @@
+/**
+ * EduBot MCB Admin - Styles
+ * Styling for manual sync button and status indicators
+ */
+
+/* MCB Sync Button Base */
+.mcb-sync-btn {
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+    border: 1px solid transparent;
+}
+
+/* Default state - Pending */
+.mcb-sync-btn {
+    background-color: #f5f5f5;
+    color: #666;
+    border-color: #ddd;
+}
+
+.mcb-sync-btn:hover:not(.synced):not(.loading) {
+    background-color: #e8e8e8;
+    border-color: #999;
+}
+
+/* Synced state */
+.mcb-sync-btn.synced {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.mcb-sync-btn.synced:hover {
+    background-color: #c3e6cb;
+}
+
+/* Retry state - Failed sync */
+.mcb-sync-btn.retry-mcb {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeeba;
+}
+
+.mcb-sync-btn.retry-mcb:hover {
+    background-color: #ffeeba;
+}
+
+/* Loading state */
+.mcb-sync-btn.loading {
+    opacity: 0.8;
+    pointer-events: none;
+    position: relative;
+}
+
+.mcb-sync-btn.loading::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 6px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* MCB Status Column Badges */
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.badge-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.badge-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.badge-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+.badge-secondary {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border: 1px solid #d6d8db;
+}
+
+/* Status column small text */
+.badge + small {
+    display: block;
+    margin-top: 4px;
+    color: #666;
+    font-size: 11px;
+}
+
+/* Notification/Alert styling */
+.alert {
+    padding: 12px 16px;
+    border-radius: 4px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.alert-dismissible .close {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.alert-dismissible .close:hover {
+    opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .mcb-sync-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    .badge {
+        font-size: 11px;
+        padding: 3px 6px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .mcb-sync-btn {
+        background-color: #2b2b2b;
+        color: #e0e0e0;
+        border-color: #444;
+    }
+    
+    .mcb-sync-btn:hover:not(.synced):not(.loading) {
+        background-color: #3a3a3a;
+        border-color: #666;
+    }
+    
+    .alert {
+        opacity: 0.95;
+    }
+}

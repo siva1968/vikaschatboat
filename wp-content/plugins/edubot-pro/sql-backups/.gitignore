@@ -1,0 +1,28 @@
+# SQL Backups Directory
+# This directory contains database backups
+
+# Full backups (contain sensitive data - exclude from git)
+*.sql
+!README.md
+!BACKUP_README.md
+!.gitkeep
+!restore_database.php
+
+# Temporary backup files
+*.bak
+*.tmp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Compression
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# Keep this directory in git even if empty
+!.gitkeep

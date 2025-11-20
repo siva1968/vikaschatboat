@@ -1,0 +1,895 @@
+/**
+ * EduBot Pro - Admin Styles
+ * WordPress admin panel styling
+ */
+
+/* Admin Panel Layout */
+.edubot-admin-panel {
+    background: #fff;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.edubot-admin-header {
+    border-bottom: 1px solid #e1e5e9;
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+}
+
+.edubot-admin-header h1 {
+    color: #2c3e50;
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+}
+
+.edubot-admin-header p {
+    color: #7f8c8d;
+    font-size: 16px;
+    margin: 0;
+}
+
+/* Dashboard Cards */
+.edubot-dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.edubot-dashboard-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+.edubot-dashboard-card:hover {
+    transform: translateY(-2px);
+}
+
+.edubot-dashboard-card.primary {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.edubot-dashboard-card.success {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.edubot-dashboard-card.warning {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.edubot-dashboard-card.info {
+    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    color: #2c3e50;
+}
+
+.edubot-card-icon {
+    font-size: 36px;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.edubot-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.edubot-card-value {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.edubot-card-subtitle {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* Form Sections */
+.edubot-form-section {
+    background: #f8f9fa;
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 8px;
+    border: 1px solid #e1e5e9;
+}
+
+.edubot-form-section h3 {
+    color: #2c3e50;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #4facfe;
+}
+
+.edubot-form-section p {
+    color: #7f8c8d;
+    margin-bottom: 20px;
+}
+
+/* API Sections */
+.edubot-api-section {
+    background: white;
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 8px;
+    border: 1px solid #e1e5e9;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.edubot-api-section h3 {
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Status Indicators */
+.edubot-status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.edubot-status-indicator.connected {
+    background: #d4edda;
+    color: #155724;
+}
+
+.edubot-status-indicator.disconnected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.edubot-status-indicator.testing {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.edubot-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+/* Test Buttons */
+.edubot-test-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin-left: 10px;
+}
+
+.edubot-test-btn:hover {
+    background: #5a6268;
+}
+
+.edubot-test-btn.testing {
+    background: #ffc107;
+    color: #212529;
+}
+
+.edubot-test-btn.success {
+    background: #28a745;
+}
+
+.edubot-test-btn.error {
+    background: #dc3545;
+}
+
+/* Dynamic Field Groups */
+.edubot-field-group {
+    margin-bottom: 25px;
+}
+
+.edubot-field-group h4 {
+    color: #495057;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 15px;
+}
+
+.edubot-field-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+}
+
+.edubot-field-item input,
+.edubot-field-item select {
+    flex: 1;
+    border: 1px solid #ced4da;
+    padding: 8px 12px;
+    border-radius: 4px;
+}
+
+.edubot-remove-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.edubot-remove-btn:hover {
+    background: #c82333;
+}
+
+.edubot-add-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-top: 10px;
+}
+
+.edubot-add-btn:hover {
+    background: #218838;
+}
+
+/* Custom Fields Builder */
+.edubot-custom-field-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 2fr auto auto auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 15px;
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+}
+
+.edubot-custom-field-item input,
+.edubot-custom-field-item select {
+    border: 1px solid #ced4da;
+    padding: 8px 12px;
+    border-radius: 4px;
+}
+
+.edubot-custom-field-item label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+}
+
+/* Applications Table */
+.edubot-applications-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.edubot-applications-table th,
+.edubot-applications-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.edubot-applications-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.edubot-applications-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* Status Badges */
+.edubot-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.edubot-status-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.edubot-status-badge.approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.edubot-status-badge.rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.edubot-status-badge.under-review {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+/* Analytics Charts */
+.edubot-analytics-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin: 30px 0;
+}
+
+.edubot-chart-section {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.edubot-chart-section h3 {
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+/* Metrics Grid */
+.edubot-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.edubot-metric-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.edubot-metric-card h3 {
+    color: #7f8c8d;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+.edubot-metric-value {
+    color: #2c3e50;
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.edubot-metric-change {
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.edubot-metric-change.positive {
+    color: #28a745;
+}
+
+.edubot-metric-change.negative {
+    color: #dc3545;
+}
+
+/* Color Picker */
+.edubot-color-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.edubot-color-preview {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    border: 2px solid #e1e5e9;
+}
+
+/* File Upload */
+.edubot-upload-field {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.edubot-upload-btn {
+    background: #007cba;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.edubot-upload-btn:hover {
+    background: #005a87;
+}
+
+.edubot-upload-preview {
+    max-width: 100px;
+    max-height: 100px;
+    border-radius: 4px;
+    border: 1px solid #e1e5e9;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .edubot-analytics-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .edubot-dashboard-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .edubot-custom-field-item {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .edubot-applications-table {
+        font-size: 14px;
+    }
+    
+    .edubot-applications-table th,
+    .edubot-applications-table td {
+        padding: 8px 10px;
+    }
+}
+
+/* Loading States */
+.edubot-loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.edubot-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top: 2px solid #4facfe;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    transform: translate(-50%, -50%);
+}
+
+@keyframes spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* Notifications */
+.edubot-notification {
+    padding: 15px 20px;
+    border-radius: 4px;
+    margin: 15px 0;
+    font-weight: 500;
+}
+
+.edubot-notification.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.edubot-notification.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.edubot-notification.warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.edubot-notification.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Form Tables */
+.edubot-form-table {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.edubot-form-table th {
+    width: 200px;
+    text-align: left;
+    padding: 15px 10px;
+    font-weight: 600;
+    color: #495057;
+    vertical-align: top;
+}
+
+.edubot-form-table td {
+    padding: 15px 10px;
+}
+
+.edubot-form-table input[type="text"],
+.edubot-form-table input[type="email"],
+.edubot-form-table input[type="url"],
+.edubot-form-table input[type="tel"],
+.edubot-form-table input[type="password"],
+.edubot-form-table input[type="number"],
+.edubot-form-table select,
+.edubot-form-table textarea {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.edubot-form-table textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.edubot-form-table .description {
+    font-size: 13px;
+    color: #7f8c8d;
+    margin-top: 5px;
+    font-style: italic;
+}
+
+/* Help Text */
+.edubot-help-text {
+    background: #f8f9fa;
+    border-left: 4px solid #4facfe;
+    padding: 15px 20px;
+    margin: 20px 0;
+    border-radius: 0 4px 4px 0;
+}
+
+.edubot-help-text h4 {
+    color: #2c3e50;
+    margin: 0 0 10px 0;
+    font-size: 16px;
+}
+
+.edubot-help-text p {
+    color: #495057;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Tabs */
+.edubot-tabs {
+    border-bottom: 1px solid #e1e5e9;
+    margin-bottom: 30px;
+}
+
+.edubot-tab-nav {
+    display: flex;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.edubot-tab-nav li {
+    margin: 0;
+}
+
+.edubot-tab-nav a {
+    display: block;
+    padding: 15px 25px;
+    color: #495057;
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.edubot-tab-nav a:hover,
+.edubot-tab-nav a.active {
+    color: #4facfe;
+    border-bottom-color: #4facfe;
+    background: #f8f9fa;
+}
+
+.edubot-tab-content {
+    display: none;
+}
+
+.edubot-tab-content.active {
+    display: block;
+}
+
+/* Logo Upload Styles */
+.edubot-logo-upload {
+    max-width: 400px;
+}
+
+.edubot-logo-upload .logo-preview {
+    margin-bottom: 15px;
+    min-height: 20px;
+}
+
+.edubot-logo-upload .logo-preview img {
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
+    background: #f9f9f9;
+}
+
+.edubot-upload-logo-btn {
+    background: #4facfe;
+    border-color: #4facfe;
+    color: white;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+.edubot-upload-logo-btn:hover {
+    background: #3b8bfe;
+    border-color: #3b8bfe;
+}
+
+.edubot-remove-logo-btn {
+    background: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+.edubot-remove-logo-btn:hover {
+    background: #c82333;
+    border-color: #c82333;
+}
+
+/* Multiple Grade Systems Styles */
+.edubot-grade-systems-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin: 10px 0;
+}
+
+.edubot-checkbox-label {
+    display: block;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: #f9f9f9;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.edubot-checkbox-label:hover {
+    border-color: #4facfe;
+    background: #f0f8ff;
+}
+
+.edubot-checkbox-label input[type="checkbox"] {
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.edubot-checkbox-label input[type="checkbox"]:checked + strong {
+    color: #4facfe;
+}
+
+.edubot-checkbox-label:has(input:checked) {
+    border-color: #4facfe;
+    background: #f0f8ff;
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.2);
+}
+
+.edubot-checkbox-label .description {
+    color: #666;
+    font-style: italic;
+    margin-top: 5px;
+}
+
+/* Application Details Modal Enhancements */
+.application-details {
+    max-width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.application-details .detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e1e5e9;
+    margin-bottom: 20px;
+}
+
+.application-details .detail-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.application-details .status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.application-details .status-pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.application-details .status-approved {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.application-details .status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.application-details .detail-section {
+    margin-bottom: 25px;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #4facfe;
+}
+
+.application-details .detail-section h4 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.application-details .detail-section h4:before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: #4facfe;
+    margin-right: 10px;
+    border-radius: 2px;
+}
+
+.application-details .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.application-details .detail-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: top;
+}
+
+.application-details .detail-table td:first-child {
+    background: #f1f3f4;
+    font-weight: 600;
+    color: #495057;
+    width: 35%;
+    min-width: 140px;
+}
+
+.application-details .detail-table td:last-child {
+    color: #212529;
+}
+
+.application-details .detail-table tr:last-child td {
+    border-bottom: none;
+}
+
+.application-details .detail-table tr:hover {
+    background: #f8f9fa;
+}
+
+/* UTM Tracking Section Special Styling */
+.application-details .detail-section:has(h4:contains("UTM")) {
+    border-left-color: #28a745;
+}
+
+.application-details .detail-section:has(h4:contains("UTM")) h4:before {
+    background: #28a745;
+}
+
+/* Campaign Click IDs Section Special Styling */
+.application-details .detail-section:has(h4:contains("Campaign Click")) {
+    border-left-color: #fd7e14;
+}
+
+.application-details .detail-section:has(h4:contains("Campaign Click")) h4:before {
+    background: #fd7e14;
+}
+
+/* Notification Status Section Special Styling */
+.application-details .detail-section:has(h4:contains("Notification")) {
+    border-left-color: #17a2b8;
+}
+
+.application-details .detail-section:has(h4:contains("Notification")) h4:before {
+    background: #17a2b8;
+}
+
+/* Status indicators for notifications */
+.application-details .detail-table span[style*="green"] {
+    background: #d4edda;
+    color: #155724;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.application-details .detail-table span[style*="#999"] {
+    background: #e9ecef;
+    color: #6c757d;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
