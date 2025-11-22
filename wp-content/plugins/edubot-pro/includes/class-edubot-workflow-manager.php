@@ -26,7 +26,12 @@ class EduBot_Workflow_Manager {
     private function is_whatsapp_session($session_id) {
         global $wpdb;
         
-        // Check if session exists in WhatsApp sessions table
+        // First check by session ID format (starts with whatsapp_)
+        if (strpos($session_id, 'whatsapp_') === 0) {
+            return true;
+        }
+        
+        // Also check if session exists in WhatsApp sessions table
         $whatsapp_session = $wpdb->get_var($wpdb->prepare(
             "SELECT session_id FROM {$wpdb->prefix}edubot_whatsapp_sessions WHERE session_id = %s",
             $session_id
@@ -72,9 +77,63 @@ class EduBot_Workflow_Manager {
                 }
             }
             
-            // Determine current state and next action
+            // For WhatsApp sessions, check if we should show the initial menu or handle menu requests FIRST
+            if ($is_whatsapp_session) {
+                // PRIORITY CHECK: Handle direct menu option selection (1-5) ONLY if not in admission flow
+                $session_data = $this->session_manager->get_session($session_id);
+                $has_started_admission = !empty($session_data['data']['student_name']) || 
+                                       !empty($session_data['data']['phone']) || 
+                                       !empty($session_data['data']['email']) ||
+                                       !empty($session_data['data']['selected_option']);
+                
+                if (preg_match('/^[1-5]$/', trim($message)) && !$has_started_admission) {
+                    return $this->handle_initial_menu($message, $session_id);
+                }
+                
+                // Check for menu keywords or requests to restart
+                $message_lower = strtolower(trim($message));
+                $menu_keywords = ['menu', 'main menu', 'options', 'help', 'start', 'restart', 'talk to human'];
+                $is_menu_request = in_array($message_lower, $menu_keywords) || 
+                                 preg_match('/\b(menu|options|help|start|restart|talk.*human)\b/i', $message);
+                
+                // Check if this is a greeting
+                $common_greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'namaste'];
+                $is_greeting = in_array($message_lower, $common_greetings);
+                
+                // Clean session if user sends greeting and session has invalid data (like greetings as names)
+                if ($is_greeting || $is_menu_request) {
+                    $current_student_name = $session_data['data']['student_name'] ?? '';
+                    if (in_array(strtolower($current_student_name), $common_greetings)) {
+                        // Reset session data if student name is a greeting
+                        $this->session_manager->update_session_data($session_id, 'student_name', '');
+                        $this->session_manager->update_session_data($session_id, 'phone', '');
+                        $this->session_manager->update_session_data($session_id, 'email', '');
+                        $this->session_manager->update_session_data($session_id, 'menu_shown', false);
+                        $this->session_manager->update_session_data($session_id, 'selected_option', '');
+                        error_log("EduBot WhatsApp: Reset session data for greeting/menu request from {$session_id}");
+                        
+                        // Refresh session data after reset
+                        $session_data = $this->session_manager->get_session($session_id);
+                        $current_step = $this->determine_current_step($session_data);
+                    }
+                }
+                
+                // Show menu for greetings, menu requests, or fresh sessions
+                if (empty($session_data['data']['menu_shown']) || $is_menu_request || $is_greeting) {
+                    return $this->handle_initial_menu($message, $session_id);
+                }
+                
+                // Handle post-information requests
+                if (!empty($session_data['data']['info_provided'])) {
+                    return $this->handle_post_info_request($message, $session_id);
+                }
+            }
+
+            // Determine current state and next action (after WhatsApp menu handling)
             $current_step = $this->determine_current_step($session_data);
             $extracted_info = $this->extract_information($message);
+            
+
             
             // Process based on current step
             switch ($current_step) {
@@ -164,7 +223,12 @@ class EduBot_Workflow_Manager {
 
         if (!$looks_like_email && preg_match('/(?:name\s*:?\s*)?([A-Za-z\s\.]{2,30})(?:\s|$)/i', $message, $matches)) {
             $name = trim($matches[1]);
-            if (strlen($name) >= 2 && strlen($name) <= 30 && !preg_match('/\b(grade|class|email|phone)\b/i', $name)) {
+            $name_lower = strtolower($name);
+            $common_greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'namaste', 'hola', 'hallo', 'start', 'begin', 'enquiry', 'admission', 'info', 'information'];
+            
+            if (strlen($name) >= 2 && strlen($name) <= 30 && 
+                !preg_match('/\b(grade|class|email|phone)\b/i', $name) &&
+                !in_array($name_lower, $common_greetings)) {
                 $info['name'] = ucwords(strtolower($name));
             }
         }
@@ -221,17 +285,125 @@ class EduBot_Workflow_Manager {
             return $this->get_next_step_message($session_id);
         }
         
-        // If no name detected, treat entire message as name if it looks like one
-        if (preg_match('/^[A-Za-z\s\.]{2,30}$/', trim($message))) {
+        // Filter out common greetings and non-names
+        $message_lower = strtolower(trim($message));
+        $common_greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'namaste', 'hola', 'hallo', 'start', 'begin', 'enquiry', 'admission', 'info', 'information'];
+        
+        // If no name detected, treat entire message as name if it looks like one (but not a greeting)
+        if (preg_match('/^[A-Za-z\s\.]{2,30}$/', trim($message)) && !in_array($message_lower, $common_greetings)) {
             $name = ucwords(strtolower(trim($message)));
             $this->session_manager->update_session_data($session_id, 'student_name', $name);
             return $this->get_next_step_message($session_id);
         }
         
-        return "👶 **Please provide the student's name:**\n\n" .
+        return "👶 Please provide the student's name:\n\n" .
                "Just type the student's name (e.g., 'Rahul Kumar')\n\n" .
                "Or you can provide multiple details at once:\n" .
                "Name: Rahul Kumar, Email: parent@email.com, Phone: 9876543210";
+    }
+    
+    /**
+     * Handle initial menu for WhatsApp sessions
+     */
+    private function handle_initial_menu($message, $session_id) {
+        $message_lower = strtolower(trim($message));
+        $common_greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'namaste', 'hola', 'hallo', 'start', 'begin'];
+        
+        // Handle "Talk to Human" requests
+        if (preg_match('/\b(talk.*human|speak.*human|human.*support|live.*chat)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            return $this->handle_human_support_request();
+        }
+        
+        // Check if user selected a menu option
+        if (preg_match('/^[1-5]$/', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            
+            switch ($message) {
+                case '1':
+                    $this->session_manager->update_session_data($session_id, 'selected_option', 'admission');
+                    // Ensure session is clean for admission workflow
+                    $this->session_manager->update_session_data($session_id, 'student_name', '');
+                    $this->session_manager->update_session_data($session_id, 'phone', '');
+                    $this->session_manager->update_session_data($session_id, 'email', '');
+                    $this->session_manager->update_session_data($session_id, 'grade', '');
+                    $this->session_manager->update_session_data($session_id, 'board', '');
+                    return $this->handle_name_collection("", $session_id, array());
+                    
+                case '2':
+                    $this->session_manager->update_session_data($session_id, 'selected_option', 'curriculum');
+                    $this->session_manager->update_session_data($session_id, 'info_provided', true);
+                    return $this->handle_curriculum_info();
+                    
+                case '3':
+                    $this->session_manager->update_session_data($session_id, 'selected_option', 'facilities');
+                    $this->session_manager->update_session_data($session_id, 'info_provided', true);
+                    return $this->handle_facilities_info();
+                    
+                case '4':
+                    $this->session_manager->update_session_data($session_id, 'selected_option', 'contact');
+                    $this->session_manager->update_session_data($session_id, 'info_provided', true);
+                    return $this->handle_contact_info();
+                    
+                case '5':
+                    $this->session_manager->update_session_data($session_id, 'selected_option', 'online_form');
+                    $this->session_manager->update_session_data($session_id, 'info_provided', true);
+                    return $this->handle_online_enquiry_info();
+            }
+        }
+        
+        // Check for direct option names
+        if (preg_match('/\b(admission|enquiry)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'admission');
+            return $this->handle_name_collection("", $session_id, array());
+        }
+        
+        if (preg_match('/\b(curriculum|academic|classes)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'curriculum');
+            $this->session_manager->update_session_data($session_id, 'info_provided', true);
+            return $this->handle_curriculum_info();
+        }
+        
+        if (preg_match('/\b(facilities|infrastructure)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'facilities');
+            $this->session_manager->update_session_data($session_id, 'info_provided', true);
+            return $this->handle_facilities_info();
+        }
+        
+        if (preg_match('/\b(contact|visit|phone|address)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'contact');
+            $this->session_manager->update_session_data($session_id, 'info_provided', true);
+            return $this->handle_contact_info();
+        }
+        
+        if (preg_match('/\b(online|form)\b/i', $message)) {
+            $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'online_form');
+            $this->session_manager->update_session_data($session_id, 'info_provided', true);
+            return $this->handle_online_enquiry_info();
+        }
+        
+        // Mark menu as shown and display it
+        $this->session_manager->update_session_data($session_id, 'menu_shown', true);
+        
+        // Get school name from config
+        $school_config = EduBot_School_Config::getInstance();
+        $config = $school_config->get_config();
+        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        
+        return "👋 Welcome to {$school_name}!\n\n" .
+               "I'm here to help you with all your queries. Please select an option:\n\n" .
+               "1️⃣ Admission Enquiry\n" .
+               "2️⃣ Curriculum & Classes\n" .
+               "3️⃣ Facilities\n" .
+               "4️⃣ Contact / Visit School\n" .
+               "5️⃣ Online Enquiry Form\n\n" .
+               "Simply reply with the number (1-5) or type the option name.\n\n" .
+               "Example: Type 1 for Admission Enquiry";
     }
     
     /**
@@ -262,7 +434,7 @@ class EduBot_Workflow_Manager {
             if (!empty($validation['corrected']) && $validation['corrected'] !== trim($message)) {
                 $session_data = $this->session_manager->get_session($session_id);
                 $progress = $this->get_progress_message($session_data['data'] ?? array());
-                return $progress . "\n\n💡 **I corrected your email to:** " . $validation['corrected'] . "\n\n" .
+                return $progress . "\n\n💡 I corrected your email to: " . $validation['corrected'] . "\n\n" .
                        "Proceeding to next step...\n\n" .
                        $this->get_next_step_message($session_id);
             }
@@ -271,15 +443,15 @@ class EduBot_Workflow_Manager {
         }
 
         // Email validation failed - show clear error with AI insights
-        $error_message = "❌ **Invalid Email Address**\n\n" .
+        $error_message = "❌ Invalid Email Address\n\n" .
                         "You entered: " . esc_html(trim($message)) . "\n\n";
 
         if (!empty($validation['issue'])) {
-            $error_message .= "**Issue detected:** " . esc_html($validation['issue']) . "\n\n";
+            $error_message .= "Issue detected: " . esc_html($validation['issue']) . "\n\n";
         }
 
         if (!empty($validation['corrected'])) {
-            $error_message .= "💡 **Did you mean:** " . esc_html($validation['corrected']) . "?\n\n" .
+            $error_message .= "💡 Did you mean: " . esc_html($validation['corrected']) . "?\n\n" .
                              "Reply with the corrected email or enter a different one.\n\n";
         }
 
@@ -477,8 +649,8 @@ class EduBot_Workflow_Manager {
                        "Examples: Grade 5, Class 1, Nursery, PP1";
                        
             case 'collect_board':
-                return $progress . "\n📚 **Almost done! Which educational board do you prefer?**\n\n" .
-                       "• **CBSE** • **CAIE**";
+                return $progress . "\n📚 Almost done! Which educational board do you prefer?\n\n" .
+                       "CBSE • CAIE";
                        
             case 'collect_academic_year':
                 // Get available years and show selection menu
@@ -490,12 +662,12 @@ class EduBot_Workflow_Manager {
                     $year_options .= "• " . ($idx + 1) . ": " . $year . "\n";
                 }
                 
-                return $progress . "\n📅 **Which academic year are you applying for?**\n\n" .
+                return $progress . "\n📅 Which academic year are you applying for?\n\n" .
                        $year_options . "\n" .
                        "Reply with the number (1, 2, etc.)";
                        
             case 'collect_dob':
-                return $progress . "\n📅 **Finally, please provide the student's date of birth:**\n\n" .
+                return $progress . "\n📅 Finally, please provide the student's date of birth:\n\n" .
                        "Format: DD/MM/YYYY (e.g., 16/10/2010)";
                        
             case 'ready_to_submit':
@@ -510,7 +682,7 @@ class EduBot_Workflow_Manager {
      * Generate progress message
      */
     private function get_progress_message($collected) {
-        $progress = "✅ **Information Recorded:**\n";
+        $progress = "✅ Information Recorded:\n";
         
         if (!empty($collected['student_name'])) {
             $progress .= "👶 Student: {$collected['student_name']}\n";
@@ -591,7 +763,7 @@ class EduBot_Workflow_Manager {
             $table_name = $wpdb->prefix . 'edubot_enquiries';
             
             // Get tracking data
-            $utm_data = $this->get_utm_data();
+            $utm_data = $this->get_utm_data($session_id);
             $ip_address = $this->get_client_ip();
             $user_agent = !empty($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field($_SERVER['HTTP_USER_AGENT']) : '';
             
@@ -646,8 +818,16 @@ class EduBot_Workflow_Manager {
                 error_log('EduBot Workflow Manager: Failed to save enquiry to database: ' . $wpdb->last_error);
                 throw new Exception('Database insert failed: ' . $wpdb->last_error);
             }
-            
+
             $enquiry_id = $wpdb->insert_id;
+            
+            // Trigger advanced attribution tracking
+            if (class_exists('EduBot_Advanced_Attribution_Manager')) {
+                do_action('edubot_enquiry_created', $enquiry_id, 'enquiry');
+                error_log("EduBot Attribution: Triggered enquiry conversion tracking for ID: {$enquiry_id}");
+            }
+            
+            // Note: Don't reassign $enquiry_id here as attribution actions may change $wpdb->insert_id
             error_log("EduBot Workflow Manager: Successfully saved enquiry {$enquiry_number} to database with ID {$enquiry_id}");
             
             // Trigger MCB sync (if enabled)
@@ -660,7 +840,7 @@ class EduBot_Workflow_Manager {
             
             // Save to applications table
             try {
-                $this->save_to_applications_table($collected_data, $enquiry_number);
+                $this->save_to_applications_table($collected_data, $enquiry_number, $session_id);
                 error_log("EduBot Workflow Manager: Successfully saved to applications table");
             } catch (Exception $app_error) {
                 error_log("EduBot Workflow Manager: Exception when saving to applications table: " . $app_error->getMessage());
@@ -715,12 +895,124 @@ class EduBot_Workflow_Manager {
     /**
      * Get UTM tracking data
      */
-    private function get_utm_data() {
+    private function get_utm_data($session_id = null) {
         $utm_data = array();
         $utm_params = array('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid', 'fbclid');
         
+        // First try to get UTM data from WhatsApp session if session_id is provided
+        if ($session_id && $this->is_whatsapp_session($session_id)) {
+            $session_data = $this->session_manager->get_session($session_id);
+            if (!empty($session_data)) {
+                // Handle both old flat structure and new nested data structure
+                $data_source = !empty($session_data['data']) ? $session_data['data'] : $session_data;
+                
+                // Check for individual UTM fields stored with underscore prefix
+                foreach ($utm_params as $param) {
+                    if (!empty($data_source['_' . $param])) {
+                        $utm_data[$param] = $data_source['_' . $param];
+                        error_log("EduBot get_utm_data: Found {$param} in WhatsApp session: " . $utm_data[$param]);
+                    }
+                }
+                
+                // Also check for consolidated utm_data array (for backward compatibility)
+                if (!empty($data_source['utm_data'])) {
+                    error_log("EduBot get_utm_data: Found consolidated UTM data in WhatsApp session: " . wp_json_encode($data_source['utm_data']));
+                    $utm_data = array_merge($utm_data, $data_source['utm_data']);
+                }
+                
+                // If no UTM data found in current session, search for UTM data in recent sessions for same phone
+                $phone = $data_source['_whatsapp_phone'] ?? $session_data['_whatsapp_phone'] ?? null;
+                if (empty($utm_data) && !empty($phone)) {
+                    error_log("EduBot get_utm_data: No UTM in current session, searching recent sessions for phone: {$phone}");
+                    
+                    // Search recent WhatsApp options for this phone number with UTM data
+                    global $wpdb;
+                    $recent_sessions = $wpdb->get_results($wpdb->prepare("
+                        SELECT option_name, option_value 
+                        FROM {$wpdb->options} 
+                        WHERE option_name LIKE 'whatsapp_session_%' 
+                        AND option_value LIKE %s
+                        AND option_value LIKE %s
+                        ORDER BY option_id DESC 
+                        LIMIT 10
+                    ", '%"_whatsapp_phone";s:' . strlen($phone) . ':"' . $phone . '"%', '%"_utm_source"%'));
+                    
+                    foreach ($recent_sessions as $session_row) {
+                        $recent_session_data = maybe_unserialize($session_row->option_value);
+                        if (is_array($recent_session_data)) {
+                            // Handle both old flat structure and new nested data structure
+                            $data_source = !empty($recent_session_data['data']) ? $recent_session_data['data'] : $recent_session_data;
+                            
+                            $found_utm = false;
+                            foreach ($utm_params as $param) {
+                                if (!empty($data_source['_' . $param])) {
+                                    $utm_data[$param] = $data_source['_' . $param];
+                                    $found_utm = true;
+                                    error_log("EduBot get_utm_data: Found {$param} in recent session for phone {$phone}: " . $utm_data[$param]);
+                                }
+                            }
+                            if ($found_utm) {
+                                error_log("EduBot get_utm_data: Using UTM data from recent session: " . $session_row->option_name);
+                                break; // Use the first (most recent) session with UTM data
+                            }
+                        }
+                    }
+                }
+                
+                // If still no UTM data found, look for recent campaign activity from ANY phone (time-based attribution)
+                if (empty($utm_data)) {
+                    error_log("EduBot get_utm_data: No UTM for phone {$phone}, checking recent campaign activity from any phone");
+                    
+                    // Look for any recent session with UTM data within the last 30 minutes
+                    $time_window = date('Y-m-d H:i:s', strtotime('-30 minutes'));
+                    $any_recent_sessions = $wpdb->get_results($wpdb->prepare("
+                        SELECT option_name, option_value 
+                        FROM {$wpdb->options} 
+                        WHERE option_name LIKE 'whatsapp_session_%' 
+                        AND option_value LIKE %s
+                        AND option_name NOT LIKE %s
+                        ORDER BY option_id DESC 
+                        LIMIT 5
+                    ", '%"_utm_source"%', '%_transient_%'));
+                    
+                    foreach ($any_recent_sessions as $session_row) {
+                        $recent_session_data = maybe_unserialize($session_row->option_value);
+                        if (is_array($recent_session_data)) {
+                            // Handle both old flat structure and new nested data structure
+                            $data_source = !empty($recent_session_data['data']) ? $recent_session_data['data'] : $recent_session_data;
+                            
+                            // Check if this session has recent activity (within time window)
+                            $session_time = $recent_session_data['last_updated'] ?? $recent_session_data['started'] ?? null;
+                            if ($session_time && strtotime($session_time) >= strtotime($time_window)) {
+                                $found_utm = false;
+                                $campaign_phone = $data_source['_whatsapp_phone'] ?? $data_source['_phone'] ?? 'unknown';
+                                
+                                foreach ($utm_params as $param) {
+                                    if (!empty($data_source['_' . $param])) {
+                                        $utm_data[$param] = $data_source['_' . $param];
+                                        $found_utm = true;
+                                        error_log("EduBot get_utm_data: Found {$param} from recent campaign activity (phone {$campaign_phone}): " . $utm_data[$param]);
+                                    }
+                                }
+                                
+                                if ($found_utm) {
+                                    error_log("EduBot get_utm_data: Using time-based attribution from phone {$campaign_phone} to application phone {$phone}");
+                                    break; // Use the first recent session with UTM data
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         foreach ($utm_params as $param) {
-            // First check $_GET (immediate parameters in URL)
+            // Skip if already found in session
+            if (!empty($utm_data[$param])) {
+                continue;
+            }
+            
+            // Check $_GET (immediate parameters in URL)
             if (!empty($_GET[$param])) {
                 $utm_data[$param] = sanitize_text_field($_GET[$param]);
                 error_log("EduBot get_utm_data: Found {$param} in \$_GET: " . $utm_data[$param]);
@@ -755,7 +1047,7 @@ class EduBot_Workflow_Manager {
     /**
      * Save to applications table (using Database Manager)
      */
-    private function save_to_applications_table($collected_data, $enquiry_number) {
+    private function save_to_applications_table($collected_data, $enquiry_number, $session_id = null) {
         try {
             // Use Database Manager to properly format and save application
             if (!class_exists('EduBot_Database_Manager')) {
@@ -780,8 +1072,8 @@ class EduBot_Workflow_Manager {
 
             error_log('EduBot Workflow Manager: Student data prepared: ' . wp_json_encode($student_data));
 
-            // Collect UTM data from GET parameters
-            $utm_data = $this->get_utm_data();
+            // Collect UTM data from session and GET parameters
+            $utm_data = $this->get_utm_data($session_id);
             $gclid = $utm_data['gclid'] ?? null;
             $fbclid = $utm_data['fbclid'] ?? null;
             
@@ -1779,5 +2071,170 @@ class EduBot_Workflow_Manager {
                "Call: 7702800800 / 9248111448\n" .
                "Email: admissions@epistemo.in\n\n" .
                "Or you can restart by providing your information again.";
+    }
+    
+    /**
+     * Handle curriculum information request
+     */
+    private function handle_curriculum_info() {
+        $school_config = EduBot_School_Config::getInstance();
+        $config = $school_config->get_config();
+        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        
+        return "📚 **Curriculum & Classes at {$school_name}**\n\n" .
+               "🎯 **Educational Boards:**\n" .
+               "• CBSE (Central Board of Secondary Education)\n" .
+               "• CAIE (Cambridge Assessment International Education)\n\n" .
+               "🏫 **Grade Levels:**\n" .
+               "• Early Childhood: Nursery, PP1, PP2\n" .
+               "• Primary School: Grades 1-5\n" .
+               "• Middle School: Grades 6-8\n" .
+               "• High School: Grades 9-12\n\n" .
+               "🌟 **Special Programs:**\n" .
+               "• STEAM education\n" .
+               "• Language immersion programs\n" .
+               "• Leadership development\n" .
+               "• Arts and creative expression\n\n" .
+               "Ready to start your **admission enquiry**? Type **1** or **admission**.";
+    }
+    
+    /**
+     * Handle facilities information request
+     */
+    private function handle_facilities_info() {
+        $school_config = EduBot_School_Config::getInstance();
+        $config = $school_config->get_config();
+        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        
+        return "🏢 **World-Class Facilities at {$school_name}**\n\n" .
+               "🎯 **Academic Facilities:**\n" .
+               "• Modern, technology-equipped classrooms\n" .
+               "• Advanced science and computer laboratories\n" .
+               "• Comprehensive library and media center\n" .
+               "• Maker spaces and innovation labs\n\n" .
+               "🏃‍♂️ **Sports & Recreation:**\n" .
+               "• Multi-purpose sports complex\n" .
+               "• Swimming pool and athletics track\n" .
+               "• Indoor games and fitness center\n\n" .
+               "🎭 **Creative Spaces:**\n" .
+               "• Art and music studios\n" .
+               "• Drama and performance theater\n" .
+               "• Maker spaces and innovation labs\n\n" .
+               "Ready to schedule a **campus visit**? Type **1** for admission enquiry.";
+    }
+    
+    /**
+     * Handle contact information request
+     */
+    private function handle_contact_info() {
+        return "📞 **Contact / Visit School**\n\n" .
+               "You can reach us in the following ways:\n\n" .
+               "📞 **Call Admission Office**\n" .
+               "• 7702800800 / 9248111448\n" .
+               "• Mon-Sat: 9 AM - 6 PM\n\n" .
+               "📧 **Email Us**\n" .
+               "• admissions@epistemo.in\n" .
+               "• Quick response within 2-4 hours\n\n" .
+               "🏫 **Campus Visit**\n" .
+               "• Guided campus tour\n" .
+               "• Meet faculty & principal\n" .
+               "• Q&A with admissions team\n\n" .
+               "📍 **Location**\n" .
+               "• Prime location with excellent connectivity\n\n" .
+               "Ready to start your **admission enquiry**? Type **1** or **admission**.";
+    }
+    
+    /**
+     * Handle online enquiry form information
+     */
+    private function handle_online_enquiry_info() {
+        return "🌐 **Online Enquiry Form**\n\n" .
+               "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
+               "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
+               "📋 **What you can do on the form:**\n" .
+               "• Provide detailed student information\n" .
+               "• Select preferred curriculum and grade\n" .
+               "• Specify your requirements and preferences\n" .
+               "• Upload necessary documents\n" .
+               "• Schedule a campus visit\n\n" .
+               "✅ **Benefits:**\n" .
+               "• Save time with pre-filled information\n" .
+               "• Upload documents directly\n" .
+               "• Get faster response from our team\n" .
+               "• Track your application status\n\n" .
+               "🚀 **Or continue here for instant help!**\n\n" .
+               "Type **1** to start your admission enquiry in this chat.";
+    }
+    
+    /**
+     * Handle human support/talk to human requests
+     */
+    private function handle_human_support_request() {
+        return "👨‍💼 **Talk to Human Support**\n\n" .
+               "I'd be happy to connect you with our human support team!\n\n" .
+               "📞 **Direct Contact Options:**\n" .
+               "• **Call Now:** 7702800800 / 9248111448\n" .
+               "• **Available:** Mon-Sat, 9 AM - 6 PM\n" .
+               "• **Email:** admissions@epistemo.in\n\n" .
+               "🕐 **Response Times:**\n" .
+               "• Phone calls: Immediate assistance\n" .
+               "• Email queries: Within 2-4 hours\n" .
+               "• WhatsApp: Continue chatting here\n\n" .
+               "💡 **Quick Help:**\n" .
+               "I can also help you right now with:\n" .
+               "• Admission process guidance\n" .
+               "• School information and facilities\n" .
+               "• Curriculum and fee details\n\n" .
+               "**What would you prefer?**\n" .
+               "• Type **1** to start admission enquiry here\n" .
+               "• Call the numbers above for human support\n" .
+               "• Continue asking me questions";
+    }
+    
+    /**
+     * Handle requests after information has been provided
+     */
+    private function handle_post_info_request($message, $session_id) {
+        $message_lower = strtolower(trim($message));
+        
+        // Check if they want to start admission
+        if (preg_match('/^[1]$/', $message) || preg_match('/\b(admission|enquiry|start|yes|apply)\b/i', $message)) {
+            // Clear info flags and start admission process
+            $this->session_manager->update_session_data($session_id, 'selected_option', 'admission');
+            $this->session_manager->update_session_data($session_id, 'info_provided', false);
+            return $this->handle_name_collection("", $session_id, array());
+        }
+        
+        // Check if they want more information
+        if (preg_match('/^[2-5]$/', $message)) {
+            return $this->handle_initial_menu($message, $session_id);
+        }
+        
+        // Check for specific info requests
+        if (preg_match('/\b(curriculum|academic|classes)\b/i', $message)) {
+            return $this->handle_curriculum_info();
+        }
+        
+        if (preg_match('/\b(facilities|infrastructure)\b/i', $message)) {
+            return $this->handle_facilities_info();
+        }
+        
+        if (preg_match('/\b(contact|visit|phone|address)\b/i', $message)) {
+            return $this->handle_contact_info();
+        }
+        
+        if (preg_match('/\b(online|form)\b/i', $message)) {
+            return $this->handle_online_enquiry_info();
+        }
+        
+        // Default response after info has been provided
+        return "I've shared the information you requested! 📚\n\n" .
+               "**What would you like to do next?**\n\n" .
+               "1️⃣ **Start Admission Enquiry** - Let's begin your application\n" .
+               "2️⃣ **More about Curriculum** - Academic programs details\n" .
+               "3️⃣ **School Facilities** - Infrastructure and amenities\n" .
+               "4️⃣ **Contact Information** - Get in touch with us\n" .
+               "5️⃣ **Online Form** - Fill detailed enquiry form\n\n" .
+               "Simply reply with the number or type what interests you most!";
     }
 }

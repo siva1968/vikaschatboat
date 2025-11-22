@@ -123,6 +123,11 @@ require plugin_dir_path(__FILE__) . 'includes/class-edubot-core.php';
 require plugin_dir_path(__FILE__) . 'includes/class-applications-table-fixer.php';
 
 /**
+ * Load Advanced Attribution Manager for multi-touch attribution tracking
+ */
+require plugin_dir_path(__FILE__) . 'includes/class-advanced-attribution-manager.php';
+
+/**
  * Load MCB (MyClassBoard) sync service and integration
  */
 require plugin_dir_path(__FILE__) . 'includes/class-myclassboard-integration.php';
@@ -245,12 +250,28 @@ add_action('rest_api_init', function() {
             
             $receiver = new EduBot_WhatsApp_Webhook_Receiver();
             
-            // Handle GET requests (webhook verification from Meta)
-            if ($request->get_method() === 'GET') {
-                return $receiver->verify_webhook_get($request);
-            }
+        // Handle GET requests (webhook verification from Meta)
+        if ($request->get_method() === 'GET') {
+            // Check for webhook verification parameters directly
+            $mode = $request->get_param('hub.mode');
+            $challenge = $request->get_param('hub.challenge');
+            $verify_token = $request->get_param('hub.verify_token');
+            $expected_token = get_option('edubot_whatsapp_webhook_token', '');
             
-            // Handle POST requests (incoming messages)
+            error_log('EduBot Direct: Mode=' . $mode . ', Challenge=' . $challenge . ', Token=' . $verify_token . ', Expected=' . $expected_token);
+            
+            if ($mode === 'subscribe' && $verify_token === $expected_token && !empty($expected_token)) {
+                // Clean all output buffers and return plain text
+                while (ob_get_level()) {
+                    ob_end_clean();
+                }
+                header('Content-Type: text/plain');
+                echo $challenge;
+                die();
+            } else {
+                return new WP_Error('forbidden', 'Verification failed', array('status' => 403));
+            }
+        }            // Handle POST requests (incoming messages)
             return $receiver->handle_webhook($request);
         },
         'permission_callback' => '__return_true' // Webhook needs to be public

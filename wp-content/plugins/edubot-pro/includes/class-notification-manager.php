@@ -184,22 +184,37 @@ class EduBot_Notification_Manager {
         // Send email notification
         if ($notification_settings['email_enabled'] && !empty($user_data['email'])) {
             error_log('[NOTIF-004] 📧 Sending email to: ' . $user_data['email']);
-            $this->send_parent_email($user_data['email'], $variables);
-            $this->database_manager->update_notification_status($application_id, 'email');
+            $email_result = $this->send_parent_email($user_data['email'], $variables);
+            if ($email_result) {
+                $this->database_manager->update_notification_status($application_id, 'email');
+                error_log('[NOTIF-004-SUCCESS] ✅ Email sent and status updated');
+            } else {
+                error_log('[NOTIF-004-FAILED] ❌ Email sending failed, status not updated');
+            }
         }
 
         // Send WhatsApp notification
         if ($notification_settings['whatsapp_enabled'] && !empty($user_data['phone'])) {
             error_log('[NOTIF-005] 💬 Sending WhatsApp to: ' . $user_data['phone']);
-            $this->send_parent_whatsapp($user_data['phone'], $variables);
-            $this->database_manager->update_notification_status($application_id, 'whatsapp');
+            $whatsapp_result = $this->send_parent_whatsapp($user_data['phone'], $variables);
+            if ($whatsapp_result) {
+                $this->database_manager->update_notification_status($application_id, 'whatsapp');
+                error_log('[NOTIF-005-SUCCESS] ✅ WhatsApp sent and status updated');
+            } else {
+                error_log('[NOTIF-005-FAILED] ❌ WhatsApp sending failed, status not updated');
+            }
         }
 
         // Send SMS notification
         if ($notification_settings['sms_enabled'] && !empty($user_data['phone'])) {
             error_log('[NOTIF-006] 📱 Sending SMS to: ' . $user_data['phone']);
-            $this->send_parent_sms($user_data['phone'], $variables);
-            $this->database_manager->update_notification_status($application_id, 'sms');
+            $sms_result = $this->send_parent_sms($user_data['phone'], $variables);
+            if ($sms_result) {
+                $this->database_manager->update_notification_status($application_id, 'sms');
+                error_log('[NOTIF-006-SUCCESS] ✅ SMS sent and status updated');
+            } else {
+                error_log('[NOTIF-006-FAILED] ❌ SMS sending failed, status not updated');
+            }
         }
     }
 

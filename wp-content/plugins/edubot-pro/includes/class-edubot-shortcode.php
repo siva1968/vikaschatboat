@@ -1874,13 +1874,13 @@ class EduBot_Shortcode {
             if (empty($collected_data['parent_name'])) $missing_fields[] = "👨‍👩‍👧 Parent/Guardian Name";
             
             if (!empty($missing_fields)) {
-                $response = "✅ **Information Recorded:**\n";
+                $response = "✅ Information Recorded:\n";
                 if (!empty($collected_data['student_name'])) $response .= "• Student: {$collected_data['student_name']}\n";
                 if (!empty($collected_data['email'])) $response .= "• Email: {$collected_data['email']}\n";
                 if (!empty($collected_data['phone'])) $response .= "• Phone: {$collected_data['phone']}\n";
                 if (!empty($collected_data['parent_name'])) $response .= "• Parent: {$collected_data['parent_name']}\n";
                 
-                $response .= "\n**Still needed:**\n";
+                $response .= "\nStill needed:\n";
                 foreach ($missing_fields as $field) {
                     $response .= "• {$field}\n";
                 }
@@ -1897,10 +1897,10 @@ class EduBot_Shortcode {
                    "👨‍👩‍👧 **Parent:** {$collected_data['parent_name']}\n" .
                    "📧 **Email:** {$collected_data['email']}\n" .
                    "📱 **Phone:** {$collected_data['phone']}\n\n" .
-                   "**Step 2: Academic Information** 🎓\n\n" .
+                   "Step 2: Academic Information 🎓\n\n" .
                    "Please share:\n" .
-                   "• **Grade/Class** seeking admission for\n" .
-                   "• **Board Preference** (CBSE/CAIE)\n\n" .
+                   "• Grade/Class seeking admission for\n" .
+                   "• Board Preference (CBSE/CAIE)\n\n" .
                    "You can type like:\n" .
                    "Grade 5, CBSE\n\n" .
                    "Or just tell me the grade and I'll ask about board preference.";
@@ -1965,7 +1965,7 @@ class EduBot_Shortcode {
                 }
                 
                 if (empty($collected_data['board'])) {
-                    $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
+                    $response .= "\nAvailable Boards:\nCBSE • CAIE\n";
                 }
                 
                 return $response;
@@ -2132,10 +2132,10 @@ class EduBot_Shortcode {
                        "👶 **Student:** {$collected_data['student_name']}\n" .
                        "📧 **Email:** {$collected_data['email']}\n" .
                        "📱 **Phone:** {$phone}\n\n" .
-                       "**Step 2: Academic Information** 🎓\n\n" .
+                       "Step 2: Academic Information 🎓\n\n" .
                        "Please share:\n" .
-                       "• **Grade/Class** seeking admission for\n" .
-                       "• **Board Preference** (CBSE/CAIE)\n\n" .
+                       "• Grade/Class seeking admission for\n" .
+                       "• Board Preference (CBSE/CAIE)\n\n" .
                        "You can type like:\n" .
                        "Grade 5, CBSE\n\n" .
                        "Or just tell me the grade and I'll ask about board preference.";

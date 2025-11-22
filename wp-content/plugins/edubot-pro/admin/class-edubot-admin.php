@@ -39,6 +39,12 @@ class EduBot_Admin {
         add_action('wp_ajax_edubot_simple_whatsapp_link', array($this, 'generate_simple_whatsapp_link_ajax'));
         add_action('wp_ajax_edubot_generate_webhook_token', array($this, 'generate_webhook_token_ajax'));
         
+        // Campaign management AJAX handlers
+        add_action('wp_ajax_edubot_save_campaign_template', array($this, 'save_campaign_template_ajax'));
+        add_action('wp_ajax_edubot_delete_campaign_template', array($this, 'delete_campaign_template_ajax'));
+        add_action('wp_ajax_edubot_get_campaign_template', array($this, 'get_campaign_template_ajax'));
+        add_action('wp_ajax_edubot_generate_campaign_link', array($this, 'generate_campaign_link_ajax'));
+        
         // System status AJAX handlers
         add_action('wp_ajax_edubot_clear_error_logs', array($this, 'clear_error_logs_ajax'));
         add_action('wp_ajax_edubot_run_migration', array($this, 'run_migration_ajax'));
@@ -237,6 +243,11 @@ class EduBot_Admin {
      * Add admin menu
      */
     public function add_admin_menu() {
+        // Load WhatsApp Ad Integration page class
+        if (!class_exists('EduBot_WhatsApp_Ad_Integration_Page')) {
+            require_once plugin_dir_path(__FILE__) . 'pages/whatsapp-ad-integration.php';
+        }
+        
         add_menu_page(
             __('EduBot Pro', 'edubot-pro'),
             __('EduBot Pro', 'edubot-pro'),
@@ -343,7 +354,7 @@ class EduBot_Admin {
             __('WhatsApp Ads', 'edubot-pro'),
             'manage_options',
             'edubot-whatsapp-ads',
-            array($this, 'display_whatsapp_ads_page')
+            array('EduBot_WhatsApp_Ad_Integration_Page', 'render_page')
         );
     }
 
@@ -4805,6 +4816,177 @@ class EduBot_Admin {
         }
 
         return $result;
+    }
+
+    /**
+     * Save campaign template via AJAX
+     */
+    public function save_campaign_template_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'edubot_campaign_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        // Load campaign manager
+        if (!class_exists('EduBot_WhatsApp_Campaign_Manager')) {
+            require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-whatsapp-campaign-manager.php';
+        }
+
+        $name = sanitize_text_field($_POST['name']);
+        $platform = sanitize_text_field($_POST['platform']);
+        $grades = sanitize_text_field($_POST['grades']);
+        $message = sanitize_textarea_field($_POST['message']);
+        $notes = sanitize_textarea_field($_POST['notes']);
+        $editing = sanitize_text_field($_POST['editing'] ?? '');
+
+        // Validate required fields
+        if (empty($name) || empty($platform) || empty($grades) || empty($message)) {
+            wp_send_json_error(array('message' => 'All required fields must be filled'));
+        }
+
+        try {
+            $result = EduBot_WhatsApp_Campaign_Manager::save_campaign($name, array(
+                'platform' => $platform,
+                'target_grades' => $grades,
+                'message_template' => $message,
+                'notes' => $notes
+            ), !empty($editing));
+
+            if ($result) {
+                wp_send_json_success(array('message' => 'Campaign template saved successfully'));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to save campaign template'));
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Delete campaign template via AJAX
+     */
+    public function delete_campaign_template_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'edubot_campaign_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        // Load campaign manager
+        if (!class_exists('EduBot_WhatsApp_Campaign_Manager')) {
+            require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-whatsapp-campaign-manager.php';
+        }
+
+        $name = sanitize_text_field($_POST['name']);
+
+        if (empty($name)) {
+            wp_send_json_error(array('message' => 'Campaign name is required'));
+        }
+
+        try {
+            $result = EduBot_WhatsApp_Campaign_Manager::delete_campaign($name);
+
+            if ($result) {
+                wp_send_json_success(array('message' => 'Campaign template deleted successfully'));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to delete campaign template'));
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Get campaign template data via AJAX
+     */
+    public function get_campaign_template_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'edubot_campaign_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        // Load campaign manager
+        if (!class_exists('EduBot_WhatsApp_Campaign_Manager')) {
+            require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-whatsapp-campaign-manager.php';
+        }
+
+        $name = sanitize_text_field($_POST['name']);
+
+        if (empty($name)) {
+            wp_send_json_error(array('message' => 'Campaign name is required'));
+        }
+
+        try {
+            $campaigns = EduBot_WhatsApp_Campaign_Manager::get_campaigns();
+            
+            if (isset($campaigns[$name])) {
+                $campaign_data = $campaigns[$name];
+                $campaign_data['name'] = $name;
+                wp_send_json_success($campaign_data);
+            } else {
+                wp_send_json_error(array('message' => 'Campaign template not found'));
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * Generate campaign-based WhatsApp link via AJAX
+     */
+    public function generate_campaign_link_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'edubot_campaign_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        // Load campaign manager
+        if (!class_exists('EduBot_WhatsApp_Campaign_Manager')) {
+            require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-whatsapp-campaign-manager.php';
+        }
+
+        $campaign_name = sanitize_text_field($_POST['campaign_name']);
+        $phone = sanitize_text_field($_POST['phone']);
+
+        // Validate required fields
+        if (empty($campaign_name) || empty($phone)) {
+            wp_send_json_error(array('message' => 'Campaign name and phone number are required'));
+        }
+
+        try {
+            $result = EduBot_WhatsApp_Campaign_Manager::generate_link_by_campaign($campaign_name, $phone);
+
+            if (is_wp_error($result)) {
+                wp_send_json_error(array('message' => $result->get_error_message()));
+            } else {
+                wp_send_json_success(array(
+                    'link' => $result,
+                    'campaign' => $campaign_name,
+                    'phone' => $phone
+                ));
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error: ' . $e->getMessage()));
+        }
     }
 }
 

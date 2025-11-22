@@ -48,6 +48,7 @@ class EduBot_Autoloader {
         
         // WhatsApp Ad Integration (New v1.6.0)
         'EduBot_WhatsApp_Ad_Link_Generator' => 'includes/class-whatsapp-ad-link-generator.php',
+        'EduBot_WhatsApp_Campaign_Manager' => 'includes/class-whatsapp-campaign-manager.php',
         'EduBot_WhatsApp_Session_Manager' => 'includes/class-whatsapp-session-manager.php',
         'EduBot_WhatsApp_Webhook_Receiver' => 'includes/class-whatsapp-webhook-receiver.php',
         

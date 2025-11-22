@@ -22,10 +22,19 @@ class EduBot_WhatsApp_Webhook_Receiver {
         error_log( 'EduBot: WhatsApp webhook received (v24.0)' );
         
         try {
+            // Check if this is a forwarded request from our standalone webhook
+            $user_agent = $request->get_header( 'User-Agent' );
+            $is_forwarded = strpos( $user_agent, 'WhatsApp-Webhook-Forwarder' ) !== false;
+            
             // Verify webhook signature for security (v24.0 enhancement)
-            if ( !$this->verify_webhook_signature( $request ) ) {
+            // Skip verification for forwarded requests from our trusted webhook forwarder
+            if ( !$is_forwarded && !$this->verify_webhook_signature( $request ) ) {
                 error_log( 'EduBot: Invalid webhook signature' );
                 return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 401 );
+            }
+            
+            if ( $is_forwarded ) {
+                error_log( 'EduBot: Processing forwarded WhatsApp webhook from standalone file' );
             }
             
             $data = $request->get_json_params();
@@ -153,6 +162,10 @@ class EduBot_WhatsApp_Webhook_Receiver {
      */
     private function process_incoming_message( $message_data, $webhook_value = array() ) {
         $phone = $message_data['from'] ?? '';
+        
+        // Normalize phone number - remove spaces and special characters (Meta API requirement)
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        
         $message_id = $message_data['id'] ?? '';
         $timestamp = $message_data['timestamp'] ?? '';
         $type = $message_data['type'] ?? 'text';
@@ -188,6 +201,10 @@ class EduBot_WhatsApp_Webhook_Receiver {
         
         // Store incoming message in both systems for full compatibility
         try {
+            // Load WhatsApp session manager if not already loaded
+            if ( !class_exists( 'EduBot_WhatsApp_Session_Manager' ) ) {
+                require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-whatsapp-session-manager.php';
+            }
             EduBot_WhatsApp_Session_Manager::store_message( $session_id, 'user', $message_text, $message_id );
         } catch ( Exception $e ) {
             error_log( 'EduBot WhatsApp: Could not store message in WhatsApp session: ' . $e->getMessage() );
@@ -436,6 +453,34 @@ class EduBot_WhatsApp_Webhook_Receiver {
             }
         }
         
+        // NEW SIMPLE: Try to extract [Campaign: Campaign Name] format
+        if ( preg_match( '/\[Campaign:\s*([^\]]+?)\]/', $message_text, $matches ) ) {
+            $campaign_name = trim( $matches[1] );
+            
+            // Load campaign manager to get campaign details
+            if ( !class_exists( 'EduBot_WhatsApp_Campaign_Manager' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'class-whatsapp-campaign-manager.php';
+            }
+            
+            $campaign = EduBot_WhatsApp_Campaign_Manager::get_campaign( $campaign_name );
+            
+            if ( $campaign ) {
+                // Extract UTM data from campaign configuration
+                $utm_source = str_replace( '_ads', '', $campaign['platform'] );
+                $utm_campaign = sanitize_title( $campaign_name );
+                
+                $data['platform_source'] = $utm_source;
+                $data['campaign_name'] = $campaign_name;
+                $data['utm_source'] = $utm_source;
+                $data['utm_medium'] = 'whatsapp_click_to_chat';
+                $data['utm_campaign'] = $utm_campaign;
+                
+                error_log( 'EduBot: Extracted campaign from simple format - Campaign: ' . $campaign_name . ', Platform: ' . $utm_source );
+                
+                return $data;
+            }
+        }
+        
         // LEGACY: Try to extract [Source: PLATFORM | Campaign: NAME | utm_...]
         // Kept for backwards compatibility
         if ( preg_match( '/\[Source:\s*(\w+(?:\/\w+)?)\s*\|\s*Campaign:\s*([^\|]+?)\s*\|\s*utm_source=([^&\]]+)(?:&utm_medium=([^&\]]+))?(?:&utm_campaign=([^\]]+))?\]/', $message_text, $matches ) ) {
@@ -487,9 +532,9 @@ class EduBot_WhatsApp_Webhook_Receiver {
         }
         
         // Check message text for tracking codes
-        $message_text = $this->extract_message_content( $message_data, $message_data['type'] ?? 'text' );
+        $message_text = $this->extract_message_content_v24( $message_data, $message_data['type'] ?? 'text' );
         if ( !empty( $message_text ) ) {
-            $tracking_data = $this->extract_tracking_data( $message_text );
+            $tracking_data = $this->extract_platform_from_message( $message_text );
             if ( !empty( $tracking_data['platform_source'] ) && $tracking_data['platform_source'] !== 'unknown' ) {
                 $data = array_merge( $data, $tracking_data );
             }
@@ -507,6 +552,11 @@ class EduBot_WhatsApp_Webhook_Receiver {
             require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-edubot-session-manager.php';
         }
         
+        // Load WhatsApp session manager
+        if ( !class_exists( 'EduBot_WhatsApp_Session_Manager' ) ) {
+            require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-whatsapp-session-manager.php';
+        }
+        
         $session_manager = EduBot_Session_Manager::getInstance();
         
         // Try to find existing WhatsApp session first
@@ -521,12 +571,20 @@ class EduBot_WhatsApp_Webhook_Receiver {
                 // Initialize in main session manager to maintain compatibility
                 error_log( "EduBot WhatsApp: Initializing existing WhatsApp session {$session_id} in main session manager" );
                 $session_manager->init_session( $session_id, 'admission' );
-                
-                // Store platform information
-                if ( !empty( $platform_data['platform_source'] ) ) {
-                    $session_manager->update_session_data( $session_id, '_platform', 'whatsapp' );
-                    $session_manager->update_session_data( $session_id, '_platform_source', $platform_data['platform_source'] );
+            }
+            
+            // Always store platform information when new campaign data is available
+            if ( !empty( $platform_data ) ) {
+                error_log( "EduBot WhatsApp: Storing platform data in existing session {$session_id}" );
+                foreach ( $platform_data as $key => $value ) {
+                    if ( !empty( $value ) ) {
+                        $session_manager->update_session_data( $session_id, '_' . $key, $value );
+                        error_log( "EduBot WhatsApp: Updated _{$key} = {$value} in session {$session_id}" );
+                    }
                 }
+                
+                // Also ensure basic platform info is set
+                $session_manager->update_session_data( $session_id, '_platform', 'whatsapp' );
             }
             
             return $session_id;
@@ -689,7 +747,7 @@ class EduBot_WhatsApp_Webhook_Receiver {
                 error_log( "EduBot WhatsApp: Sending message {$message_num}/{$total_messages} to {$phone}" );
                 
                 // Use same API method as web chatbot (with v24.0 support)
-                $result = $api_integrations->send_meta_whatsapp( $phone, $msg );
+                $result = $api_integrations->send_meta_whatsapp( $phone, $msg, array() );
                 
                 if ( !$result ) {
                     error_log( "EduBot WhatsApp: Failed to send message {$message_num} to {$phone}" );
@@ -711,6 +769,10 @@ class EduBot_WhatsApp_Webhook_Receiver {
                     
                     // Store outgoing message in both systems
                     try {
+                        // Load WhatsApp session manager if not already loaded
+                        if ( !class_exists( 'EduBot_WhatsApp_Session_Manager' ) ) {
+                            require_once EDUBOT_PRO_PLUGIN_PATH . 'includes/class-whatsapp-session-manager.php';
+                        }
                         EduBot_WhatsApp_Session_Manager::store_message( $session_id, 'bot', $msg );
                     } catch ( Exception $e ) {
                         error_log( 'EduBot WhatsApp: Could not store outgoing message in WhatsApp session: ' . $e->getMessage() );
@@ -826,6 +888,17 @@ class EduBot_WhatsApp_Webhook_Receiver {
                 array( '%s' )
             );
         }
+    }
+    
+    /**
+     * Process message called from standalone webhook file
+     */
+    public function process_message( $message_data, $metadata = array() ) {
+        error_log( 'EduBot WhatsApp: Processing message via standalone webhook: ' . json_encode( $message_data ) );
+        
+        // Call the existing process_incoming_message method with proper webhook value format
+        $webhook_value = array( 'metadata' => $metadata );
+        $this->process_incoming_message( $message_data, $webhook_value );
     }
     
     /**

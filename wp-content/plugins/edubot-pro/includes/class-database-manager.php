@@ -63,9 +63,18 @@ class EduBot_Database_Manager {
         }
 
         if ($result !== false) {
+            $application_id = $wpdb->insert_id;
+            
             // Log successful application save
-            do_action('edubot_application_saved', $wpdb->insert_id, $data);
-            return $wpdb->insert_id;
+            do_action('edubot_application_saved', $application_id, $data);
+            
+            // Trigger advanced attribution tracking for applications
+            if (class_exists('EduBot_Advanced_Attribution_Manager')) {
+                do_action('edubot_application_created', $application_id, 'application');
+                error_log("EduBot Attribution: Triggered application conversion tracking for ID: {$application_id}");
+            }
+            
+            return $application_id;
         }
 
         // Log failed application save
