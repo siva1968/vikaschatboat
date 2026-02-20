@@ -1882,8 +1882,8 @@ class EduBot_Workflow_Manager {
             <p style="margin: 0 0 10px 0; font-weight: bold; color: #333;">Contact Us</p>
             <p style="margin: 0; color: #666; font-size: 14px;">
                 📞 ' . esc_html($school_phone) . '<br>
-                📧 admissions@epistemo.in<br>
-                🌐 www.epistemo.in
+                📧 admissions@vikasconcept.com<br>
+                🌐 www.vikasconcept.com
             </p>
         </div>
         
@@ -2012,7 +2012,7 @@ class EduBot_Workflow_Manager {
                   "• Grade 11 - 12: Specialized programs\n\n" .
                   "📞 **For exact fees, please contact:**\n" .
                   "Call: 7702800800 / 9248111448\n" .
-                  "Email: admissions@epistemo.in\n\n";
+                  "Email: admissions@vikasconcept.com\n\n";
         
         if ($is_whatsapp) {
             $message .= "🎯 **Quick Action:**\n" .
@@ -2073,7 +2073,7 @@ class EduBot_Workflow_Manager {
         return "I encountered an issue processing your request. Let me help you continue.\n\n" .
                "📞 **For immediate assistance:**\n" .
                "Call: 7702800800 / 9248111448\n" .
-               "Email: admissions@epistemo.in\n\n" .
+               "Email: admissions@vikasconcept.com\n\n" .
                "Or you can restart by providing your information again.";
     }
     
@@ -2137,7 +2137,7 @@ class EduBot_Workflow_Manager {
                "• 7702800800 / 9248111448\n" .
                "• Mon-Sat: 9 AM - 6 PM\n\n" .
                "📧 **Email Us**\n" .
-               "• admissions@epistemo.in\n" .
+               "• admissions@vikasconcept.com\n" .
                "• Quick response within 2-4 hours\n\n" .
                "🏫 **Campus Visit**\n" .
                "• Guided campus tour\n" .
@@ -2154,7 +2154,7 @@ class EduBot_Workflow_Manager {
     private function handle_online_enquiry_info() {
         return "🌐 **Online Enquiry Form**\n\n" .
                "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
-               "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
+               "🔗 **Direct Link:** https://www.vikasconcept.com/enquiry/\n\n" .
                "📋 **What you can do on the form:**\n" .
                "• Provide detailed student information\n" .
                "• Select preferred curriculum and grade\n" .
@@ -2179,7 +2179,7 @@ class EduBot_Workflow_Manager {
                "📞 **Direct Contact Options:**\n" .
                "• **Call Now:** 7702800800 / 9248111448\n" .
                "• **Available:** Mon-Sat, 9 AM - 6 PM\n" .
-               "• **Email:** admissions@epistemo.in\n\n" .
+               "• **Email:** admissions@vikasconcept.com\n\n" .
                "🕐 **Response Times:**\n" .
                "• Phone calls: Immediate assistance\n" .
                "• Email queries: Within 2-4 hours\n" .

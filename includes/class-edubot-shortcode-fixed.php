@@ -524,7 +524,7 @@ class EduBot_Shortcode {
                                        "• Secondary: 9248111448\n" .
                                        "• Available: Mon-Sat, 9 AM - 6 PM\n\n" .
                                        "📧 **Email Communication:**\n" .
-                                       "• General Enquiries: admissions@epistemo.in\n" .
+                                       "• General Enquiries: admissions@vikasconcept.com\n" .
                                        "• Quick Response: Usually within 2-4 hours\n\n" .
                                        "🏫 **Campus Visit Options:**\n" .
                                        "• Guided Campus Tour\n" .
@@ -536,7 +536,8 @@ class EduBot_Shortcode {
                                        "• Book Campus Visit\n" .
                                        "• Virtual Tour Session\n\n" .
                                        "🌐 **Online Options:**\n" .
-                                       "• Website: https://epistemo.in\n" .
+                                       "• Website: https://www.vikasconcept.com
+" .
                                        "• Online Enquiry Form\n" .
                                        "• Virtual Admissions Session\n\n" .
                                        "How would you prefer to connect with our admission team?",
@@ -576,7 +577,7 @@ class EduBot_Shortcode {
                 'response' => "Thank you for your interest in {$school_name}! 🎓\n\n" .
                            "For immediate assistance with admissions, please contact our office:\n" .
                            "📞 Call: 7702800800 or 9248111448\n" .
-                           "📧 Email: admissions@epistemo.in\n\n" .
+                           "📧 Email: admissions@vikasconcept.com\n\n" .
                            "Our team is ready to help you with the admission process!",
                 'action' => 'contact_info',
                 'session_data' => array()
@@ -655,7 +656,7 @@ class EduBot_Shortcode {
         
         if (preg_match('/\b(contact|phone|email|address|location|visit)\b/i', $message)) {
             return array(
-                'response' => "📞 Contact us at 7702800800 or admissions@epistemo.in. We're located in a prime area with excellent connectivity. Ready to start your admission enquiry?",
+                'response' => "📞 Contact us at 7702800800 or admissions@vikasconcept.com. We're located in a prime area with excellent connectivity. Ready to start your admission enquiry?",
                 'action' => 'contact_info',
                 'session_data' => array()
             );
@@ -753,7 +754,7 @@ class EduBot_Shortcode {
                                "• You'll receive detailed information about programs and fees\n" .
                                "• Campus tour can be scheduled during the call\n\n" .
                                "📞 **For urgent queries:** 7702800800\n" .
-                               "📧 **Email:** admissions@epistemo.in\n\n" .
+                               "📧 **Email:** admissions@vikasconcept.com\n\n" .
                                "Thank you for choosing Vikas The Concept School!",
                     'action' => 'completed',
                     'session_data' => array('step' => 'completed', 'data' => $data)

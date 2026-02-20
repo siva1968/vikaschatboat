@@ -903,8 +903,8 @@ class EduBot_Workflow_Manager {
             $email_subject = "Admission Enquiry Confirmation - {$enquiry_number}";
             $email_body = $this->build_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
             
-            // Get admin email for from address - use noreply@epistemo.in (verified sender in ZeptoMail)
-            $admin_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
+            // Get admin email for from address - use info@vikasconcept.com (verified sender in ZeptoMail)
+            $admin_email = get_option('edubot_admin_contact_email', 'info@vikasconcept.com');
             
             // Prepare ZeptoMail payload
             $payload = array(
@@ -1332,7 +1332,7 @@ class EduBot_Workflow_Manager {
             </html>";
             
             // Get from email - use verified sender from ZeptoMail
-            $from_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
+            $from_email = get_option('edubot_admin_contact_email', 'info@vikasconcept.com');
             
             // Send via ZeptoMail API with correct authorization header
             $payload = array(
@@ -1549,8 +1549,8 @@ class EduBot_Workflow_Manager {
             <p style="margin: 0 0 10px 0; font-weight: bold; color: #333;">Contact Us</p>
             <p style="margin: 0; color: #666; font-size: 14px;">
                 📞 ' . esc_html($school_phone) . '<br>
-                📧 admissions@epistemo.in<br>
-                🌐 www.epistemo.in
+                📧 admissions@vikasconcept.com<br>
+                🌐 www.vikasconcept.com
             </p>
         </div>
         
@@ -1605,7 +1605,7 @@ class EduBot_Workflow_Manager {
         return "I encountered an issue processing your request. Let me help you continue.\n\n" .
                "📞 **For immediate assistance:**\n" .
                "Call: 7702800800 / 9248111448\n" .
-               "Email: admissions@epistemo.in\n\n" .
+               "Email: admissions@vikasconcept.com\n\n" .
                "Or you can restart by providing your information again.";
     }
 }

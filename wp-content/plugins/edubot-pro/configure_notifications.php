@@ -53,7 +53,7 @@ if ($current_config) {
 
     // Set admin email if not set
     if (empty($config_array['notification_settings']['admin_email'])) {
-        $admin_email = get_option('admin_email', 'admissions@epistemo.in');
+        $admin_email = get_option('admin_email', 'admissions@vikasconcept.com');
         $config_array['notification_settings']['admin_email'] = $admin_email;
         echo "✓ Set admin email to: $admin_email\n";
     }
