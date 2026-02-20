@@ -167,7 +167,6 @@ if (!defined('ABSPATH')) {
                         'curriculum' => array(
                             'label' => 'Curriculum & Classes',
                             'response' => "We offer comprehensive curriculum with experienced faculty. Our classes include:\n\n" .
-                                        "✓ Multiple boards (CBSE/ICSE/State)\n" .
                                         "✓ Modern teaching methods\n" .
                                         "✓ Regular assessments\n\n" .
                                         "Would you like to schedule a visit to learn more?",
