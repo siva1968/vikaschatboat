@@ -75,7 +75,7 @@ class EduBot_Shortcode {
                 <div class="edubot-messages" id="edubot-messages">
                     <div class="edubot-message bot-message">
                         <div class="message-content">
-                            Welcome to Epistemo Vikas Leadership School! 🏫<br><br>
+                            Welcome to Vikas The Concept School! 🏫<br><br>
                             I'm here to help with your admission enquiry. What would you like to know?
                         </div>
                     </div>
@@ -398,7 +398,7 @@ class EduBot_Shortcode {
             $request_cache = array();
             // Return immediate success to break any loop
             return array(
-                'response' => "✅ Thank you for your enquiry! Your information has been successfully recorded. Our admission team will contact you within 24 hours with detailed information about Epistemo Vikas Leadership School.",
+                'response' => "✅ Thank you for your enquiry! Your information has been successfully recorded. Our admission team will contact you within 24 hours with detailed information about Vikas The Concept School.",
                 'action' => 'complete',
                 'session_data' => array()
             );
@@ -439,7 +439,7 @@ class EduBot_Shortcode {
             
             // Get school configuration
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
             
             $response = array();
             
@@ -603,7 +603,7 @@ class EduBot_Shortcode {
     private function process_user_message_safely($message, $session_id) {
         $message_lower = strtolower(trim($message));
         $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
         
         // Get current session data
         $session_data = $this->get_conversation_session($session_id);
@@ -754,7 +754,7 @@ class EduBot_Shortcode {
                                "• Campus tour can be scheduled during the call\n\n" .
                                "📞 **For urgent queries:** 7702800800\n" .
                                "📧 **Email:** admissions@epistemo.in\n\n" .
-                               "Thank you for choosing Epistemo Vikas Leadership School!",
+                               "Thank you for choosing Vikas The Concept School!",
                     'action' => 'completed',
                     'session_data' => array('step' => 'completed', 'data' => $data)
                 );

@@ -182,7 +182,7 @@ class EduBot_Workflow_Manager {
         if (empty($collected['phone'])) return 'collect_phone';
         if (empty($collected['email'])) return 'collect_email';
         if (empty($collected['grade'])) return 'collect_grade';
-        if (empty($collected['board'])) return 'collect_board';
+        // Board defaults to CBSE - skip collection step
         
         // Check if multiple academic years are available - if yes, ask user to select
         $school_config = EduBot_School_Config::getInstance();
@@ -393,7 +393,7 @@ class EduBot_Workflow_Manager {
         // Get school name from config
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_details']['name'] ?? 'Vikas The Concept School';
         
         return "👋 Welcome to {$school_name}!\n\n" .
                "I'm here to help you with all your queries. Please select an option:\n\n" .
@@ -528,10 +528,9 @@ class EduBot_Workflow_Manager {
         if (!empty($extracted_info['grade'])) {
             $this->session_manager->update_session_data($session_id, 'grade', $extracted_info['grade']);
             
-            // Check if board was also provided
-            if (!empty($extracted_info['board'])) {
-                $this->session_manager->update_session_data($session_id, 'board', $extracted_info['board']);
-            }
+            // Auto-set board to CBSE (default); override only if user explicitly mentioned another board
+            $board = !empty($extracted_info['board']) ? $extracted_info['board'] : 'CBSE';
+            $this->session_manager->update_session_data($session_id, 'board', $board);
             
             return $this->get_next_step_message($session_id);
         }
@@ -750,7 +749,7 @@ class EduBot_Workflow_Manager {
             
             // Get school settings
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
             
             // Convert DOB from DD/MM/YYYY to YYYY-MM-DD
             $dob = '';
@@ -1200,22 +1199,14 @@ class EduBot_Workflow_Manager {
             $api_config = $wpdb->get_row(
                 "SELECT email_provider, email_api_key, email_from_address FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
             );
-            
+
             if (empty($api_config) || empty($api_config->email_api_key)) {
-                error_log("EduBot Workflow Manager: Email API not configured");
+                error_log("EduBot Workflow Manager: ZeptoMail API key not configured");
                 return false;
             }
-            
-            error_log("EduBot Workflow Manager: Email provider: {$api_config->email_provider}");
-            
-            // For ZeptoMail, use the API directly
-            if ($api_config->email_provider === 'zeptomail') {
-                return $this->send_zeptomail_email($parent_email, $enquiry_number, $school_name, $collected_data, $api_config->email_api_key);
-            }
-            
-            // Fallback for other providers
-            error_log("EduBot Workflow Manager: Unsupported email provider: {$api_config->email_provider}");
-            return false;
+
+            error_log("EduBot Workflow Manager: Sending parent email via ZeptoMail");
+            return $this->send_zeptomail_email($parent_email, $enquiry_number, $school_name, $collected_data, $api_config->email_api_key);
             
         } catch (Exception $e) {
             error_log("EduBot Workflow Manager: Exception in send_parent_confirmation_email: " . $e->getMessage());
@@ -1232,8 +1223,8 @@ class EduBot_Workflow_Manager {
             $email_subject = "Admission Enquiry Confirmation - {$enquiry_number}";
             $email_body = $this->build_parent_confirmation_email($collected_data, $enquiry_number, $school_name);
             
-            // Get admin email for from address - use noreply@epistemo.in (verified sender in ZeptoMail)
-            $admin_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
+            // Get from address from DB (verified sender in ZeptoMail)
+            $admin_email = $this->get_zeptomail_from_address();
             
             // Prepare ZeptoMail payload
             $payload = array(
@@ -1292,6 +1283,17 @@ class EduBot_Workflow_Manager {
         }
     }
     
+    /**
+     * Get verified from address for ZeptoMail from DB
+     */
+    private function get_zeptomail_from_address() {
+        global $wpdb;
+        $address = $wpdb->get_var(
+            "SELECT email_from_address FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
+        );
+        return !empty($address) ? $address : 'info@vikasconcept.com';
+    }
+
     /**
      * Send parent WhatsApp confirmation
      */
@@ -1581,15 +1583,17 @@ class EduBot_Workflow_Manager {
                 return false;
             }
             
-            // Get API key
-            $api_key = $wpdb->get_var(
-                "SELECT email_api_key FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
+            // Get API config
+            $api_config_school = $wpdb->get_row(
+                "SELECT email_provider, email_api_key, email_from_address FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
             );
-            
-            if (empty($api_key)) {
-                error_log("EduBot Workflow Manager: Email API key not configured");
+
+            if (empty($api_config_school) || empty($api_config_school->email_api_key)) {
+                error_log("EduBot Workflow Manager: ZeptoMail API key not configured for school notification");
                 return false;
             }
+
+            $api_key = $api_config_school->email_api_key;
             
             $student_name = $collected_data['student_name'] ?? 'N/A';
             $student_email = $collected_data['email'] ?? 'N/A';
@@ -1660,8 +1664,8 @@ class EduBot_Workflow_Manager {
                 </body>
             </html>";
             
-            // Get from email - use verified sender from ZeptoMail
-            $from_email = get_option('edubot_admin_contact_email', 'noreply@epistemo.in');
+            // Get from email from DB (verified sender in ZeptoMail)
+            $from_email = !empty($api_config_school->email_from_address) ? $api_config_school->email_from_address : get_option('admin_email', 'info@vikasconcept.com');
             
             // Send via ZeptoMail API with correct authorization header
             $payload = array(
@@ -1955,7 +1959,7 @@ class EduBot_Workflow_Manager {
         
         $api_integrations = new EduBot_API_Integrations();
         
-        $school_context = "You are a helpful admission assistant for Epistemo Vikas Leadership School. " .
+        $school_context = "You are a helpful admission assistant for Vikas The Concept School. " .
                          "We offer education from Nursery to Grade 12 with CBSE and CAIE (Cambridge) boards. " .
                          "Keep responses concise, friendly, and focused on admissions. " .
                          "If asked about fees, mention they vary by grade and to contact us for details.";
@@ -1979,7 +1983,7 @@ class EduBot_Workflow_Manager {
      * Get school information message
      */
     private function get_school_info_message($is_whatsapp = false) {
-        $message = "🏫 **About Epistemo Vikas Leadership School**\n\n" .
+        $message = "🏫 **About Vikas The Concept School**\n\n" .
                   "✨ Premium education from Nursery to Grade 12\n" .
                   "📚 Dual boards: CBSE & CAIE (Cambridge)\n" .
                   "🌟 Focus on leadership & holistic development\n" .
@@ -2034,7 +2038,7 @@ class EduBot_Workflow_Manager {
             $is_whatsapp = $this->is_whatsapp_session($session_id);
         }
         
-        $welcome_message = "👋 **Welcome to Epistemo Vikas Leadership School!**\n\n" .
+        $welcome_message = "👋 **Welcome to Vikas The Concept School!**\n\n" .
                           "I'll help you with your admission enquiry for **AY {$years_text}**.\n\n";
         
         if ($is_whatsapp) {
@@ -2079,7 +2083,7 @@ class EduBot_Workflow_Manager {
     private function handle_curriculum_info() {
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_details']['name'] ?? 'Vikas The Concept School';
         
         return "📚 **Curriculum & Classes at {$school_name}**\n\n" .
                "🎯 **Educational Boards:**\n" .
@@ -2104,7 +2108,7 @@ class EduBot_Workflow_Manager {
     private function handle_facilities_info() {
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_details']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_details']['name'] ?? 'Vikas The Concept School';
         
         return "🏢 **World-Class Facilities at {$school_name}**\n\n" .
                "🎯 **Academic Facilities:**\n" .

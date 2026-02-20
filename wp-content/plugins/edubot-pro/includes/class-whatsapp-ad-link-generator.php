@@ -258,7 +258,7 @@ class EduBot_WhatsApp_Ad_Link_Generator {
      */
     private function get_school_name() {
         $settings = get_option( 'edubot_pro_settings', array() );
-        return isset( $settings['school_name'] ) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        return isset( $settings['school_name'] ) ? $settings['school_name'] : 'Vikas The Concept School';
     }
     
     /**

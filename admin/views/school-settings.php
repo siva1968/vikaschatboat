@@ -157,6 +157,98 @@ if (!defined('ABSPATH')) {
             </div>
 
             <div class="edubot-card">
+                <h2>Quick Action Buttons</h2>
+                <p class="description">Configure the quick action buttons shown in the chatbot welcome message. <strong>Note:</strong> Admission Enquiry button is always enabled and cannot be modified.</p>
+                
+                <table class="form-table">
+                    <?php
+                    // Define default button configurations
+                    $default_buttons = array(
+                        'curriculum' => array(
+                            'label' => 'Curriculum & Classes',
+                            'response' => "We offer comprehensive curriculum with experienced faculty. Our classes include:\n\n" .
+                                        "✓ Multiple boards (CBSE/ICSE/State)\n" .
+                                        "✓ Modern teaching methods\n" .
+                                        "✓ Regular assessments\n\n" .
+                                        "Would you like to schedule a visit to learn more?",
+                            'enabled' => true
+                        ),
+                        'facilities' => array(
+                            'label' => 'Facilities',
+                            'response' => "Our school features:\n\n" .
+                                        "🏫 Modern infrastructure\n" .
+                                        "💻 Smart classrooms\n" .
+                                        "📚 Well-stocked library\n" .
+                                        "🏃 Sports facilities\n" .
+                                        "🔬 Science & computer labs\n\n" .
+                                        "Would you like to visit our campus?",
+                            'enabled' => true
+                        ),
+                        'contact_visit' => array(
+                            'label' => 'Contact / Visit School',
+                            'response' => "📍 Visit us at: " . get_option('edubot_school_address', 'School Address') . "\n\n" .
+                                        "📞 Call: " . get_option('edubot_school_phone', 'Contact Number') . "\n" .
+                                        "📧 Email: " . get_option('edubot_school_email', 'Email Address') . "\n" .
+                                        "🌐 Website: " . get_option('edubot_school_website', 'Website URL') . "\n\n" .
+                                        "Would you like to schedule a campus visit?",
+                            'enabled' => true
+                        ),
+                        'online_enquiry' => array(
+                            'label' => 'Online Enquiry Form',
+                            'response' => "📝 You can fill out our online enquiry form for detailed information.\n\n" .
+                                        "Our team will review your submission and get back to you within 24 hours.\n\n" .
+                                        "Click the link below to access the form:\n" .
+                                        get_option('edubot_school_website', '') . "/enquiry",
+                            'enabled' => true
+                        )
+                    );
+
+                    $button_index = 2; // Start from 2 since Admission Enquiry is #1
+                    foreach ($default_buttons as $button_key => $button_data):
+                        $saved_enabled = get_option("edubot_button_{$button_key}_enabled", $button_data['enabled']);
+                        $saved_label = get_option("edubot_button_{$button_key}_label", $button_data['label']);
+                        $saved_response = get_option("edubot_button_{$button_key}_response", $button_data['response']);
+                    ?>
+                    <tr>
+                        <th scope="row">Button <?php echo $button_index; ?>: <?php echo esc_html($button_key); ?></th>
+                        <td>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" name="edubot_button_<?php echo $button_key; ?>_enabled" value="1" <?php checked($saved_enabled); ?> style="margin-right: 8px;" />
+                                    <strong>Enable this button</strong>
+                                </label>
+                                
+                                <div style="margin-top: 10px;">
+                                    <label style="display: block; margin-bottom: 5px;"><strong>Button Label:</strong></label>
+                                    <input type="text" 
+                                           name="edubot_button_<?php echo $button_key; ?>_label" 
+                                           value="<?php echo esc_attr($saved_label); ?>" 
+                                           class="regular-text" 
+                                           placeholder="Enter button text" />
+                                </div>
+                                
+                                <div style="margin-top: 10px;">
+                                    <label style="display: block; margin-bottom: 5px;"><strong>Bot Response:</strong></label>
+                                    <textarea name="edubot_button_<?php echo $button_key; ?>_response" 
+                                              rows="5" 
+                                              class="large-text" 
+                                              placeholder="Enter the message the chatbot will display when this button is clicked"><?php echo esc_textarea($saved_response); ?></textarea>
+                                    <p class="description">Available placeholders: {school_name}, {school_phone}, {school_email}, {school_address}, {school_website}</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php 
+                        $button_index++;
+                    endforeach; 
+                    ?>
+                </table>
+                <p class="description" style="margin-top: 10px;">
+                    <strong>💡 Tip:</strong> Customize button labels and responses to match your school's information. Use placeholders to automatically insert school details.
+                </p>
+            </div>
+
+            <div class="edubot-card">
                 <h2>Notification Settings</h2>
                 <p class="description">Configure how parents receive admission enquiry confirmations</p>
                 

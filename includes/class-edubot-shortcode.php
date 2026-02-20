@@ -190,8 +190,27 @@ class EduBot_Shortcode {
             'edubot-frontend',
             EDUBOT_PRO_PLUGIN_URL . 'assets/css/frontend.css',
             array(),
-            EDUBOT_PRO_VERSION
+            EDUBOT_PRO_VERSION . '.' . time() // Force cache refresh
         );
+        
+        // Add inline styles with current colors to ensure they override any cached CSS
+        $primary_color = get_option('edubot_primary_color', '#4facfe');
+        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
+        
+        $custom_css = "
+        :root {
+            --edubot-primary-color: {$primary_color} !important;
+            --edubot-secondary-color: {$secondary_color} !important;
+            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%) !important;
+        }
+        .edubot-chatbot-widget {
+            --edubot-primary-color: {$primary_color} !important;
+            --edubot-secondary-color: {$secondary_color} !important;
+            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%) !important;
+        }
+        ";
+        
+        wp_add_inline_style('edubot-frontend', $custom_css);
         
         // Ensure the public script's AJAX object is available for shortcode usage
         if (!wp_script_is('edubot-pro', 'enqueued')) {
@@ -235,7 +254,7 @@ class EduBot_Shortcode {
         }
         
         // Set the new welcome message format
-        $new_welcome_message = "Hello! Welcome to Epistemo Vikas Leadership School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
+        $new_welcome_message = "Hello! Welcome to Vikas The Concept School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
         
         // Get configured welcome message or use new default
         $school_config = EduBot_School_Config::getInstance();
@@ -252,25 +271,51 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
-        // Force your database colors - Updated for your specific colors
+        // Get colors directly from WordPress options (where admin settings are saved)
+        $primary_color = get_option('edubot_primary_color', '#4facfe');
+        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
+        
+        // Log the colors being used for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('EduBot Chatbot Colors: Primary=' . $primary_color . ', Secondary=' . $secondary_color);
+        }
+        
         $colors = array(
-            'primary' => '#74a211',   // Your green primary color from database
-            'secondary' => '#113b02'  // Your dark green secondary color from database
+            'primary' => $primary_color,
+            'secondary' => $secondary_color
         );
-        
-        // Fallback to config/options only if not set above
-        if (empty($colors['primary'])) {
-            $colors['primary'] = isset($config['school_info']['colors']['primary']) ? $config['school_info']['colors']['primary'] : get_option('edubot_primary_color', '#4facfe');
-        }
-        if (empty($colors['secondary'])) {
-            $colors['secondary'] = isset($config['school_info']['colors']['secondary']) ? $config['school_info']['colors']['secondary'] : get_option('edubot_secondary_color', '#00f2fe');
-        }
         
         ob_start();
         ?>
-        <div id="edubot-chatbot" class="edubot-chatbot theme-<?php echo esc_attr($atts['theme']); ?> position-<?php echo esc_attr($atts['position']); ?>">
+        <!-- Force color override with unique cache-busting ID -->
+        <style id="edubot-colors-<?php echo time(); ?>">
+            #edubot-chatbot .quick-action,
+            .edubot-chatbot .quick-action,
+            .quick-action[data-action] {
+                background: <?php echo esc_attr($colors['primary']); ?> !important;
+                border-color: <?php echo esc_attr($colors['primary']); ?> !important;
+            }
+            #edubot-chatbot .quick-action:hover,
+            .edubot-chatbot .quick-action:hover,
+            .quick-action[data-action]:hover {
+                background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
+            }
+            #edubot-chatbot .edubot-chat-button,
+            .edubot-chatbot .edubot-chat-button {
+                background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
+            }
+            #edubot-chatbot .chat-header,
+            .edubot-chatbot .chat-header {
+                background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
+            }
+        </style>
+        <div id="edubot-chatbot" 
+             class="edubot-chatbot theme-<?php echo esc_attr($atts['theme']); ?> position-<?php echo esc_attr($atts['position']); ?>"
+             data-primary-color="<?php echo esc_attr($colors['primary']); ?>"
+             data-secondary-color="<?php echo esc_attr($colors['secondary']); ?>"
+             data-version="<?php echo EDUBOT_PRO_VERSION; ?>">
             <!-- Chat Button -->
             <div class="edubot-chat-button">
                 <div class="button-icon">
@@ -311,11 +356,11 @@ class EduBot_Shortcode {
                         <div class="message-content">
                             <p><?php echo esc_html($atts['welcome_message']); ?></p>
                             <div class="quick-actions">
-                                <button class="quick-action" data-action="admission">1. Admission Enquiry</button>
-                                <button class="quick-action" data-action="curriculum">2. Curriculum & Classes</button>
-                                <button class="quick-action" data-action="facilities">3. Facilities</button>
-                                <button class="quick-action" data-action="contact_visit">4. Contact / Visit School</button>
-                                <button class="quick-action" data-action="online_enquiry">5. Online Enquiry Form</button>
+                                <button class="quick-action" data-action="admission" style="background: <?php echo esc_attr($colors['primary']); ?> !important; border-color: <?php echo esc_attr($colors['primary']); ?> !important;">1. Admission Enquiry</button>
+                                <button class="quick-action" data-action="curriculum" style="background: <?php echo esc_attr($colors['primary']); ?> !important; border-color: <?php echo esc_attr($colors['primary']); ?> !important;">2. Curriculum & Classes</button>
+                                <button class="quick-action" data-action="facilities" style="background: <?php echo esc_attr($colors['primary']); ?> !important; border-color: <?php echo esc_attr($colors['primary']); ?> !important;">3. Facilities</button>
+                                <button class="quick-action" data-action="contact_visit" style="background: <?php echo esc_attr($colors['primary']); ?> !important; border-color: <?php echo esc_attr($colors['primary']); ?> !important;">4. Contact / Visit School</button>
+                                <button class="quick-action" data-action="online_enquiry" style="background: <?php echo esc_attr($colors['primary']); ?> !important; border-color: <?php echo esc_attr($colors['primary']); ?> !important;">5. Online Enquiry Form</button>
                             </div>
                         </div>
                     </div>
@@ -352,7 +397,7 @@ class EduBot_Shortcode {
             left: 20px;
         }
         .edubot-chat-button {
-            background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%);
+            background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
             color: white;
             border: none;
             border-radius: 30px;
@@ -381,7 +426,7 @@ class EduBot_Shortcode {
             flex-direction: column;
         }
         .chat-header {
-            background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%);
+            background: linear-gradient(135deg, <?php echo esc_attr($colors['primary']); ?> 0%, <?php echo esc_attr($colors['secondary']); ?> 100%) !important;
             color: white;
             padding: 20px;
             border-radius: 12px 12px 0 0;
@@ -439,7 +484,7 @@ class EduBot_Shortcode {
             width: 30px;
             height: 30px;
             border-radius: 50%;
-            background: <?php echo esc_attr($colors['primary']); ?>;
+            background: <?php echo esc_attr($colors['primary']); ?> !important;
             color: white;
             display: flex;
             align-items: center;
@@ -463,9 +508,9 @@ class EduBot_Shortcode {
             flex-direction: row-reverse;
         }
         .user-message .message-content {
-            background: <?php echo esc_attr($colors['primary']); ?>;
+            background: <?php echo esc_attr($colors['primary']); ?> !important;
             color: white;
-            border-color: <?php echo esc_attr($colors['primary']); ?>;
+            border-color: <?php echo esc_attr($colors['primary']); ?> !important;
         }
         .user-message .message-avatar {
             background: #28a745;
@@ -1173,7 +1218,7 @@ class EduBot_Shortcode {
                 }
                 
                 $settings = get_option('edubot_pro_settings', array());
-                $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+                $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
                 
                 // Get available academic years for dynamic message
                 $school_config = EduBot_School_Config::getInstance();
@@ -1203,96 +1248,128 @@ class EduBot_Shortcode {
                 
 
                 case 'curriculum':
+                    // Load configured response or use default
+                    $response_text = get_option('edubot_button_curriculum_response', 
+                        "📚 **Academic Programs & Curriculum at {$school_name}**\n\n" .
+                        "🎯 **Our Academic Approach:**\n" .
+                        "• Student-centered learning methodology\n" .
+                        "• Integrated curriculum design\n" .
+                        "• Critical thinking and problem-solving focus\n" .
+                        "• Technology-enhanced education\n\n" .
+                        "📖 **Curriculum Boards:**\n" .
+                        "• CBSE (Central Board of Secondary Education)\n" .
+                        "• CAIE (Cambridge Assessment International Education)\n\n" .
+                        "🏫 **Grade Levels:**\n" .
+                        "• Early Childhood: Nursery, PP1, PP2\n" .
+                        "• Primary School: Grades 1-5\n" .
+                        "• Middle School: Grades 6-8\n" .
+                        "• High School: Grades 9-12\n\n" .
+                        "🌟 **Special Programs:**\n" .
+                        "• STEAM education\n" .
+                        "• Language immersion programs\n" .
+                        "• Leadership development\n" .
+                        "• Arts and creative expression\n\n" .
+                        "Which grade level or subject area interests you most?\n\n" .
+                        "Ready to **start your admission enquiry**? Just type '**admission**' or click the admission button!"
+                    );
+                    
+                    // Replace placeholders
+                    $response_text = $this->replace_placeholders($response_text);
+                    
                     return array(
-                        'response' => "📚 **Academic Programs & Curriculum at {$school_name}**\n\n" .
-                                   "🎯 **Our Academic Approach:**\n" .
-                                   "• Student-centered learning methodology\n" .
-                                   "• Integrated curriculum design\n" .
-                                   "• Critical thinking and problem-solving focus\n" .
-                                   "• Technology-enhanced education\n\n" .
-                                   "📖 **Curriculum Boards:**\n" .
-                                   "• CBSE (Central Board of Secondary Education)\n" .
-                                   "• CAIE (Cambridge Assessment International Education)\n\n" .
-                                   "🏫 **Grade Levels:**\n" .
-                                   "• Early Childhood: Nursery, PP1, PP2\n" .
-                                   "• Primary School: Grades 1-5\n" .
-                                   "• Middle School: Grades 6-8\n" .
-                                   "• High School: Grades 9-12\n\n" .
-                                   "🌟 **Special Programs:**\n" .
-                                   "• STEAM education\n" .
-                                   "• Language immersion programs\n" .
-                                   "• Leadership development\n" .
-                                   "• Arts and creative expression\n\n" .
-                                   "Which grade level or subject area interests you most?\n\n" .
-                                   "Ready to **start your admission enquiry**? Just type '**admission**' or click the admission button!",
+                        'response' => $response_text,
                         'action' => 'curriculum_info',
                         'session_data' => array()
                     );
                 
                 case 'facilities':
+                    // Load configured response or use default
+                    $response_text = get_option('edubot_button_facilities_response',
+                        "🏢 **World-Class Facilities at {$school_name}**\n\n" .
+                        "🎯 **Academic Facilities:**\n" .
+                        "• Modern, well-equipped classrooms\n" .
+                        "• Advanced science laboratories\n" .
+                        "• Computer and robotics labs\n" .
+                        "• Comprehensive library and media center\n\n" .
+                        "🏃 **Sports & Recreation:**\n" .
+                        "• Multi-purpose sports complex\n" .
+                        "• Swimming pool\n" .
+                        "• Indoor and outdoor courts\n" .
+                        "• Fitness and wellness center\n\n" .
+                        "🎨 **Creative Spaces:**\n" .
+                        "• Art and design studios\n" .
+                        "• Music and performance halls\n" .
+                        "• Drama and theater facilities\n" .
+                        "• Maker spaces and innovation labs\n\n" .
+                        "🚌 **Support Services:**\n" .
+                        "• Safe transportation network\n" .
+                        "• Nutritious cafeteria meals\n" .
+                        "• Health and medical support\n" .
+                        "• 24/7 security systems\n\n" .
+                        "Would you like to schedule a campus tour to see these facilities?"
+                    );
+                    
+                    // Replace placeholders
+                    $response_text = $this->replace_placeholders($response_text);
+                    
                     return array(
-                        'response' => "🏢 **World-Class Facilities at {$school_name}**\n\n" .
-                                   "🎯 **Academic Facilities:**\n" .
-                                   "• Modern, well-equipped classrooms\n" .
-                                   "• Advanced science laboratories\n" .
-                                   "• Computer and robotics labs\n" .
-                                   "• Comprehensive library and media center\n\n" .
-                                   "🏃 **Sports & Recreation:**\n" .
-                                   "• Multi-purpose sports complex\n" .
-                                   "• Swimming pool\n" .
-                                   "• Indoor and outdoor courts\n" .
-                                   "• Fitness and wellness center\n\n" .
-                                   "🎨 **Creative Spaces:**\n" .
-                                   "• Art and design studios\n" .
-                                   "• Music and performance halls\n" .
-                                   "• Drama and theater facilities\n" .
-                                   "• Maker spaces and innovation labs\n\n" .
-                                   "🚌 **Support Services:**\n" .
-                                   "• Safe transportation network\n" .
-                                   "• Nutritious cafeteria meals\n" .
-                                   "• Health and medical support\n" .
-                                   "• 24/7 security systems\n\n" .
-                                   "Would you like to schedule a campus tour to see these facilities?",
+                        'response' => $response_text,
                         'action' => 'facilities_info',
                         'session_data' => array()
                     );
                 
                 case 'contact_visit':
+                    // Load configured response or use default
+                    $response_text = get_option('edubot_button_contact_visit_response',
+                        "🏫 **Contact / Visit {$school_name}**\n\n" .
+                        "You can reach us in the following ways:\n\n" .
+                        "📞 **Call Admission Office**\n" .
+                        "• 7702800800 / 9248111448\n\n" .
+                        "📧 **Email Us**\n" .
+                        "• admissions@epistemo.in\n\n" .
+                        "🏫 **Book a Campus Tour**\n" .
+                        "• Schedule a personalized campus visit\n\n" .
+                        "📞 **Request a Callback**\n" .
+                        "• We'll call you at your convenience\n\n" .
+                        "How would you like to connect with us?"
+                    );
+                    
+                    // Replace placeholders
+                    $response_text = $this->replace_placeholders($response_text);
+                    
                     return array(
-                        'response' => "🏫 **Contact / Visit {$school_name}**\n\n" .
-                                   "You can reach us in the following ways:\n\n" .
-                                   "📞 **Call Admission Office**\n" .
-                                   "• 7702800800 / 9248111448\n\n" .
-                                   "📧 **Email Us**\n" .
-                                   "• admissions@epistemo.in\n\n" .
-                                   "🏫 **Book a Campus Tour**\n" .
-                                   "• Schedule a personalized campus visit\n\n" .
-                                   "📞 **Request a Callback**\n" .
-                                   "• We'll call you at your convenience\n\n" .
-                                   "How would you like to connect with us?",
+                        'response' => $response_text,
                         'action' => 'contact_info',
                         'session_data' => array()
                     );
                 
 
                 case 'online_enquiry':
+                    // Load configured response or use default
+                    $response_text = get_option('edubot_button_online_enquiry_response',
+                        "🌐 **Online Enquiry Form**\n\n" .
+                        "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
+                        "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
+                        "📋 **What you can do on the form:**\n" .
+                        "• Provide detailed student information\n" .
+                        "• Select preferred curriculum and grade\n" .
+                        "• Specify your requirements and preferences\n" .
+                        "• Upload necessary documents\n" .
+                        "• Schedule a campus visit\n\n" .
+                        "✅ **Benefits:**\n" .
+                        "• Save time with pre-filled information\n" .
+                        "• Upload documents directly\n" .
+                        "• Get faster response from our team\n" .
+                        "• Track your application status\n\n" .
+                        "🚀 **Click the link above to get started!**\n\n" .
+                        "If you prefer, I can also help you with the admission process right here in the chat. Just let me know!"
+                    );
+                    
+                    // Replace placeholders
+                    $response_text = $this->replace_placeholders($response_text);
+                    
                     return array(
-                        'response' => "🌐 **Online Enquiry Form**\n\n" .
-                                   "For your convenience, you can fill out our detailed online enquiry form:\n\n" .
-                                   "🔗 **Direct Link:** https://epistemo.in/enquiry/\n\n" .
-                                   "📋 **What you can do on the form:**\n" .
-                                   "• Provide detailed student information\n" .
-                                   "• Select preferred curriculum and grade\n" .
-                                   "• Specify your requirements and preferences\n" .
-                                   "• Upload necessary documents\n" .
-                                   "• Schedule a campus visit\n\n" .
-                                   "✅ **Benefits:**\n" .
-                                   "• Save time with pre-filled information\n" .
-                                   "• Upload documents directly\n" .
-                                   "• Get faster response from our team\n" .
-                                   "• Track your application status\n\n" .
-                                   "🚀 **Click the link above to get started!**\n\n" .
-                                   "If you prefer, I can also help you with the admission process right here in the chat. Just let me know!",
+                        'response' => $response_text,
                         'action' => 'online_enquiry_info',
                         'session_data' => array()
                     );
@@ -1380,7 +1457,7 @@ class EduBot_Shortcode {
         } catch (Exception $e) {
             error_log('EduBot Error in generate_response: ' . $e->getMessage());
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
             return array(
                 'response' => "Thank you for your interest in {$school_name}! For immediate assistance, please contact our admission office at 7702800800 or email admissions@epistemo.in",
                 'action' => 'error_fallback',
@@ -1394,7 +1471,7 @@ class EduBot_Shortcode {
      */
     private function get_flow_welcome_message($flow_type, $topic = null) {
         $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
         
         switch ($flow_type) {
             case 'admission':
@@ -1527,7 +1604,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         $message_lower = strtolower($message);
         
         // Get conversation session data
@@ -2280,7 +2357,7 @@ class EduBot_Shortcode {
      */
     private function process_user_message_safely($message, $session_id) {
         $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
         
         // Check if this message contains personal information and redirect to admission flow
         $personal_info = $this->parse_personal_info($message);
@@ -2795,7 +2872,7 @@ class EduBot_Shortcode {
             
             // Get school name
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+            $school_name = $settings['school_name'] ?? 'Vikas The Concept School';
             
             // Save to database - ensure table exists first
             $table_name = $wpdb->prefix . 'edubot_enquiries';
@@ -4277,7 +4354,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         $message_lower = strtolower($message);
         
         // Get conversation session data
@@ -5153,7 +5230,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
         // Get session data for conversation context
         $session_data = $this->get_conversation_session($session_id);
@@ -5244,7 +5321,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
         // Add action buttons if response doesn't already contain strong calls to action
         $message_lower = strtolower($original_message);
@@ -6513,6 +6590,21 @@ Reply STOP to unsubscribe");
         }
         
         return $utm_data;
+    }
+
+    /**
+     * Replace placeholders in button response text with actual school data
+     */
+    private function replace_placeholders($text) {
+        $replacements = array(
+            '{school_name}' => get_option('edubot_school_name', 'Our School'),
+            '{school_phone}' => get_option('edubot_school_phone', ''),
+            '{school_email}' => get_option('edubot_school_email', ''),
+            '{school_address}' => get_option('edubot_school_address', ''),
+            '{school_website}' => get_option('edubot_school_website', '')
+        );
+        
+        return str_replace(array_keys($replacements), array_values($replacements), $text);
     }
 }
 

@@ -31,7 +31,7 @@ class EduBot_Public {
             $this->plugin_name,
             EDUBOT_PRO_PLUGIN_URL . 'public/css/edubot-public.css',
             array(),
-            $this->version,
+            $this->version . '.' . time(), // Force cache refresh
             'all'
         );
 
@@ -83,19 +83,15 @@ class EduBot_Public {
      * Add custom branding styles
      */
     private function add_custom_branding_styles() {
-        // Generate CSS directly to avoid branding manager loops
-        $school_config = EduBot_School_Config::getInstance();
-        $config = $school_config->get_config();
-        
-        // Force your database colors - Updated for your specific colors
-        $primary_color = '#74a211';   // Your green primary color from database
-        $secondary_color = '#113b02'; // Your dark green secondary color from database
+        // Get colors from WordPress options (where admin saves them)
+        $primary_color = get_option('edubot_primary_color', '#4facfe');
+        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
         
         $custom_css = "
         :root {
-            --edubot-primary-color: {$primary_color};
-            --edubot-secondary-color: {$secondary_color};
-            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%);
+            --edubot-primary-color: {$primary_color} !important;
+            --edubot-secondary-color: {$secondary_color} !important;
+            --edubot-gradient: linear-gradient(135deg, {$primary_color} 0%, {$secondary_color} 100%) !important;
         }
         ";
         
@@ -111,9 +107,9 @@ class EduBot_Public {
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
         
-        // Force your database colors - Updated for your specific colors
-        $primary_color = '#74a211';   // Your green primary color from database
-        $secondary_color = '#113b02'; // Your dark green secondary color from database
+        // Get colors from WordPress options (where admin saves them)
+        $primary_color = get_option('edubot_primary_color', '#4facfe');
+        $secondary_color = get_option('edubot_secondary_color', '#00f2fe');
         
         $colors = array(
             'primary' => $primary_color,
@@ -155,14 +151,14 @@ class EduBot_Public {
             flex-direction: column;
             gap: 8px;
         }
-        /* Maximum specificity selectors for your database colors */
+        /* Maximum specificity selectors - uses CSS variables from branding */
         .edubot-chat-container .edubot-quick-actions .edubot-quick-action,
         #edubot-chat-container .edubot-quick-actions .edubot-quick-action,
         div.edubot-chat-container .edubot-quick-actions button.edubot-quick-action {
-            background: #74a211 !important;
-            background-color: #74a211 !important;
-            border: 1px solid #74a211 !important;
-            border-color: #74a211 !important;
+            background: var(--edubot-primary-color) !important;
+            background-color: var(--edubot-primary-color) !important;
+            border: 1px solid var(--edubot-primary-color) !important;
+            border-color: var(--edubot-primary-color) !important;
             border-radius: 6px !important;
             padding: 12px 16px !important;
             font-size: 14px !important;
@@ -176,11 +172,11 @@ class EduBot_Public {
         .edubot-chat-container .edubot-quick-actions .edubot-quick-action:hover,
         #edubot-chat-container .edubot-quick-actions .edubot-quick-action:hover,
         div.edubot-chat-container .edubot-quick-actions button.edubot-quick-action:hover {
-            background: linear-gradient(135deg, #74a211 0%, #113b02 100%) !important;
-            background-color: #74a211 !important;
-            border-color: #74a211 !important;
+            background: var(--edubot-gradient) !important;
+            background-color: var(--edubot-primary-color) !important;
+            border-color: var(--edubot-primary-color) !important;
             transform: translateY(-2px) !important;
-            box-shadow: 0 4px 8px rgba(116, 162, 17, 0.25) !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25) !important;
         }
         .edubot-quick-action:active {
             transform: translateY(0);
@@ -332,11 +328,44 @@ class EduBot_Public {
                             <div class="edubot-message-content">
                                 <?php echo esc_html($config['chatbot_settings']['welcome_message']); ?>
                                 <div class="edubot-quick-actions">
-                                    <button class="edubot-quick-action" data-action="admission">1) Admission Enquiry</button>
-                                    <button class="edubot-quick-action" data-action="curriculum">2) Curriculum & Classes</button>
-                                    <button class="edubot-quick-action" data-action="facilities">3) Facilities</button>
-                                    <button class="edubot-quick-action" data-action="contact_visit">4) Contact / Visit School</button>
-                                    <button class="edubot-quick-action" data-action="online_enquiry">5) Online Enquiry Form</button>
+                                    <?php
+                                    // Always show Admission Enquiry button first
+                                    echo '<button class="edubot-quick-action" data-action="admission">1) Admission Enquiry</button>';
+                                    
+                                    // Load configurable buttons
+                                    $button_configs = array(
+                                        'curriculum' => array(
+                                            'action' => 'curriculum',
+                                            'default_label' => 'Curriculum & Classes'
+                                        ),
+                                        'facilities' => array(
+                                            'action' => 'facilities',
+                                            'default_label' => 'Facilities'
+                                        ),
+                                        'contact_visit' => array(
+                                            'action' => 'contact_visit',
+                                            'default_label' => 'Contact / Visit School'
+                                        ),
+                                        'online_enquiry' => array(
+                                            'action' => 'online_enquiry',
+                                            'default_label' => 'Online Enquiry Form'
+                                        )
+                                    );
+                                    
+                                    $button_number = 2; // Start from 2 since Admission is #1
+                                    foreach ($button_configs as $key => $button_config) {
+                                        $enabled = get_option("edubot_button_{$key}_enabled", true);
+                                        
+                                        if ($enabled) {
+                                            $label = get_option("edubot_button_{$key}_label", $button_config['default_label']);
+                                            $action = $button_config['action'];
+                                            
+                                            echo '<button class="edubot-quick-action" data-action="' . esc_attr($action) . '">' 
+                                                 . esc_html($button_number . ') ' . $label) . '</button>';
+                                            $button_number++;
+                                        }
+                                    }
+                                    ?>
                                 </div>
                             </div>
                         </div>

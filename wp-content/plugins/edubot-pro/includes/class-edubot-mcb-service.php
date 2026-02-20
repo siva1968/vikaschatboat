@@ -657,6 +657,7 @@ class EduBot_MCB_Service {
             'google display' => '270',
             'google search' => '269',
             'instagram' => '268',
+            'whatsapp' => '273',  // WhatsApp ads/messages - using chat bot ID
             'ebook' => '274',
             'linkedin' => '267',
             'chat bot' => '273',

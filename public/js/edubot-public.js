@@ -440,12 +440,25 @@
             // First decode any existing HTML entities from WordPress
             var decoded = decodeHtml(message);
             
-            // Then escape only if needed (for user input, not server responses)
-            // Since this is a server response, we trust it and just format it
-            return decoded
+            // Format message with markdown and convert URLs to links
+            var formatted = decoded
                 .replace(/\n/g, '<br>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            // Convert URLs to clickable links
+            // Match URLs starting with http://, https://, or www.
+            var urlPattern = /(https?:\/\/[^\s<]+)|(www\.[^\s<]+)/gi;
+            formatted = formatted.replace(urlPattern, function(url) {
+                var href = url;
+                // Add protocol if missing (for www. links)
+                if (url.indexOf('http') !== 0) {
+                    href = 'http://' + url;
+                }
+                return '<a href="' + href + '" target="_blank" rel="noopener noreferrer" style="color: #0073aa; text-decoration: underline;">' + url + '</a>';
+            });
+            
+            return formatted;
         },
 
         // Show typing indicator

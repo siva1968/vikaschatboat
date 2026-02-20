@@ -299,7 +299,6 @@ class EduBot_WhatsApp_Ad_Integration_Page {
                                 <option value="Grade 2">Grade 2</option>
                                 <option value="Grade 3">Grade 3</option>
                                 <option value="Grade 4">Grade 4</option>
-                                <option value="Grade 5">Grade 5</option>
                                 <option value="Grade 6,Grade 7,Grade 8">Middle School</option>
                                 <option value="Grade 9,Grade 10">High School</option>
                                 <option value="Grade 11,Grade 12">Senior School</option>

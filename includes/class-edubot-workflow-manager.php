@@ -88,7 +88,7 @@ class EduBot_Workflow_Manager {
         if (empty($collected['phone'])) return 'collect_phone';
         if (empty($collected['email'])) return 'collect_email';
         if (empty($collected['grade'])) return 'collect_grade';
-        if (empty($collected['board'])) return 'collect_board';
+        // Board defaults to CBSE - skip collection step
         
         // Check if multiple academic years are available - if yes, ask user to select
         $school_config = EduBot_School_Config::getInstance();
@@ -149,7 +149,7 @@ class EduBot_Workflow_Manager {
         }
         
         // Extract board
-        if (preg_match('/\b(cbse|caie|cambridge|icse|state|igcse)\b/i', $message, $matches)) {
+        if (preg_match('/\b(cbse|icse|state|igcse)\b/i', $message, $matches)) {
             $info['board'] = strtoupper($matches[1]);
         }
         
@@ -321,22 +321,20 @@ class EduBot_Workflow_Manager {
         if (!empty($extracted_info['grade'])) {
             $this->session_manager->update_session_data($session_id, 'grade', $extracted_info['grade']);
             
-            // Check if board was also provided
-            if (!empty($extracted_info['board'])) {
-                $this->session_manager->update_session_data($session_id, 'board', $extracted_info['board']);
-            }
+            // Auto-set board to CBSE (default); override only if user explicitly mentioned another board
+            $board = !empty($extracted_info['board']) ? $extracted_info['board'] : 'CBSE';
+            $this->session_manager->update_session_data($session_id, 'board', $board);
             
             return $this->get_next_step_message($session_id);
         }
         
         return "🎓 **Which grade/class are you seeking admission for?**\n\n" .
                "Examples:\n" .
-               "• Grade 5\n" .
                "• Class 1\n" .
                "• Nursery\n" .
                "• PP1/PP2\n" .
                "• LKG/UKG\n\n" .
-               "You can also mention the board: 'Grade 5, CBSE'";
+               "You can also mention the board: 'Class 1, CBSE'";
     }
     
     /**
@@ -350,7 +348,7 @@ class EduBot_Workflow_Manager {
         
         // Check for board in simple text
         $message_upper = strtoupper(trim($message));
-        if (in_array($message_upper, array('CBSE', 'CAIE', 'CAMBRIDGE', 'ICSE', 'STATE', 'IGCSE'))) {
+        if (in_array($message_upper, array('CBSE', 'ICSE', 'STATE', 'IGCSE'))) {
             $this->session_manager->update_session_data($session_id, 'board', $message_upper);
             return $this->get_next_step_message($session_id);
         }
@@ -358,8 +356,8 @@ class EduBot_Workflow_Manager {
         return "📚 **Which educational board do you prefer?**\n\n" .
                "Available options:\n" .
                "• **CBSE** - Central Board of Secondary Education\n" .
-               "• **CAIE** - Cambridge Assessment International Education\n\n" .
-               "Just type 'CBSE' or 'CAIE'";
+               "• **ICSE** - Indian Certificate of Secondary Education\n\n" .
+               "Just type 'CBSE' or 'ICSE'";
     }
     
     /**
@@ -439,11 +437,11 @@ class EduBot_Workflow_Manager {
                        
             case 'collect_grade':
                 return $progress . "\n🎓 **Excellent! Which grade/class are you seeking admission for?**\n\n" .
-                       "Examples: Grade 5, Class 1, Nursery, PP1";
+                       "Examples: Class 1, Nursery, PP1, LKG";
                        
             case 'collect_board':
                 return $progress . "\n📚 **Almost done! Which educational board do you prefer?**\n\n" .
-                       "• **CBSE** • **CAIE**";
+                       "• **CBSE** • **ICSE**";
                        
             case 'collect_academic_year':
                 // Get available years and show selection menu
@@ -543,7 +541,7 @@ class EduBot_Workflow_Manager {
             
             // Get school settings
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
             
             // Convert DOB from DD/MM/YYYY to YYYY-MM-DD
             $dob = '';
@@ -1591,7 +1589,7 @@ class EduBot_Workflow_Manager {
         $available_years = $school_config->get_available_academic_years();
         $years_text = implode(' & ', $available_years);
         
-        return "👋 **Welcome to Epistemo Vikas Leadership School!**\n\n" .
+        return "👋 **Welcome to Vikas The Concept School!**\n\n" .
                "I'll help you with your admission enquiry for **AY {$years_text}**.\n\n" .
                "Please provide:\n" .
                "👶 Student Name\n" .

@@ -1165,6 +1165,28 @@ class EduBot_Admin {
                 }
             }
             
+            // Save quick action button configurations
+            $button_keys = array('curriculum', 'facilities', 'contact_visit', 'online_enquiry');
+            foreach ($button_keys as $button_key) {
+                // Save enabled status
+                $enabled = isset($_POST["edubot_button_{$button_key}_enabled"]) ? 1 : 0;
+                $this->safe_update_option("edubot_button_{$button_key}_enabled", $enabled);
+                
+                // Save button label
+                if (isset($_POST["edubot_button_{$button_key}_label"])) {
+                    $label = sanitize_text_field($_POST["edubot_button_{$button_key}_label"]);
+                    $this->safe_update_option("edubot_button_{$button_key}_label", $label);
+                }
+                
+                // Save button response
+                if (isset($_POST["edubot_button_{$button_key}_response"])) {
+                    $response = sanitize_textarea_field($_POST["edubot_button_{$button_key}_response"]);
+                    $this->safe_update_option("edubot_button_{$button_key}_response", $response);
+                }
+                
+                error_log("EduBot: Saved button config for {$button_key}: enabled={$enabled}");
+            }
+            
             // Process and validate boards configuration
             $boards_data = array();
             if (isset($_POST['edubot_boards']) && is_array($_POST['edubot_boards'])) {

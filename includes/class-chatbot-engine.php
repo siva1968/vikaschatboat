@@ -202,7 +202,7 @@ class EduBot_Chatbot_Engine {
      * Handle greeting and initial interaction
      */
     private function handle_greeting($message, $session, $config) {
-        $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
         
         $welcome_message = "Hello! Welcome to " . $school_name . "\n\n" .
             "We're glad you reached out to us. Seems like you're looking to join a school with a great learning environment. How may we help you today?";
@@ -259,7 +259,7 @@ class EduBot_Chatbot_Engine {
      */
     public function start_admission_process($session, $config) {
         try {
-            $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
+            $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
             
             $response_message = "🎓 Welcome to {$school_name} Admission Process!\n\n" .
                 "I'll help you with your admission enquiry and collect the necessary information. Let's start:\n\n" .
@@ -567,7 +567,7 @@ class EduBot_Chatbot_Engine {
             $this->save_admission_enquiry($admission_record);
             
             $data = $session['admission_data'];
-            $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
+            $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
             
             $success_message = "🎉 **Admission Enquiry Submitted Successfully!**\n\n" .
                              "📋 **Enquiry Number: {$enquiry_number}**\n\n" .
@@ -868,7 +868,7 @@ class EduBot_Chatbot_Engine {
      */
     private function show_application_summary($session, $config) {
         $user_data = $session['user_data'];
-        $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
         
         $summary_message = "Perfect! Here's a summary of your application:\n\n";
         $summary_message .= "🎓 School: " . $school_name . "\n";
@@ -897,7 +897,7 @@ class EduBot_Chatbot_Engine {
      * Add career info method
      */
     private function provide_career_info($session, $config) {
-        $school_name = $config['school_info']['name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
         $phone = $config['school_info']['contact_info']['phone'] ?? 'Contact us';
         $email = $config['school_info']['contact_info']['email'] ?? 'Not available';
         

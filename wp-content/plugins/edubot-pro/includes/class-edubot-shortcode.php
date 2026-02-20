@@ -235,7 +235,7 @@ class EduBot_Shortcode {
         }
         
         // Set the new welcome message format
-        $new_welcome_message = "Hello! Welcome to Epistemo Vikas Leadership School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
+        $new_welcome_message = "Hello! Welcome to Vikas The Concept School. We are currently accepting applications for AY 2026–27.\n\nHow can I help you today?\n\n1. Admission Enquiry\n2. Curriculum & Classes\n3. Facilities\n4. Contact / Visit School\n5. Online Enquiry Form";
         
         // Get configured welcome message or use new default
         $school_config = EduBot_School_Config::getInstance();
@@ -252,7 +252,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
         // Force your database colors - Updated for your specific colors
         $colors = array(
@@ -1173,7 +1173,7 @@ class EduBot_Shortcode {
                 }
                 
                 $settings = get_option('edubot_pro_settings', array());
-                $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+                $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
                 
                 // Get available academic years for dynamic message
                 $school_config = EduBot_School_Config::getInstance();
@@ -1380,7 +1380,7 @@ class EduBot_Shortcode {
         } catch (Exception $e) {
             error_log('EduBot Error in generate_response: ' . $e->getMessage());
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+            $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
             return array(
                 'response' => "Thank you for your interest in {$school_name}! For immediate assistance, please contact our admission office at 7702800800 or email admissions@epistemo.in",
                 'action' => 'error_fallback',
@@ -1394,7 +1394,7 @@ class EduBot_Shortcode {
      */
     private function get_flow_welcome_message($flow_type, $topic = null) {
         $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
         
         switch ($flow_type) {
             case 'admission':
@@ -1527,7 +1527,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         $message_lower = strtolower($message);
         
         // Get conversation session data
@@ -2280,7 +2280,7 @@ class EduBot_Shortcode {
      */
     private function process_user_message_safely($message, $session_id) {
         $settings = get_option('edubot_pro_settings', array());
-        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Epistemo Vikas Leadership School';
+        $school_name = isset($settings['school_name']) ? $settings['school_name'] : 'Vikas The Concept School';
         
         // Check if this message contains personal information and redirect to admission flow
         $personal_info = $this->parse_personal_info($message);
@@ -2795,7 +2795,7 @@ class EduBot_Shortcode {
             
             // Get school name
             $settings = get_option('edubot_pro_settings', array());
-            $school_name = $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+            $school_name = $settings['school_name'] ?? 'Vikas The Concept School';
             
             // Save to database - ensure table exists first
             $table_name = $wpdb->prefix . 'edubot_enquiries';
@@ -4277,7 +4277,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         $message_lower = strtolower($message);
         
         // Get conversation session data
@@ -5153,7 +5153,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
         // Get session data for conversation context
         $session_data = $this->get_conversation_session($session_id);
@@ -5244,7 +5244,7 @@ class EduBot_Shortcode {
         $settings = get_option('edubot_pro_settings', array());
         $school_config = EduBot_School_Config::getInstance();
         $config = $school_config->get_config();
-        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Epistemo Vikas Leadership School';
+        $school_name = $config['school_info']['name'] ?? $settings['school_name'] ?? 'Vikas The Concept School';
         
         // Add action buttons if response doesn't already contain strong calls to action
         $message_lower = strtolower($original_message);

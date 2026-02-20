@@ -105,7 +105,7 @@ echo "<h2>📱 Expected WhatsApp Message</h2>";
 echo "<pre style='background: #f0f0f0; padding: 15px; border-radius: 4px;'>";
 echo "Dear [Student Name],
 
-Thank you for your enquiry at Epistemo Vikas Leadership School.
+Thank you for your enquiry at Vikas The Concept School.
 Your enquiry number is [ENQ2025XXXX] for Grade [Grade].
 
 We have received your application and will contact you within 24-48 hours.
