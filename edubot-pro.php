@@ -256,6 +256,19 @@ add_action('rest_api_init', function() {
         'permission_callback' => '__return_true' // Webhook needs to be public
     ));
     
+    // MSG91 WhatsApp Chatbot Webhook
+    register_rest_route('edubot/v1', '/msg91-webhook', array(
+        'methods'             => 'POST',
+        'callback'            => function( $request ) {
+            if ( ! class_exists( 'EduBot_MSG91_Webhook_Receiver' ) ) {
+                require_once plugin_dir_path( __FILE__ ) . 'includes/class-msg91-webhook-receiver.php';
+            }
+            $receiver = new EduBot_MSG91_Webhook_Receiver();
+            return $receiver->handle_webhook( $request );
+        },
+        'permission_callback' => '__return_true',  // Public — MSG91 POSTs without auth
+    ));
+
     // Generate WhatsApp Link endpoint
     register_rest_route('edubot/v1', '/whatsapp-generate-link', array(
         'methods' => 'POST',

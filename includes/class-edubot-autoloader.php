@@ -50,6 +50,7 @@ class EduBot_Autoloader {
         'EduBot_WhatsApp_Ad_Link_Generator' => 'includes/class-whatsapp-ad-link-generator.php',
         'EduBot_WhatsApp_Session_Manager' => 'includes/class-whatsapp-session-manager.php',
         'EduBot_WhatsApp_Webhook_Receiver' => 'includes/class-whatsapp-webhook-receiver.php',
+        'EduBot_MSG91_Webhook_Receiver'    => 'includes/class-msg91-webhook-receiver.php',
         
         // Utility classes
         'EduBot_Logger' => 'includes/class-edubot-logger.php',
