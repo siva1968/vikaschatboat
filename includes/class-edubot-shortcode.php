@@ -1275,8 +1275,7 @@ class EduBot_Shortcode {
                         "• Critical thinking and problem-solving focus\n" .
                         "• Technology-enhanced education\n\n" .
                         "📖 **Curriculum Boards:**\n" .
-                        "• CBSE (Central Board of Secondary Education)\n" .
-                        "• CAIE (Cambridge Assessment International Education)\n\n" .
+                        "• CBSE (Central Board of Secondary Education)\n\n" .
                         "🏫 **Grade Levels:**\n" .
                         "• Early Childhood: Nursery, PP1, PP2\n" .
                         "• Primary School: Grades 1-5\n" .
@@ -1307,18 +1306,13 @@ class EduBot_Shortcode {
                         "🎯 **Academic Facilities:**\n" .
                         "• Modern, well-equipped classrooms\n" .
                         "• Advanced science laboratories\n" .
-                        "• Computer and robotics labs\n" .
                         "• Comprehensive library and media center\n\n" .
                         "🏃 **Sports & Recreation:**\n" .
                         "• Multi-purpose sports complex\n" .
-                        "• Swimming pool\n" .
                         "• Indoor and outdoor courts\n" .
                         "• Fitness and wellness center\n\n" .
-                        "🎨 **Creative Spaces:**\n" .
-                        "• Art and design studios\n" .
-                        "• Music and performance halls\n" .
-                        "• Drama and theater facilities\n" .
-                        "• Maker spaces and innovation labs\n\n" .
+                        "🎵 **Arts & Activities:**\n" .
+                        "• Music and performance halls\n\n" .
                         "🚌 **Support Services:**\n" .
                         "• Safe transportation network\n" .
                         "• Nutritious cafeteria meals\n" .
@@ -1995,7 +1989,7 @@ class EduBot_Shortcode {
                    "**Step 2: Academic Information** 🎓\n\n" .
                    "Please share:\n" .
                    "• **Grade/Class** seeking admission for\n" .
-                   "• **Board Preference** (CBSE/CAIE)\n\n" .
+                   "• **Board Preference** (CBSE)\n\n" .
                    "You can type like:\n" .
                    "Grade 5, CBSE\n\n" .
                    "Or just tell me the grade and I'll ask about board preference.";
@@ -2021,7 +2015,7 @@ class EduBot_Shortcode {
                        "Please enter a valid grade like:\n" .
                        "• Grade 5, CBSE\n" .
                        "• Nursery\n" .
-                       "• Grade 10, CAIE\n\n" .
+                       "• Grade 10, CBSE\n\n" .
                        "Try again:";
             }
         }
@@ -2060,7 +2054,7 @@ class EduBot_Shortcode {
                 }
                 
                 if (empty($collected_data['board'])) {
-                    $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
+                    $response .= "\n**Available Boards:**\n• **CBSE**\n";
                 }
                 
                 return $response;
@@ -2230,7 +2224,7 @@ class EduBot_Shortcode {
                        "**Step 2: Academic Information** 🎓\n\n" .
                        "Please share:\n" .
                        "• **Grade/Class** seeking admission for\n" .
-                       "• **Board Preference** (CBSE/CAIE)\n\n" .
+                       "• **Board Preference** (CBSE)\n\n" .
                        "You can type like:\n" .
                        "Grade 5, CBSE\n\n" .
                        "Or just tell me the grade and I'll ask about board preference.";
@@ -2287,7 +2281,7 @@ class EduBot_Shortcode {
                     }
                     
                     if (empty($collected_data['board'])) {
-                        $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
+                        $response .= "\n**Available Boards:**\n• **CBSE**\n";
                     }
                     
                     return $response;
@@ -2461,7 +2455,7 @@ class EduBot_Shortcode {
         
         if (preg_match('/\b(curriculum|academic|program|course|study|subject)\b/i', $message)) {
             return array(
-                'response' => "📚 Our curriculum includes CBSE and CAIE boards with comprehensive programs. Would you like to know more about our academic approach?",
+                'response' => "📚 Our curriculum includes CBSE curriculum with comprehensive programs. Would you like to know more about our academic approach?",
                 'action' => 'curriculum_info',
                 'session_data' => array()
             );
@@ -4603,7 +4597,7 @@ class EduBot_Shortcode {
                             }
                         }
                     } catch (Exception $e) {
-                        $response .= "\n**Available Boards:**\n• **CBSE** • **CAIE**\n";
+                        $response .= "\n**Available Boards:**\n• **CBSE**\n";
                     }
                 }
                 
@@ -4800,14 +4794,12 @@ class EduBot_Shortcode {
                 }
                 
                 if (empty($board_options)) {
-                    $board_options = "• **CBSE** (Central Board of Secondary Education)\n" .
-                                   "• **CAIE** (Cambridge Assessment International Education)\n";
+                    $board_options = "• **CBSE** (Central Board of Secondary Education)\n";
                 }
                 
             } catch (Exception $e) {
                 error_log('EduBot Board Config Error: ' . $e->getMessage());
-                $board_options = "• **CBSE** (Central Board of Secondary Education)\n" .
-                               "• **CAIE** (Cambridge Assessment International Education)\n";
+                $board_options = "• **CBSE** (Central Board of Secondary Education)\n";
             }
             
             // Get available grades from backend configuration
@@ -4962,26 +4954,20 @@ class EduBot_Shortcode {
                 
                 if (empty($board_options)) {
                     // Fallback if no boards configured
-                    $board_options = "• **CBSE** (Central Board of Secondary Education)\n" .
-                                   "• **CAIE** (Cambridge Assessment International Education)\n" .
-                                   "• **ICSE** (Indian Certificate of Secondary Education)\n" .
-                                   "• **IGCSE** (International General Certificate of Secondary Education)\n";
+                    $board_options = "• **CBSE** (Central Board of Secondary Education)\n";
                 }
                 
             } catch (Exception $e) {
                 error_log('EduBot Board Config Error: ' . $e->getMessage());
                 // Fallback board options
-                $board_options = "• **CBSE** (Central Board of Secondary Education)\n" .
-                               "• **CAIE** (Cambridge Assessment International Education)\n" .
-                               "• **ICSE** (Indian Certificate of Secondary Education)\n" .
-                               "• **IGCSE** (International General Certificate of Secondary Education)\n";
+                $board_options = "• **CBSE** (Central Board of Secondary Education)\n";
             }
             
             return "✅ **Grade Selected: {$grade}**\n\n" .
                    "Perfect! Now I need to know about the **curriculum board** you prefer.\n\n" .
                    "**Which board would you like?** 📚\n\n" .
                    $board_options . "\n" .
-                   "Just type the board code you prefer, like 'CBSE' or 'CAIE'.";
+                   "Just type the board code you prefer, like 'CBSE'.";
         }
         
         // Age input is no longer supported - only DOB in dd/mm/yyyy format
@@ -5095,13 +5081,12 @@ class EduBot_Shortcode {
                    "**Our Mission:**\n" .
                    "To provide world-class education that develops confident, capable, and caring global citizens.\n\n" .
                    "**Key Features:**\n" .
-                   "• 🎓 Multiple curriculum options (CBSE/State/International)\n" .
+                   "• 🎓 Multiple curriculum options (CBSE)\n" .
                    "• 👨‍🏫 Highly qualified faculty (avg. 15+ years experience)\n" .
                    "• 🔬 State-of-the-art laboratories and equipment\n" .
                    "• 📚 Well-stocked library with digital resources\n" .
                    "• 💻 Smart classrooms with modern technology\n" .
                    "• 🏃‍♂️ Comprehensive sports complex\n" .
-                   "• 🎨 Dedicated arts, music, and dance studios\n" .
                    "• 🚌 Safe and reliable transportation\n" .
                    "• 🍱 Nutritious meal programs\n\n" .
                    "**Academic Excellence:**\n" .
@@ -5110,9 +5095,9 @@ class EduBot_Shortcode {
                    "• 🏆 Regular academic competitions and awards\n" .
                    "• 💡 Individual attention and personalized learning\n\n" .
                    "**Extracurricular Activities:**\n" .
-                   "• 🏃‍♂️ Sports: Cricket, Football, Basketball, Swimming\n" .
-                   "• 🎭 Arts: Music, Dance, Drama, Fine Arts\n" .
-                   "• 🧪 Clubs: Science, Robotics, Environmental, Chess\n" .
+                   "• 🏃‍♂️ Sports: Cricket, Football, Basketball\n" .
+                   "• 🎭 Arts: Music, Dance, Fine Arts\n" .
+                   "• 🧪 Clubs: Science, Environmental, Chess\n" .
                    "• 🎪 Events: Annual day, Sports day, Science exhibitions\n\n" .
                    "**Safety & Security:**\n" .
                    "• 24/7 CCTV surveillance\n" .
@@ -5270,7 +5255,6 @@ class EduBot_Shortcode {
         
         $context .= "\n\nAvailable programs and boards:\n";
         $context .= "- CBSE (Central Board of Secondary Education)\n";
-        $context .= "- CAIE/Cambridge (Cambridge Assessment International Education)\n";
         $context .= "- State Board\n";
         $context .= "- ICSE (Indian Certificate of Secondary Education)\n";
         $context .= "- IGCSE (International General Certificate of Secondary Education)\n";
@@ -5526,9 +5510,9 @@ class EduBot_Shortcode {
                             }
                         }
                     } catch (Exception $e) {
-                        $response .= "• **CBSE** • **CAIE** • **State Board**\n";
+                        $response .= "• **CBSE** • **State Board**\n";
                     }
-                    $response .= "\nExample: CBSE or Grade 1 CAIE\n";
+                    $response .= "\nExample: CBSE or Grade 1\n";
                 }
             } else {
                 // All basic info collected, move to final details
@@ -5688,7 +5672,7 @@ class EduBot_Shortcode {
             return 'CBSE';
         }
         if (stripos($message_lower, 'caie') !== false || stripos($message_lower, 'cambridge') !== false) {
-            return 'CAIE';
+            return 'CBSE'; // School offers CBSE only
         }
         if (stripos($message_lower, 'state') !== false) {
             return 'State Board';
