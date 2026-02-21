@@ -885,7 +885,9 @@ class EduBot_API_Integrations {
         $url = 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
 
         if (!is_array($message) || !isset($message['type']) || $message['type'] !== 'msg91_template') {
-            error_log('EduBot MSG91: Only msg91_template payloads are supported for outbound messages.');
+            // MSG91 outbound API only supports pre-approved templates;
+            // log and skip freeform messages instead of silently returning false.
+            error_log('EduBot MSG91: Freeform/non-template messages are not supported for outbound WhatsApp via MSG91. Message skipped for ' . $phone);
             return false;
         }
 

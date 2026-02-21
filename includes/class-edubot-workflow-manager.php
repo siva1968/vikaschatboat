@@ -1019,23 +1019,34 @@ class EduBot_Workflow_Manager {
             
             error_log("EduBot Workflow Manager: Using admission_confirmation template with params: " . json_encode($template_params));
             
-            // Send via template
-            $result = $this->send_meta_whatsapp_template(
-                $parent_phone,
-                'admission_confirmation',
-                $template_params
-            );
-            
-            // If template fails, fall back to text message
-            if (!$result) {
-                error_log("EduBot Workflow Manager: admission_confirmation template failed, falling back to text message");
-                $message_text = "Hello {$parent_name},\n\nThank you for submitting your admission enquiry to {$school_name}.\n\n" .
-                                "Enquiry Number: {$enquiry_number}\n" .
-                                "Grade: {$student_grade}\n\n" .
-                                "Our admission team will review your application and contact you within 24 hours.\n\n" .
-                                "Best regards,\n{$school_name} Admission Team";
+            // Dispatch to correct provider
+            if ($api_config->whatsapp_provider === 'msg91') {
+                $result = $this->send_msg91_whatsapp(
+                    $parent_phone,
+                    'admission_confirmation',
+                    $api_config->whatsapp_token,
+                    $api_config->whatsapp_phone_id,
+                    $template_params
+                );
+            } else {
+                // Send via Meta template
+                $result = $this->send_meta_whatsapp_template(
+                    $parent_phone,
+                    'admission_confirmation',
+                    $template_params
+                );
                 
-                $result = $this->send_meta_whatsapp($parent_phone, $message_text, $api_config->whatsapp_token);
+                // If template fails, fall back to text message
+                if (!$result) {
+                    error_log("EduBot Workflow Manager: admission_confirmation template failed, falling back to text message");
+                    $message_text = "Hello {$parent_name},\n\nThank you for submitting your admission enquiry to {$school_name}.\n\n" .
+                                    "Enquiry Number: {$enquiry_number}\n" .
+                                    "Grade: {$student_grade}\n\n" .
+                                    "Our admission team will review your application and contact you within 24 hours.\n\n" .
+                                    "Best regards,\n{$school_name} Admission Team";
+                    
+                    $result = $this->send_meta_whatsapp($parent_phone, $message_text, $api_config->whatsapp_token);
+                }
             }
             
             if ($result) {
@@ -1130,6 +1141,91 @@ class EduBot_Workflow_Manager {
         }
     }
     
+    /**
+     * Send WhatsApp via MSG91 outbound template API
+     */
+    private function send_msg91_whatsapp($phone, $template_name, $authkey, $integrated_number, $parameters = array()) {
+        error_log("EduBot Workflow Manager: Sending MSG91 WhatsApp template '{$template_name}' to {$phone}");
+
+        try {
+            // Normalise phone: no + prefix, add country code if 10 digits
+            $phone = ltrim(preg_replace('/[^0-9+]/', '', $phone), '+');
+            if (strlen($phone) === 10) {
+                $phone = '91' . $phone;
+            }
+
+            // Build named components: header_1, body_1..N
+            $components = array(
+                'header_1' => array('type' => 'text', 'value' => 'Admission Enquiry Confirmation'),
+            );
+            foreach ($parameters as $idx => $value) {
+                $components['body_' . ($idx + 1)] = array('type' => 'text', 'value' => (string)$value);
+            }
+
+            $payload = array(
+                'integrated_number' => $integrated_number,
+                'content_type'      => 'template',
+                'payload'           => array(
+                    'type'              => 'template',
+                    'messaging_product' => 'whatsapp',
+                    'template'          => array(
+                        'name'     => $template_name,
+                        'language' => array(
+                            'code'   => 'en',
+                            'policy' => 'deterministic',
+                        ),
+                        'to_and_components' => array(
+                            array(
+                                'to'         => array($phone),
+                                'components' => $components,
+                            ),
+                        ),
+                    ),
+                ),
+            );
+
+            $body = wp_json_encode($payload);
+            error_log('EduBot Workflow Manager: MSG91 payload: ' . $body);
+
+            $response = wp_remote_post(
+                'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/',
+                array(
+                    'headers' => array(
+                        'authkey'      => $authkey,
+                        'content-type' => 'application/json',
+                        'accept'       => 'application/json',
+                    ),
+                    'body'    => $body,
+                    'timeout' => 30,
+                )
+            );
+
+            if (is_wp_error($response)) {
+                error_log('EduBot Workflow Manager: MSG91 error: ' . $response->get_error_message());
+                return false;
+            }
+
+            $status_code   = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
+            error_log("EduBot Workflow Manager: MSG91 response status: {$status_code}");
+            error_log("EduBot Workflow Manager: MSG91 response body: {$response_body}");
+
+            if ($status_code === 200) {
+                $result = json_decode($response_body, true);
+                if (isset($result['type']) && $result['type'] === 'success') {
+                    error_log('EduBot Workflow Manager: MSG91 message sent successfully to ' . $phone);
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (Exception $e) {
+            error_log('EduBot Workflow Manager: Exception in send_msg91_whatsapp: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     /**
      * Send WhatsApp message via template (new method)
      * @param string $phone - Phone number (format: 919866133566)
@@ -1409,7 +1505,7 @@ class EduBot_Workflow_Manager {
             
             // Get WhatsApp token and template config from database
             $whatsapp_config = $wpdb->get_row(
-                "SELECT whatsapp_token, whatsapp_template_name FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
+                "SELECT whatsapp_provider, whatsapp_token, whatsapp_phone_id, whatsapp_template_name FROM {$wpdb->prefix}edubot_api_integrations WHERE status = 'active' LIMIT 1"
             );
             
             if (empty($whatsapp_config) || empty($whatsapp_config->whatsapp_token)) {
@@ -1454,25 +1550,34 @@ class EduBot_Workflow_Manager {
             
             error_log("EduBot Workflow Manager: Using school admin template: {$template_name} with params: " . json_encode($template_params));
             
-            $result = $this->send_meta_whatsapp_template(
-                $admin_phone,
-                $template_name,
-                $template_params
-            );
-            
-            // If template fails, fall back to text message
-            if (!$result) {
-                error_log("EduBot Workflow Manager: School template failed, falling back to text message");
-                // Fallback to text message
-                $message_text = "New admission enquiry received!\n\n" .
-                                "Enquiry: {$enquiry_number}\n" .
-                                "Student: {$student_name}\n" .
-                                "Grade: {$grade}\n" .
-                                "Parent: {$parent_name}\n" .
-                                "Contact: {$student_phone}\n\n" .
-                                "Check admin panel for full details.";
+            if ($whatsapp_config->whatsapp_provider === 'msg91') {
+                $result = $this->send_msg91_whatsapp(
+                    $admin_phone,
+                    $template_name,
+                    $whatsapp_config->whatsapp_token,
+                    $whatsapp_config->whatsapp_phone_id,
+                    $template_params
+                );
+            } else {
+                $result = $this->send_meta_whatsapp_template(
+                    $admin_phone,
+                    $template_name,
+                    $template_params
+                );
                 
-                $result = $this->send_meta_whatsapp($admin_phone, $message_text, $whatsapp_config->whatsapp_token);
+                // If template fails, fall back to text message
+                if (!$result) {
+                    error_log("EduBot Workflow Manager: School template failed, falling back to text message");
+                    $message_text = "New admission enquiry received!\n\n" .
+                                    "Enquiry: {$enquiry_number}\n" .
+                                    "Student: {$student_name}\n" .
+                                    "Grade: {$grade}\n" .
+                                    "Parent: {$parent_name}\n" .
+                                    "Contact: {$student_phone}\n\n" .
+                                    "Check admin panel for full details.";
+                    
+                    $result = $this->send_meta_whatsapp($admin_phone, $message_text, $whatsapp_config->whatsapp_token);
+                }
             }
             
             if ($result) {
