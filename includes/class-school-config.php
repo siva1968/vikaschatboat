@@ -306,12 +306,27 @@ class EduBot_School_Config {
     public function get_api_keys() {
         $config = $this->get_config();
         $security_manager = new EduBot_Security_Manager();
-        
+
+        $keys = array();
         if (isset($config['api_keys'])) {
-            return $security_manager->decrypt_api_keys($config['api_keys']);
+            $keys = $security_manager->decrypt_api_keys($config['api_keys']);
         }
-        
-        return array();
+
+        // Fall back to wp_options for openai_key / ai_model set via API Settings admin page
+        if ( empty( $keys['openai_key'] ) ) {
+            $wp_key = get_option( 'edubot_openai_key', '' );
+            if ( ! empty( $wp_key ) ) {
+                $keys['openai_key'] = $wp_key;
+            }
+        }
+
+        // Always honour wp_options model if explicitly set
+        $wp_model = get_option( 'edubot_ai_model', '' );
+        if ( ! empty( $wp_model ) ) {
+            $keys['ai_model'] = $wp_model;
+        }
+
+        return $keys;
     }
 
     /**

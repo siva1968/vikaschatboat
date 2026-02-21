@@ -17,7 +17,7 @@
 class EduBot_MSG91_Webhook_Receiver {
 
     /** MSG91 outbound message API */
-    const API_URL = 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
+    const API_URL = 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/';
 
     // ─────────────────────────────────────────────────────────────
     // Entry point (registered as REST callback)
@@ -85,16 +85,24 @@ class EduBot_MSG91_Webhook_Receiver {
         // Get or create a stable session_id keyed to the phone number
         $session_id = $this->get_session_id( $phone );
 
-        // Run through chatbot engine
-        $response_text = $this->get_chatbot_response( $session_id, $message_text, $phone );
+        // Run through chatbot engine — returns array with 'message' and optionally 'options'
+        $chatbot = $this->get_chatbot_response( $session_id, $message_text, $phone );
+
+        $response_text = $chatbot['message'] ?? '';
+        $options       = $chatbot['options'] ?? array();
 
         if ( empty( $response_text ) ) {
             error_log( 'EduBot MSG91 Webhook: chatbot returned empty response' );
             $response_text = 'Thank you for reaching out! Our team will get back to you shortly.';
+            $options       = array();
         }
 
-        // Send reply back via MSG91
-        $this->send_text_reply( $phone, $response_text );
+        // Send interactive buttons when options exist (max 3 per MSG91 limit)
+        if ( ! empty( $options ) ) {
+            $this->send_interactive_reply( $phone, $response_text, array_slice( $options, 0, 3 ) );
+        } else {
+            $this->send_text_reply( $phone, $response_text );
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -113,25 +121,41 @@ class EduBot_MSG91_Webhook_Receiver {
     // Chatbot engine
     // ─────────────────────────────────────────────────────────────
 
-    private function get_chatbot_response( string $session_id, string $message_text, string $phone ): string {
+    /**
+     * Run the chatbot engine and return array:
+     *   [ 'message' => string, 'options' => array ]
+     */
+    private function get_chatbot_response( string $session_id, string $message_text, string $phone ): array {
         try {
             $engine = new EduBot_Chatbot_Engine();
             $result = $engine->process_message( $message_text, $session_id );
 
+            // Debug: log what the engine returned
+            error_log( 'EduBot MSG91 Webhook: engine result type=' . gettype( $result ) . ' class=' . ( is_object( $result ) ? get_class( $result ) : 'n/a' ) . ' is_wp_error=' . ( is_wp_error( $result ) ? 'YES' : 'NO' ) );
+
             if ( is_wp_error( $result ) ) {
                 error_log( 'EduBot MSG91 Webhook: chatbot WP_Error: ' . $result->get_error_message() );
-                return '';
+                return array( 'message' => '', 'options' => array() );
             }
 
             if ( is_array( $result ) ) {
-                return $result['message'] ?? $result['response'] ?? '';
+                $msg = $result['message'] ?? $result['response'] ?? '';
+                // The engine may store a WP_Error inside 'message' — unwrap it
+                if ( is_wp_error( $msg ) ) {
+                    error_log( 'EduBot MSG91 Webhook: engine message is WP_Error: ' . $msg->get_error_message() );
+                    $msg = '';
+                }
+                return array(
+                    'message' => (string) $msg,
+                    'options' => $result['options'] ?? array(),
+                );
             }
 
-            return (string) $result;
+            return array( 'message' => (string) $result, 'options' => array() );
 
-        } catch ( Exception $e ) {
-            error_log( 'EduBot MSG91 Webhook: chatbot exception: ' . $e->getMessage() );
-            return '';
+        } catch ( \Throwable $e ) {
+            error_log( 'EduBot MSG91 Webhook: chatbot exception (' . get_class( $e ) . '): ' . $e->getMessage() );
+            return array( 'message' => '', 'options' => array() );
         }
     }
 
@@ -139,75 +163,149 @@ class EduBot_MSG91_Webhook_Receiver {
     // Reply via MSG91 text API
     // ─────────────────────────────────────────────────────────────
 
-    /**
-     * Send a freeform text reply to the user via MSG91.
-     *
-     * Uses the MSG91 outbound bulk API with content_type=text.
-     * This works when the conversation is still within the 24-hour
-     * session window opened by the user's inbound message.
-     */
-    private function send_text_reply( string $phone, string $message ) {
-        global $wpdb;
+    // ─────────────────────────────────────────────────────────────
+    // Load MSG91 credentials helper
+    // ─────────────────────────────────────────────────────────────
 
-        // Load MSG91 credentials from wp_edubot_api_integrations
+    private function get_msg91_credentials(): ?array {
+        global $wpdb;
         $table = $wpdb->prefix . 'edubot_api_integrations';
         $row   = $wpdb->get_row(
             "SELECT whatsapp_token, whatsapp_phone_id FROM {$table} WHERE whatsapp_provider = 'msg91' LIMIT 1",
             ARRAY_A
         );
-
         if ( empty( $row['whatsapp_token'] ) || empty( $row['whatsapp_phone_id'] ) ) {
             error_log( 'EduBot MSG91 Webhook: MSG91 credentials not found in DB (provider=msg91)' );
-            return false;
+            return null;
         }
+        return $row;
+    }
 
-        $authkey           = $row['whatsapp_token'];
-        $integrated_number = $row['whatsapp_phone_id'];
-
-        // Normalise phone: strip leading + 
+    private function normalise_phone( string $phone ): string {
         $phone = ltrim( preg_replace( '/[^0-9+]/', '', $phone ), '+' );
         if ( strlen( $phone ) === 10 ) {
             $phone = '91' . $phone;
         }
+        return $phone;
+    }
 
-        // Split long messages (WhatsApp 4096-char limit)
+    private function post_to_msg91( string $authkey, array $payload ): void {
+        $response = wp_remote_post( self::API_URL, array(
+            'headers' => array(
+                'authkey'      => $authkey,
+                'content-type' => 'application/json',
+                'accept'       => 'application/json',
+            ),
+            'body'    => wp_json_encode( $payload ),
+            'timeout' => 30,
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            error_log( 'EduBot MSG91 API Error: ' . $response->get_error_message() );
+            return;
+        }
+
+        $status = wp_remote_retrieve_response_code( $response );
+        $body   = wp_remote_retrieve_body( $response );
+        error_log( "EduBot MSG91 Reply HTTP {$status}: {$body}" );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Reply via MSG91 text API
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Send a plain-text reply using MSG91 "Send Message (once Session Started)" API.
+     *
+     * Endpoint: POST /whatsapp-outbound-message/?integrated_number=&recipient_number=&content_type=text
+     * Body:     { "text": "message content" }
+     * Ref: https://docs.msg91.com/whatsapp/send-message-in-text
+     */
+    private function send_text_reply( string $phone, string $message ): void {
+        $creds = $this->get_msg91_credentials();
+        if ( ! $creds ) return;
+
+        $phone  = $this->normalise_phone( $phone );
         $chunks = $this->split_message( $message );
 
         foreach ( $chunks as $chunk ) {
-            $payload = array(
-                'integrated_number' => $integrated_number,
+            $url = add_query_arg( array(
+                'integrated_number' => $creds['whatsapp_phone_id'],
+                'recipient_number'  => $phone,
                 'content_type'      => 'text',
-                'payload'           => array(
-                    'to'                => $phone,
-                    'type'              => 'text',
-                    'messaging_product' => 'whatsapp',
-                    'text'              => array(
-                        'body' => $chunk,
-                    ),
-                ),
-            );
+            ), self::API_URL );
 
-            $response = wp_remote_post( self::API_URL, array(
+            $response = wp_remote_post( $url, array(
                 'headers' => array(
-                    'authkey'      => $authkey,
+                    'authkey'      => $creds['whatsapp_token'],
                     'content-type' => 'application/json',
                     'accept'       => 'application/json',
                 ),
-                'body'    => wp_json_encode( $payload ),
+                'body'    => wp_json_encode( array( 'text' => $chunk ) ),
                 'timeout' => 30,
             ) );
 
             if ( is_wp_error( $response ) ) {
-                error_log( 'EduBot MSG91 Reply Error: ' . $response->get_error_message() );
-                return false;
+                error_log( 'EduBot MSG91 Text Reply Error: ' . $response->get_error_message() );
+                return;
             }
 
             $status = wp_remote_retrieve_response_code( $response );
             $body   = wp_remote_retrieve_body( $response );
-            error_log( "EduBot MSG91 Reply HTTP {$status}: {$body}" );
+            error_log( "EduBot MSG91 Text Reply HTTP {$status}: {$body}" );
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Reply via MSG91 interactive buttons API
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Send an interactive button message (max 3 options).
+     *
+     * Each $option must have at minimum a 'text' key.
+     * Uses MSG91 interactive buttons API:
+     * https://docs.msg91.com/whatsapp/interactive-whatsapp-buttons
+     */
+    private function send_interactive_reply( string $phone, string $body_text, array $options ): void {
+        $creds = $this->get_msg91_credentials();
+        if ( ! $creds ) return;
+
+        $phone = $this->normalise_phone( $phone );
+
+        // Build button objects — MSG91 requires id (≤256 chars) and title (≤20 chars)
+        $buttons = array();
+        foreach ( array_slice( $options, 0, 3 ) as $idx => $opt ) {
+            $label     = isset( $opt['text'] )  ? $opt['text']  : ( $opt['label'] ?? "Option {$idx}" );
+            $btn_id    = isset( $opt['value'] ) ? $opt['value'] : "opt_{$idx}";
+            // Truncate: id ≤ 256, title ≤ 20 chars
+            $btn_id    = substr( sanitize_key( $btn_id ), 0, 256 );
+            $title     = mb_substr( wp_strip_all_tags( $label ), 0, 20 );
+            $buttons[] = array(
+                'type'  => 'reply',
+                'reply' => array(
+                    'id'    => $btn_id,
+                    'title' => $title,
+                ),
+            );
         }
 
-        return true;
+        $payload = array(
+            'recipient_number'  => $phone,
+            'integrated_number' => $creds['whatsapp_phone_id'],
+            'content_type'      => 'interactive',
+            'interactive'       => array(
+                'type'   => 'button',
+                'body'   => array(
+                    'text' => $body_text,
+                ),
+                'action' => array(
+                    'buttons' => $buttons,
+                ),
+            ),
+        );
+
+        $this->post_to_msg91( $creds['whatsapp_token'], $payload );
     }
 
     // ─────────────────────────────────────────────────────────────

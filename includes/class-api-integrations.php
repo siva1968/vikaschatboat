@@ -51,13 +51,15 @@ class EduBot_API_Integrations {
         }
 
         $config = $this->school_config->get_config();
-        $model = isset($config['chatbot_settings']['ai_model']) ? 
-            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+        // Prefer model set via API Settings admin page; fall back to DB config
+        $wp_model = get_option( 'edubot_ai_model', '' );
+        $model = ! empty( $wp_model ) ? $wp_model
+            : ( isset( $config['chatbot_settings']['ai_model'] ) ? sanitize_text_field( $config['chatbot_settings']['ai_model'] ) : 'gpt-4o-mini' );
         
         // Validate model name
-        $allowed_models = array('gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview');
-        if (!in_array($model, $allowed_models)) {
-            $model = 'gpt-3.5-turbo';
+        $allowed_models = array( 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini' );
+        if ( ! in_array( $model, $allowed_models ) ) {
+            $model = 'gpt-4o-mini';
         }
         
         $system_prompt = $this->build_system_prompt($context);
@@ -208,7 +210,7 @@ class EduBot_API_Integrations {
         }
         
         $data = array(
-            'model' => 'gpt-3.5-turbo',
+            'model' => get_option( 'edubot_ai_model', 'gpt-4o-mini' ),
             'messages' => array(
                 array(
                     'role' => 'user',
@@ -1208,8 +1210,9 @@ class EduBot_API_Integrations {
                  "Input: 'test@gmail.com' → {\"valid\": true, \"corrected\": null, \"issue\": null}";
 
         $config = $this->school_config->get_config();
-        $model = isset($config['chatbot_settings']['ai_model']) ?
-            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+        $wp_model = get_option( 'edubot_ai_model', '' );
+        $model = ! empty( $wp_model ) ? $wp_model
+            : ( isset( $config['chatbot_settings']['ai_model'] ) ? sanitize_text_field( $config['chatbot_settings']['ai_model'] ) : 'gpt-4o-mini' );
 
         $data = array(
             'model' => $model,
@@ -1294,8 +1297,9 @@ class EduBot_API_Integrations {
                  "Input: '5866133566' → {\"valid\": false, \"corrected\": null, \"issue\": \"Must start with 6, 7, 8, or 9\", \"digit_count\": 10}";
 
         $config = $this->school_config->get_config();
-        $model = isset($config['chatbot_settings']['ai_model']) ?
-            sanitize_text_field($config['chatbot_settings']['ai_model']) : 'gpt-3.5-turbo';
+        $wp_model = get_option( 'edubot_ai_model', '' );
+        $model = ! empty( $wp_model ) ? $wp_model
+            : ( isset( $config['chatbot_settings']['ai_model'] ) ? sanitize_text_field( $config['chatbot_settings']['ai_model'] ) : 'gpt-4o-mini' );
 
         $data = array(
             'model' => $model,

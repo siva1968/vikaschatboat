@@ -238,6 +238,11 @@ class EduBot_Chatbot_Engine {
     private function handle_basic_info_collection($message, $session, $config) {
         $message = strtolower(trim($message));
         
+        // Greetings reset to the main menu
+        if ( in_array( $message, array( 'hi', 'hello', 'hey', 'hii', 'start', 'menu', 'help', 'options' ) ) ) {
+            return $this->handle_greeting( $message, $session, $config );
+        }
+        
         if (in_array($message, array('admissions', 'admission', 'new admission', 'apply'))) {
             return $this->start_admission_process($session, $config);
         } elseif (in_array($message, array('career', 'job', 'employment', 'work'))) {
@@ -1125,7 +1130,8 @@ class EduBot_Chatbot_Engine {
         
         $ai_response = $api_integrations->get_ai_response($message, $school_context);
         
-        if ($ai_response) {
+        // Treat WP_Error or falsy as failure → use fallback message
+        if ( $ai_response && ! is_wp_error( $ai_response ) ) {
             $session['conversation_log'][] = array(
                 'timestamp' => current_time('mysql'),
                 'type' => 'user',

@@ -426,6 +426,10 @@ class EduBot_API_Settings_Page {
                        class="nav-tab <?php echo $active_tab === 'whatsapp' ? 'nav-tab-active' : ''; ?>">
                         <span class="dashicons dashicons-phone"></span> WhatsApp
                     </a>
+                    <a href="?page=edubot-api-settings&tab=openai" 
+                       class="nav-tab <?php echo $active_tab === 'openai' ? 'nav-tab-active' : ''; ?>">
+                        <span class="dashicons dashicons-admin-generic"></span> OpenAI / AI
+                    </a>
                 </h2>
                 
                 <form method="post" action="" class="edubot-settings-form">
@@ -451,6 +455,9 @@ class EduBot_API_Settings_Page {
                                 break;
                             case 'whatsapp':
                                 $this->render_whatsapp_settings();
+                                break;
+                            case 'openai':
+                                $this->render_openai_settings();
                                 break;
                             case 'facebook':
                             default:
@@ -947,7 +954,68 @@ class EduBot_API_Settings_Page {
         </div>
         <?php
     }
-    
+
+    /**
+     * Render OpenAI / AI settings section
+     */
+    private function render_openai_settings() {
+        $current_key   = get_option( 'edubot_openai_key', '' );
+        $current_model = get_option( 'edubot_ai_model', 'gpt-4o-mini' );
+        $is_configured = ! empty( $current_key );
+        $models = array(
+            'gpt-4o-mini'        => 'GPT-4o Mini (fast & cheap)',
+            'gpt-4o'             => 'GPT-4o (powerful)',
+            'gpt-4-turbo'        => 'GPT-4 Turbo',
+            'gpt-4'              => 'GPT-4',
+            'gpt-3.5-turbo'      => 'GPT-3.5 Turbo (legacy)',
+        );
+        ?>
+        <div class="edubot-settings-section">
+            <h3>OpenAI Integration</h3>
+            <p class="description">
+                Used by the chatbot engine to answer free-text questions from users.
+                If not configured, the bot will use its built-in menu-driven flow only.
+                Get your API key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+            </p>
+
+            <div class="setting-group">
+                <label for="edubot_openai_key">
+                    <strong>OpenAI API Key</strong>
+                    <?php if ( $is_configured ) : ?>
+                        <span class="status-indicator connected" title="Configured">&#10003;</span>
+                    <?php endif; ?>
+                </label>
+                <input type="password" id="edubot_openai_key" name="edubot_openai_key"
+                       value="<?php echo esc_attr( $current_key ); ?>" class="regular-text"
+                       placeholder="sk-...">
+                <p class="description">Starts with <code>sk-</code>. Stored securely.</p>
+            </div>
+
+            <div class="setting-group">
+                <label for="edubot_ai_model"><strong>AI Model</strong></label>
+                <select id="edubot_ai_model" name="edubot_ai_model">
+                    <?php foreach ( $models as $value => $label ) : ?>
+                        <option value="<?php echo esc_attr( $value ); ?>"
+                            <?php selected( $current_model, $value ); ?>>
+                            <?php echo esc_html( $label ); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="description">Model used for AI chatbot responses.</p>
+            </div>
+
+            <div class="api-info-box">
+                <h4>How it works</h4>
+                <ul>
+                    <li>When a user sends a free-text message (not a menu option), the chatbot calls OpenAI with school context.</li>
+                    <li>Recommended model: <strong>gpt-4o-mini</strong> — lowest cost, fast responses.</li>
+                    <li>Without a key the bot falls back to a polite "I didn&apos;t understand" message and shows the main menu.</li>
+                </ul>
+            </div>
+        </div>
+        <?php
+    }
+
     /**
      * Render any admin notices
      * 
@@ -1005,6 +1073,9 @@ class EduBot_API_Settings_Page {
             'edubot_whatsapp_template_namespace',
             'edubot_whatsapp_template_name',
             'edubot_whatsapp_template_language',
+            // OpenAI / AI settings
+            'edubot_openai_key',
+            'edubot_ai_model',
         ];
         
         foreach ($settings as $setting) {
