@@ -509,45 +509,58 @@ class EduBot_Chatbot_Engine {
         }
 
         $session['admission_data']['parent_email'] = $message;
-        $session['admission_step'] = 'previous_school';
-        
+        // Previous school question removed — jump straight to confirmation
+        $session['admission_step'] = 'confirmation';
+
+        $data = $session['admission_data'];
+        $summary = "📋 Admission Enquiry Summary\n\n" .
+                  "👤 Student Details:\n" .
+                  "• Name: {$data['student_name']}\n" .
+                  "• Age: {$data['student_age']} years\n" .
+                  "• Grade: {$data['grade']}\n\n" .
+                  "👨‍👩‍👧‍👦 Parent/Guardian Details:\n" .
+                  "• Name: {$data['parent_name']}\n" .
+                  "• Phone: {$data['parent_phone']}\n" .
+                  "• Email: {$message}\n\n" .
+                  "✅ Is all the information correct?";
+
         return array(
-            'success' => true,
-            'message' => "Perfect! Email: {$message}\n\n🏫 What is the name of the student's current/previous school? (Type 'None' if this is the first school):",
-            'session_data' => $session
+            'success'      => true,
+            'message'      => $summary,
+            'session_data' => $session,
+            'options'      => array(
+                array('text' => 'YES - Submit Enquiry', 'value' => 'confirm_yes'),
+                array('text' => 'NO - Start Over',      'value' => 'confirm_no'),
+            ),
         );
     }
 
     /**
-     * Handle previous school step
+     * Previous school step — removed from flow; kept to handle any in-flight sessions
+     * that already have admission_step = 'previous_school' stored in a transient.
      */
     private function handle_previous_school_step($message, $session, $config) {
-        $session['admission_data']['previous_school'] = $message;
+        // Skip — go straight to confirmation without recording the school name.
         $session['admission_step'] = 'confirmation';
-        
-        // Display all collected information for confirmation
         $data = $session['admission_data'];
-        $summary = "📋 **Admission Enquiry Summary**\n\n" .
-                  "👤 **Student Details:**\n" .
+        $summary = "📋 Admission Enquiry Summary\n\n" .
+                  "👤 Student Details:\n" .
                   "• Name: {$data['student_name']}\n" .
                   "• Age: {$data['student_age']} years\n" .
-                  "• Grade: {$data['grade']}\n" .
-                  "• Previous School: {$message}\n\n" .
-                  "👨‍👩‍👧‍👦 **Parent/Guardian Details:**\n" .
+                  "• Grade: {$data['grade']}\n\n" .
+                  "👨‍👩‍👧‍👦 Parent/Guardian Details:\n" .
                   "• Name: {$data['parent_name']}\n" .
                   "• Phone: {$data['parent_phone']}\n" .
                   "• Email: {$data['parent_email']}\n\n" .
-                  "✅ Is all the information correct?\n\n" .
-                  "Reply 'YES' to submit or 'NO' to restart the process.";
-        
+                  "✅ Is all the information correct?";
         return array(
-            'success' => true,
-            'message' => $summary,
+            'success'      => true,
+            'message'      => $summary,
             'session_data' => $session,
-            'options' => array(
+            'options'      => array(
                 array('text' => 'YES - Submit Enquiry', 'value' => 'confirm_yes'),
-                array('text' => 'NO - Start Over', 'value' => 'confirm_no')
-            )
+                array('text' => 'NO - Start Over',      'value' => 'confirm_no'),
+            ),
         );
     }
 
