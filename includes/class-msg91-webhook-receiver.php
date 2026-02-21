@@ -73,17 +73,47 @@ class EduBot_MSG91_Webhook_Receiver {
             return;
         }
 
-        // Extract message text: MSG91 puts it in `text` for text messages
-        $message_text = trim( $data['text'] ?? $data['content'] ?? '' );
+        // ── Extract message text ────────────────────────────────
+        // Priority:
+        //   1. Interactive button reply → use button ID as the selection value
+        //   2. Interactive list reply   → use list row ID as the selection value
+        //   3. Plain text field
+        $message_text = '';
+        $msg_type     = strtolower( $data['type'] ?? 'text' );
+
+        if ( $msg_type === 'interactive' ) {
+            $interactive = $data['interactive'] ?? array();
+            $int_type    = strtolower( $interactive['type'] ?? '' );
+
+            if ( $int_type === 'button_reply' ) {
+                // User tapped a reply button — use the button ID as the message
+                $message_text = trim( $interactive['button_reply']['id'] ?? $interactive['button_reply']['title'] ?? '' );
+                error_log( "EduBot MSG91 Webhook: button_reply from {$phone}: id={$message_text}" );
+
+            } elseif ( $int_type === 'list_reply' ) {
+                // User selected a list item
+                $message_text = trim( $interactive['list_reply']['id'] ?? $interactive['list_reply']['title'] ?? '' );
+                error_log( "EduBot MSG91 Webhook: list_reply from {$phone}: id={$message_text}" );
+            }
+        }
+
+        // Fall back to plain text if still empty
+        if ( empty( $message_text ) ) {
+            $message_text = trim( $data['text'] ?? $data['content'] ?? '' );
+        }
+
         if ( empty( $message_text ) ) {
             error_log( 'EduBot MSG91 Webhook: empty message text for ' . $phone );
             return;
         }
 
-        error_log( "EduBot MSG91 Webhook: inbound from {$phone}: {$message_text}" );
+        error_log( "EduBot MSG91 Webhook: inbound from {$phone} [{$msg_type}]: {$message_text}" );
 
         // Get or create a stable session_id keyed to the phone number
         $session_id = $this->get_session_id( $phone );
+
+        // If user replied with a number, resolve it to the stored option value
+        $message_text = $this->resolve_numbered_input( $session_id, $message_text );
 
         // Run through chatbot engine — returns array with 'message' and optionally 'options'
         $chatbot = $this->get_chatbot_response( $session_id, $message_text, $phone );
@@ -97,10 +127,38 @@ class EduBot_MSG91_Webhook_Receiver {
             $options       = array();
         }
 
-        // Send interactive buttons when options exist (max 3 per MSG91 limit)
-        if ( ! empty( $options ) ) {
-            $this->send_interactive_reply( $phone, $response_text, array_slice( $options, 0, 3 ) );
+        $reply_mode = $option_count === 0 ? 'text'
+                    : ( $option_count <= 3  ? "interactive buttons({$option_count})"
+                    : ( $option_count <= 10 ? "interactive list({$option_count})"
+                    : "numbered text({$option_count})" ) );
+        error_log( "EduBot MSG91 Webhook: sending {$reply_mode} reply to {$phone}" );
+
+        // Route to the right send method based on option count:
+        //   1–3  → interactive reply buttons
+        //   4–10 → interactive list message
+        //  11+   → numbered text fallback (WhatsApp list rows cap at 10)
+        //   0    → plain text
+        $option_count = count( $options );
+
+        if ( $option_count >= 1 && $option_count <= 3 ) {
+            $this->delete_pending_options( $session_id );
+            $this->send_interactive_reply( $phone, $response_text, $options );
+        } elseif ( $option_count >= 4 && $option_count <= 10 ) {
+            $this->delete_pending_options( $session_id );
+            $this->send_list_reply( $phone, $response_text, $options );
+        } elseif ( $option_count > 10 ) {
+            // Build numbered list appended to the message body
+            $menu = $response_text . "\n";
+            foreach ( $options as $i => $opt ) {
+                $label  = $opt['text'] ?? $opt['label'] ?? ( 'Option ' . ( $i + 1 ) );
+                $menu  .= ( $i + 1 ) . '. ' . wp_strip_all_tags( $label ) . "\n";
+            }
+            $menu .= "\nReply with the number of your choice.";
+            // Store options so the next plain-text "1"/"2" can be resolved
+            $this->store_pending_options( $session_id, $options );
+            $this->send_text_reply( $phone, trim( $menu ) );
         } else {
+            $this->delete_pending_options( $session_id );
             $this->send_text_reply( $phone, $response_text );
         }
     }
@@ -309,8 +367,97 @@ class EduBot_MSG91_Webhook_Receiver {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Reply via MSG91 interactive LIST (4-10 options)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Send a WhatsApp interactive list message (supports 4-10 items).
+     * Ref: https://docs.msg91.com/whatsapp/interactive-whatsapp-with-list
+     */
+    private function send_list_reply( string $phone, string $body_text, array $options ): void {
+        $creds = $this->get_msg91_credentials();
+        if ( ! $creds ) return;
+
+        $phone = $this->normalise_phone( $phone );
+
+        // Build row objects — id ≤ 200 chars, title ≤ 24 chars
+        $rows = array();
+        foreach ( array_slice( $options, 0, 10 ) as $idx => $opt ) {
+            $label    = isset( $opt['text'] )  ? $opt['text']  : ( $opt['label'] ?? "Option {$idx}" );
+            $row_id   = isset( $opt['value'] ) ? $opt['value'] : "opt_{$idx}";
+            $row_id   = substr( sanitize_key( $row_id ), 0, 200 );
+            $title    = mb_substr( wp_strip_all_tags( $label ), 0, 24 );
+            $rows[]   = array(
+                'id'    => $row_id,
+                'title' => $title,
+            );
+        }
+
+        $payload = array(
+            'recipient_number'  => $phone,
+            'integrated_number' => $creds['whatsapp_phone_id'],
+            'content_type'      => 'interactive',
+            'interactive'       => array(
+                'type' => 'list',
+                'body' => array(
+                    'text' => $body_text,
+                ),
+                'action' => array(
+                    'button'   => 'View Options',
+                    'sections' => array(
+                        array(
+                            'title' => 'Choose an option',
+                            'rows'  => $rows,
+                        ),
+                    ),
+                ),
+            ),
+        );
+
+        $this->post_to_msg91( $creds['whatsapp_token'], $payload );
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Store the option list for a session so a subsequent "1" / "2" reply
+     * can be resolved to the correct option value (used for 11+ item menus).
+     */
+    private function store_pending_options( string $session_id, array $options ): void {
+        set_transient( 'edubot_pending_opts_' . $session_id, $options, HOUR_IN_SECONDS );
+    }
+
+    /** Remove stored pending options (called after interactive/list send so numbers don't bleed). */
+    private function delete_pending_options( string $session_id ): void {
+        delete_transient( 'edubot_pending_opts_' . $session_id );
+    }
+
+    /**
+     * If $message_text is a plain integer and there are pending options
+     * for this session, return the option's value/text instead.
+     * Otherwise return $message_text unchanged.
+     */
+    private function resolve_numbered_input( string $session_id, string $message_text ): string {
+        $trimmed = trim( $message_text );
+        if ( ! ctype_digit( $trimmed ) ) {
+            return $message_text;
+        }
+        $pending = get_transient( 'edubot_pending_opts_' . $session_id );
+        if ( ! is_array( $pending ) || empty( $pending ) ) {
+            return $message_text;
+        }
+        $index = (int) $trimmed - 1; // convert 1-based to 0-based
+        if ( $index < 0 || $index >= count( $pending ) ) {
+            return $message_text;
+        }
+        $opt = $pending[ $index ];
+        // Use 'value' as the canonical selection identifier, fall back to 'text'
+        $resolved = $opt['value'] ?? $opt['text'] ?? $opt['label'] ?? $trimmed;
+        error_log( "EduBot MSG91 Webhook: resolved numbered input '{$trimmed}' → '{$resolved}' for session {$session_id}" );
+        return (string) $resolved;
+    }
 
     private function split_message( string $message, int $limit = 4000 ): array {
         if ( strlen( $message ) <= $limit ) {
