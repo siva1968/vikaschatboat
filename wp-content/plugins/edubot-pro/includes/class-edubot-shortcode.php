@@ -1123,24 +1123,42 @@ class EduBot_Shortcode {
                     $response['message'] = $response['response'];
                     unset($response['response']);
                 }
+                $action = $response['action'] ?? 'info';
                 $final_response = array(
                     'message' => $response['message'] ?? 'Thank you for your message!',
-                    'action' => $response['action'] ?? 'info',
+                    'action' => $action,
                     'session_data' => $response['session_data'] ?? array(),
                     'session_id' => $session_id,
                     'quick_actions' => $response['quick_actions'] ?? array(),
+                    'options' => $response['options'] ?? array(),
                     'nonce' => wp_create_nonce('edubot_nonce') // Fresh nonce for next request
                 );
+                // If this is an online enquiry response, always include a URL button option
+                if ($action === 'online_enquiry_info' && empty($final_response['options'])) {
+                    $final_response['options'] = array(
+                        array('type' => 'url', 'url' => 'https://www.vikasconcept.com/enquiry/', 'text' => '🔗 Open Enquiry Form')
+                    );
+                }
                 error_log("EduBot AJAX: Sending array response: " . json_encode($final_response));
                 wp_send_json_success($final_response);
             } else {
                 // Handle string responses
+                $action_str = 'info';
+                $options_str = array();
+                // If this is an online enquiry action, include URL button even for string responses
+                if ($action_type === 'online_enquiry') {
+                    $action_str = 'online_enquiry_info';
+                    $options_str = array(
+                        array('type' => 'url', 'url' => 'https://www.vikasconcept.com/enquiry/', 'text' => '🔗 Open Enquiry Form')
+                    );
+                }
                 $final_response = array(
                     'message' => is_string($response) ? $response : 'Thank you for your message!',
-                    'action' => 'info',
+                    'action' => $action_str,
                     'session_data' => array(),
                     'session_id' => $session_id,
                     'quick_actions' => array(),  // Ensure quick_actions is always present
+                    'options' => $options_str,
                     'nonce' => wp_create_nonce('edubot_nonce') // Fresh nonce for next request
                 );
                 error_log("EduBot AJAX: Sending string response: " . json_encode($final_response));

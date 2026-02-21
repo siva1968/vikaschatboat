@@ -140,10 +140,24 @@
             });
 
             // Option button clicks
-            $(document).on('click', '.edubot-option-btn', function() {
+            $(document).on('click', '.edubot-option-btn', function(e) {
+                // Don't process URL-type options (they navigate directly)
+                if ($(this).hasClass('edubot-url-option')) {
+                    return true; // allow default <a> navigation
+                }
                 var optionValue = $(this).data('value') || $(this).text();
                 self.sendMessage(optionValue);
                 self.hideOptions();
+            });
+
+            // Handle clicks on auto-linked URLs inside bot messages
+            $(document).on('click', '.edubot-message-content a', function(e) {
+                e.stopPropagation();
+                var href = $(this).attr('href');
+                if (href && href !== '#' && href.indexOf('javascript') !== 0) {
+                    window.open(href, '_blank', 'noopener,noreferrer');
+                }
+                e.preventDefault();
             });
 
             // Quick action button clicks
@@ -440,12 +454,25 @@
             // First decode any existing HTML entities from WordPress
             var decoded = decodeHtml(message);
             
-            // Then escape only if needed (for user input, not server responses)
-            // Since this is a server response, we trust it and just format it
-            return decoded
+            // Format message with markdown and convert URLs to links
+            var formatted = decoded
                 .replace(/\n/g, '<br>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            // Convert URLs to clickable links
+            // Match URLs starting with http://, https://, or www.
+            var urlPattern = /(https?:\/\/[^\s<]+)|(www\.[^\s<]+)/gi;
+            formatted = formatted.replace(urlPattern, function(url) {
+                var href = url;
+                // Add protocol if missing (for www. links)
+                if (url.indexOf('http') !== 0) {
+                    href = 'http://' + url;
+                }
+                return '<a href="' + href + '" target="_blank" rel="noopener noreferrer" style="color: #0073aa; text-decoration: underline;">' + url + '</a>';
+            });
+            
+            return formatted;
         },
 
         // Show typing indicator
@@ -477,8 +504,15 @@
             
             var optionsHtml = '';
             options.forEach(function(option) {
-                optionsHtml += '<button class="edubot-option-btn" data-value="' + 
-                              option.value + '">' + option.text + '</button>';
+                if (option.type === 'url' && option.url) {
+                    // URL-type option: render as a real anchor tag that opens the link
+                    optionsHtml += '<a class="edubot-option-btn edubot-url-option" href="' +
+                                  option.url + '" target="_blank" rel="noopener noreferrer">' +
+                                  option.text + '</a>';
+                } else {
+                    optionsHtml += '<button class="edubot-option-btn" data-value="' + 
+                                  option.value + '">' + option.text + '</button>';
+                }
             });
             
             this.elements.options.html(optionsHtml).show();

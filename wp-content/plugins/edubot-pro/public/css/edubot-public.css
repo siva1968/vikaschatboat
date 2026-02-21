@@ -235,6 +235,31 @@
     border-left: 4px solid var(--edubot-primary-color);
 }
 
+/* Ensure links inside bot messages are always clickable */
+.edubot-message-content a {
+    color: #0073aa !important;
+    text-decoration: underline !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    word-break: break-all;
+}
+
+.edubot-message-content a:hover {
+    color: #005580 !important;
+    text-decoration: none !important;
+}
+
+/* URL option button style (anchor that looks like a button) */
+a.edubot-url-option {
+    display: inline-block;
+    text-decoration: none !important;
+    color: inherit !important;
+}
+a.edubot-url-option:hover {
+    text-decoration: none !important;
+    color: inherit !important;
+}
+
 .edubot-user-message .edubot-message-content {
     background: var(--edubot-gradient);
     color: white;

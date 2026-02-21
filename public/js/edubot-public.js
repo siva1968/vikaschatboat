@@ -140,10 +140,24 @@
             });
 
             // Option button clicks
-            $(document).on('click', '.edubot-option-btn', function() {
+            $(document).on('click', '.edubot-option-btn', function(e) {
+                // Don't process URL-type options (they navigate directly)
+                if ($(this).hasClass('edubot-url-option')) {
+                    return true; // allow default <a> navigation
+                }
                 var optionValue = $(this).data('value') || $(this).text();
                 self.sendMessage(optionValue);
                 self.hideOptions();
+            });
+
+            // Handle clicks on auto-linked URLs inside bot messages
+            $(document).on('click', '.edubot-message-content a', function(e) {
+                e.stopPropagation();
+                var href = $(this).attr('href');
+                if (href && href !== '#' && href.indexOf('javascript') !== 0) {
+                    window.open(href, '_blank', 'noopener,noreferrer');
+                }
+                e.preventDefault();
             });
 
             // Quick action button clicks
@@ -490,8 +504,15 @@
             
             var optionsHtml = '';
             options.forEach(function(option) {
-                optionsHtml += '<button class="edubot-option-btn" data-value="' + 
-                              option.value + '">' + option.text + '</button>';
+                if (option.type === 'url' && option.url) {
+                    // URL-type option: render as a real anchor tag that opens the link
+                    optionsHtml += '<a class="edubot-option-btn edubot-url-option" href="' +
+                                  option.url + '" target="_blank" rel="noopener noreferrer">' +
+                                  option.text + '</a>';
+                } else {
+                    optionsHtml += '<button class="edubot-option-btn" data-value="' + 
+                                  option.value + '">' + option.text + '</button>';
+                }
             });
             
             this.elements.options.html(optionsHtml).show();
