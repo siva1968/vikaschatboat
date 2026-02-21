@@ -1089,13 +1089,17 @@ class EduBot_Chatbot_Engine {
             // Update session
             $session['state'] = 'completed';
             $session['application_number'] = $application_number;
-            
+
+            // Use MCB enquiry code in the customer message if sync succeeded;
+            // fall back to the local WordPress application number only if MCB failed.
+            $display_ref = ! empty( $mcb_code ) ? $mcb_code : $application_number;
+
             $completion_message = $this->school_config->get_message('completion', array(
-                'application_number' => $application_number,
+                'application_number' => $display_ref,
                 'student_name' => $session['user_data']['student_name']
             ));
             
-            $completion_message .= "\n\n📋 " . __("Application Number:", 'edubot-pro') . " " . $application_number . "\n\n" .
+            $completion_message .= "\n\n📋 " . __("Enquiry Number:", 'edubot-pro') . " " . $display_ref . "\n\n" .
                 __("What happens next?", 'edubot-pro') . "\n" .
                 "✅ " . __("We'll review your application", 'edubot-pro') . "\n" .
                 "📞 " . __("Our team will contact you within 24-48 hours", 'edubot-pro') . "\n" .
@@ -1485,25 +1489,32 @@ class EduBot_Chatbot_Engine {
             
             $mcb_integration = new EduBot_MyClassBoard_Integration();
             
-            // Prepare enquiry data from user data
+            // Build the WordPress-format enquiry array that map_enquiry_to_mcb() expects
             $enquiry_data = array(
-                'student_name'     => $user_data['student_name'] ?? 'N/A',
-                'parent_name'      => $user_data['parent_name'] ?? 'N/A',
-                'email'            => $user_data['email'] ?? '',
-                'phone'            => $user_data['phone'] ?? '',
-                'grade'            => $user_data['grade'] ?? '',
-                'board'            => $user_data['board'] ?? '',
-                'academic_year'    => $user_data['academic_year'] ?? '',
-                'date_of_birth'    => $user_data['date_of_birth'] ?? '',
-                'address'          => $user_data['address'] ?? '',
-                'gender'           => $user_data['gender'] ?? '',
-                'enquiry_number'   => $application_number
+                'student_name'   => $user_data['student_name']  ?? 'N/A',
+                'parent_name'    => $user_data['parent_name']   ?? 'N/A',
+                'email'          => $user_data['parent_email']  ?? $user_data['email']  ?? '',
+                'phone'          => $user_data['parent_phone']  ?? $user_data['phone']  ?? '',
+                'grade'          => $user_data['grade']         ?? '',
+                'board'          => $user_data['board']         ?? '',
+                'academic_year'  => $user_data['academic_year'] ?? '',
+                'date_of_birth'  => $user_data['date_of_birth'] ?? '',
+                'address'        => $user_data['address']       ?? '',
+                'gender'         => $user_data['gender']        ?? '',
+                'mother_name'    => $user_data['mother_name']   ?? '',
+                'mother_phone'   => $user_data['mother_phone']  ?? '',
+                'source'         => 'chatbot',
+                'enquiry_number' => $application_number,
             );
+
+            // Run through the same field mapper used by sync_enquiry_to_mcb()
+            // so MCB receives properly named fields (StudentName, OrganisationID, etc.)
+            $mcb_data = $mcb_integration->map_enquiry_to_mcb( $enquiry_data );
             
-            error_log('[SUBMIT-APP-013] 📤 Sending to MCB API: ' . wp_json_encode($enquiry_data));
+            error_log('[SUBMIT-APP-013] 📤 Sending to MCB API: ' . wp_json_encode($mcb_data));
             
             // Call MCB API
-            $mcb_response = $mcb_integration->send_to_mcb($enquiry_data, $config['mcb_settings']);
+            $mcb_response = $mcb_integration->send_to_mcb($mcb_data, $config['mcb_settings']);
             
             error_log('[SUBMIT-APP-014] 📨 MCB API Response: ' . wp_json_encode($mcb_response));
             
