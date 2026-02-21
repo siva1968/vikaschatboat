@@ -861,6 +861,23 @@ class EduBot_MCB_Service {
                                 
                                 error_log('[RESP-016I] Marked as ALREADY_EXISTS with enquiry_id: ' . $enquiry_id);
                                 error_log('[RESP-016J] Will send notifications using local enquiry_id');
+                            } elseif (
+                                stripos($response_data, 'Thank You') !== false ||
+                                stripos($response_data, 'EnquiryCode') !== false ||
+                                stripos($response_data, 'interest in') !== false
+                            ) {
+                                // MCB returned a plain-string success message
+                                error_log('[RESP-016K] ✅ MCB returned plain-string SUCCESS message');
+                                $success      = true;
+                                $sync_status  = 'synced';
+                                $error_message = '';
+
+                                // Extract the EnquiryCode token (e.g. W2602211129224022)
+                                if (preg_match('/EnquiryCode is (\S+)/i', $response_data, $m)) {
+                                    $mcb_query_code = rtrim($m[1], '."\'');
+                                    $mcb_enquiry_id = $mcb_query_code;
+                                    error_log('[RESP-016L] Extracted EnquiryCode: ' . $mcb_query_code);
+                                }
                             } else {
                                 // Regular error message
                                 $sync_status = 'failed';
