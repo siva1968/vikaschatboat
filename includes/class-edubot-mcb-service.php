@@ -612,9 +612,13 @@ class EduBot_MCB_Service {
      */
     private function map_academic_year_to_id($academic_year) {
         $academic_year = strtoupper(trim($academic_year));
-        
-        // MCB Academic Year ID mapping
-        $mapping = array(
+
+        // Read mapping from DB settings (configurable via WP Admin → MCB Settings → Academic Years)
+        $db_settings = get_option('edubot_mcb_settings', array());
+        $db_mapping  = $db_settings['academic_year_mapping'] ?? array();
+
+        // Fallback hardcoded table (used if DB has nothing yet)
+        $hardcoded = array(
             '2020-21' => '11',
             '2021-22' => '12',
             '2022-23' => '13',
@@ -622,10 +626,21 @@ class EduBot_MCB_Service {
             '2024-25' => '15',
             '2025-26' => '16',
             '2026-27' => '17',
-            '2027-28' => '18'
+            '2027-28' => '18',
         );
-        
-        return isset($mapping[$academic_year]) ? $mapping[$academic_year] : '16'; // Default to 2025-26
+
+        $mapping = ! empty( $db_mapping ) ? $db_mapping : $hardcoded;
+
+        // Look up (case-insensitive)
+        foreach ( $mapping as $yr => $yr_id ) {
+            if ( strtoupper( trim( $yr ) ) === $academic_year ) {
+                return $yr_id;
+            }
+        }
+
+        // Default: use default_academic_year from DB settings, or fall back to 2026-27 → 17
+        $default_year = $db_settings['default_academic_year'] ?? '2026-27';
+        return $mapping[ $default_year ] ?? '17';
     }
     
     /**

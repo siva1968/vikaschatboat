@@ -113,6 +113,23 @@ class EduBot_MCB_Settings_Page {
             $sanitized['lead_source_mapping'] = $this->get_default_lead_source_mapping();
         }
 
+        // Handle academic_year_rows → rebuild academic_year_mapping
+        if ( isset( $input['academic_year_rows'] ) && is_array( $input['academic_year_rows'] ) ) {
+            $year_map = array();
+            foreach ( $input['academic_year_rows'] as $row ) {
+                $yr  = trim( sanitize_text_field( $row['year'] ?? '' ) );
+                $yid = trim( sanitize_text_field( $row['id'] ?? '' ) );
+                if ( $yr !== '' && $yid !== '' ) {
+                    $year_map[ $yr ] = $yid;
+                }
+            }
+            $sanitized['academic_year_mapping'] = ! empty( $year_map ) ? $year_map : ( $existing_settings['academic_year_mapping'] ?? array() );
+        } else {
+            $sanitized['academic_year_mapping'] = $existing_settings['academic_year_mapping'] ?? array();
+        }
+
+        $sanitized['default_academic_year'] = sanitize_text_field( $input['default_academic_year'] ?? ( $existing_settings['default_academic_year'] ?? '2026-27' ) );
+
         return $sanitized;
     }
 
@@ -189,6 +206,7 @@ class EduBot_MCB_Settings_Page {
                         <a href="#tab-settings" class="nav-tab nav-tab-active">Settings</a>
                         <a href="#tab-status" class="nav-tab">Sync Status</a>
                         <a href="#tab-mapping" class="nav-tab">Lead Source Mapping</a>
+                        <a href="#tab-academic" class="nav-tab">Academic Years</a>
                         <a href="#tab-logs" class="nav-tab">Sync Logs</a>
                     </nav>
 
@@ -554,6 +572,94 @@ class EduBot_MCB_Settings_Page {
                         </div>
                     </div>
 
+                    <!-- TAB: Academic Years -->
+                    <div id="tab-academic" class="tab-content">
+                        <div class="edubot-card">
+                            <h3>Academic Year Configuration</h3>
+                            <p class="description">Map academic year labels to MyClassBoard <strong>AcademicYearID</strong> values. The active year is offered to parents in the chatbot and used when syncing enquiries to MCB.</p>
+
+                            <form method="post" action="options.php" class="edubot-form">
+                                <?php settings_fields( 'edubot_mcb_group' ); ?>
+
+                                <!-- Default / Active Year -->
+                                <table class="form-table edubot-form-table" style="margin-bottom:0">
+                                    <tr>
+                                        <th scope="row"><label for="edubot_mcb_default_year">Default Academic Year</label></th>
+                                        <td>
+                                            <?php
+                                            $year_mapping    = $settings['academic_year_mapping'] ?? array();
+                                            $default_year    = $settings['default_academic_year'] ?? '2026-27';
+                                            $year_options    = array_keys( $year_mapping );
+                                            if ( empty( $year_options ) ) $year_options = array( '2025-26', '2026-27', '2027-28' );
+                                            ?>
+                                            <select name="edubot_mcb_settings[default_academic_year]" id="edubot_mcb_default_year">
+                                                <?php foreach ( $year_options as $yr ): ?>
+                                                    <option value="<?php echo esc_attr( $yr ); ?>" <?php selected( $default_year, $yr ); ?>>
+                                                        <?php echo esc_html( $yr ); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <p class="description">This year is used as the fallback when no year is detected from the chatbot conversation.</p>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Year → MCB ID mapping table -->
+                                <h4 style="margin:20px 0 6px;">Year → MCB AcademicYearID Mapping</h4>
+                                <p class="description" style="margin-bottom:10px;">Each row maps an academic year string to the corresponding ID in MyClassBoard. Add new rows for future years.</p>
+
+                                <table class="form-table edubot-form-table edubot-mapping-table" id="mcb-year-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Academic Year Label</th>
+                                            <th>MCB AcademicYearID</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mcb-year-tbody">
+                                        <?php
+                                        $default_mapping = array(
+                                            '2020-21' => '11', '2021-22' => '12',
+                                            '2022-23' => '13', '2023-24' => '14',
+                                            '2024-25' => '15', '2025-26' => '16',
+                                            '2026-27' => '17', '2027-28' => '18',
+                                        );
+                                        if ( empty( $year_mapping ) ) $year_mapping = $default_mapping;
+                                        $row_i = 0;
+                                        foreach ( $year_mapping as $yr => $yr_id ):
+                                        ?>
+                                        <tr class="mcb-year-row">
+                                            <td>
+                                                <input type="text"
+                                                       name="edubot_mcb_settings[academic_year_rows][<?php echo $row_i; ?>][year]"
+                                                       value="<?php echo esc_attr( $yr ); ?>"
+                                                       class="regular-text"
+                                                       placeholder="e.g. 2026-27">
+                                            </td>
+                                            <td>
+                                                <input type="text"
+                                                       name="edubot_mcb_settings[academic_year_rows][<?php echo $row_i; ?>][id]"
+                                                       value="<?php echo esc_attr( $yr_id ); ?>"
+                                                       class="small-text"
+                                                       placeholder="MCB ID">
+                                            </td>
+                                            <td>
+                                                <button type="button" class="button button-small mcb-remove-year" style="color:red;">✕ Remove</button>
+                                            </td>
+                                        </tr>
+                                        <?php $row_i++; endforeach; ?>
+                                    </tbody>
+                                </table>
+
+                                <p style="margin-top:10px;">
+                                    <button type="button" class="button" id="mcb-add-year">+ Add Year</button>
+                                </p>
+
+                                <?php submit_button( 'Save Academic Year Settings', 'primary' ); ?>
+                            </form>
+                        </div>
+                    </div>
+
                     <!-- TAB: Sync Logs -->
                     <div id="tab-logs" class="tab-content">
                         <div class="edubot-card">
@@ -808,6 +914,57 @@ class EduBot_MCB_Settings_Page {
                     $(target).addClass('active');
                     $(this).addClass('nav-tab-active');
                 });
+
+                // ── Academic Year Tab ─────────────────────────────────────
+                function reindexYearRows() {
+                    $('#mcb-year-tbody .mcb-year-row').each(function(i) {
+                        $(this).find('input').each(function() {
+                            var name = $(this).attr('name');
+                            if (name) {
+                                $(this).attr('name', name.replace(/\[\d+\]/, '[' + i + ']'));
+                            }
+                        });
+                    });
+                    syncDefaultYearDropdown();
+                }
+
+                function syncDefaultYearDropdown() {
+                    var current = $('#edubot_mcb_default_year').val();
+                    var options = '';
+                    $('#mcb-year-tbody .mcb-year-row').each(function() {
+                        var yr = $(this).find('input:first').val().trim();
+                        if (yr) {
+                            var sel = (yr === current) ? ' selected' : '';
+                            options += '<option value="' + yr + '"' + sel + '>' + yr + '</option>';
+                        }
+                    });
+                    $('#edubot_mcb_default_year').html(options);
+                }
+
+                // Add new row
+                $('#mcb-add-year').click(function() {
+                    var count = $('#mcb-year-tbody .mcb-year-row').length;
+                    var row = '<tr class="mcb-year-row">' +
+                        '<td><input type="text" name="edubot_mcb_settings[academic_year_rows][' + count + '][year]" value="" class="regular-text" placeholder="e.g. 2028-29"></td>' +
+                        '<td><input type="text" name="edubot_mcb_settings[academic_year_rows][' + count + '][id]" value="" class="small-text" placeholder="MCB ID"></td>' +
+                        '<td><button type="button" class="button button-small mcb-remove-year" style="color:red;">✕ Remove</button></td>' +
+                        '</tr>';
+                    $('#mcb-year-tbody').append(row);
+                    reindexYearRows();
+                });
+
+                // Remove row
+                $(document).on('click', '.mcb-remove-year', function() {
+                    if ($('#mcb-year-tbody .mcb-year-row').length <= 1) {
+                        alert('You must keep at least one academic year.');
+                        return;
+                    }
+                    $(this).closest('tr').remove();
+                    reindexYearRows();
+                });
+
+                // Also sync dropdown when user types a year label
+                $(document).on('input', '#mcb-year-tbody input:first-child', syncDefaultYearDropdown);
             });
         </script>
         <?php
