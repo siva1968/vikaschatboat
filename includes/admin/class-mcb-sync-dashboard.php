@@ -28,6 +28,8 @@ class EduBot_MCB_Sync_Dashboard {
         add_action( 'wp_ajax_edubot_mcb_dashboard_logs', array( $this, 'ajax_get_logs' ) );
         add_action( 'wp_ajax_edubot_mcb_manual_sync', array( $this, 'ajax_manual_sync' ) );
         add_action( 'wp_ajax_edubot_mcb_retry_sync', array( $this, 'ajax_retry_sync' ) );
+        add_action( 'wp_ajax_edubot_mcb_debug_log',   array( $this, 'ajax_get_debug_log' ) );
+        add_action( 'wp_ajax_edubot_mcb_trigger_sync', array( $this, 'ajax_trigger_sync' ) );
     }
 
     /**
@@ -179,6 +181,87 @@ class EduBot_MCB_Sync_Dashboard {
     }
 
     /**
+     * AJAX: Read debug.log and return MCB-related lines
+     */
+    public function ajax_get_debug_log() {
+        check_ajax_referer( 'edubot_mcb_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Insufficient permissions' );
+        }
+
+        $lines   = intval( $_POST['lines'] ?? 300 );
+        $filter  = sanitize_text_field( $_POST['filter'] ?? '' );
+        $log_file = WP_CONTENT_DIR . '/debug.log';
+
+        if ( ! file_exists( $log_file ) ) {
+            wp_send_json_success( array( 'entries' => array(), 'message' => 'debug.log not found' ) );
+        }
+
+        // Read the last $lines*4 bytes to avoid loading the whole file
+        $fp   = fopen( $log_file, 'r' );
+        $size = filesize( $log_file );
+        $seek = max( 0, $size - ( $lines * 200 ) );
+        fseek( $fp, $seek );
+        $raw = fread( $fp, $size );
+        fclose( $fp );
+
+        $all_lines = explode( "\n", $raw );
+        // Always filter to MCB / SYNC / API- keywords unless user wants all
+        $keywords = array( '[SYNC-', '[API-', 'MCB', 'mcb_sync', 'EduBot Workflow Manager: MCB', 'SYNC FAILED', 'SYNC SUCCESSFUL' );
+        if ( $filter ) {
+            $keywords = array( $filter );
+        }
+
+        $entries = array();
+        foreach ( $all_lines as $line ) {
+            $line = trim( $line );
+            if ( empty( $line ) ) continue;
+            foreach ( $keywords as $kw ) {
+                if ( stripos( $line, $kw ) !== false ) {
+                    // colour-code by type
+                    $type = 'info';
+                    if ( stripos( $line, 'FAILED' ) !== false || stripos( $line, '❌' ) !== false || stripos( $line, 'Error' ) !== false ) {
+                        $type = 'error';
+                    } elseif ( stripos( $line, 'SUCCESS' ) !== false || stripos( $line, '✅' ) !== false ) {
+                        $type = 'success';
+                    } elseif ( stripos( $line, 'payload' ) !== false || stripos( $line, 'Body' ) !== false || stripos( $line, 'Request' ) !== false ) {
+                        $type = 'data';
+                    }
+                    $entries[] = array( 'line' => $line, 'type' => $type );
+                    break;
+                }
+            }
+        }
+
+        wp_send_json_success( array(
+            'entries' => array_slice( $entries, -$lines ),
+            'total'   => count( $entries ),
+            'file'    => $log_file,
+        ) );
+    }
+
+    /**
+     * AJAX: Manually trigger sync for an enquiry by ID
+     */
+    public function ajax_trigger_sync() {
+        check_ajax_referer( 'edubot_mcb_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Insufficient permissions' );
+        }
+        $enquiry_id = intval( $_POST['enquiry_id'] ?? 0 );
+        if ( ! $enquiry_id ) {
+            wp_send_json_error( 'Invalid enquiry ID' );
+        }
+        $service = EduBot_MCB_Service::get_instance();
+        $result  = $service->sync_enquiry( $enquiry_id );
+        if ( ! empty( $result['success'] ) ) {
+            wp_send_json_success( $result );
+        } else {
+            wp_send_json_error( $result );
+        }
+    }
+
+    /**
      * Render dashboard HTML
      */
     public static function render_dashboard() {
@@ -274,6 +357,35 @@ class EduBot_MCB_Sync_Dashboard {
                 <div class="mcb-pagination">
                     <button class="button" id="mcb-btn-load-more">Load More</button>
                 </div>
+            </div>
+
+            <!-- ============================================
+                 LIVE DEBUG LOG SECTION
+            ============================================ -->
+            <div class="mcb-section" id="mcb-debug-section">
+                <div class="mcb-section-header">
+                    <h2 class="mcb-section-title">🔍 Live MCB Debug Log</h2>
+                    <span id="mcb-debug-status" style="font-size:12px;color:#787c82;margin-left:10px"></span>
+                </div>
+                <div class="mcb-debug-toolbar">
+                    <button class="button button-primary" id="mcb-log-refresh">🔄 Refresh</button>
+                    <button class="button" id="mcb-log-clear">🗑 Clear View</button>
+                    <label style="margin-left:12px;">
+                        <input type="checkbox" id="mcb-log-auto" style="vertical-align:middle">
+                        Auto-refresh (5 s)
+                    </label>
+                    <select id="mcb-log-lines" style="margin-left:12px;">
+                        <option value="100">Last 100 entries</option>
+                        <option value="300" selected>Last 300 entries</option>
+                        <option value="600">Last 600 entries</option>
+                    </select>
+                    <span id="mcb-debug-count" style="margin-left:12px;color:#787c82;font-size:12px"></span>
+                </div>
+                <pre id="mcb-debug-output"
+                     style="background:#1e1e1e;color:#d4d4d4;padding:16px;margin-top:10px;
+                            max-height:520px;overflow-y:auto;font-size:11.5px;line-height:1.65;
+                            border-radius:4px;white-space:pre-wrap;word-wrap:break-word;">
+Loading debug log…</pre>
             </div>
         </div>
 
@@ -434,6 +546,26 @@ class EduBot_MCB_Sync_Dashboard {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
+
+            /* Debug log section */
+            #mcb-debug-section {
+                margin-top: 24px;
+            }
+            .mcb-debug-toolbar {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin: 10px 0 6px;
+            }
+            .mcb-debug-toolbar select {
+                height: 30px;
+            }
+            #mcb-debug-output .log-error  { color: #f48771; }
+            #mcb-debug-output .log-success { color: #89d185; }
+            #mcb-debug-output .log-data    { color: #dcdcaa; }
+            #mcb-debug-output .log-api     { color: #9cdcfe; }
+            #mcb-debug-output .log-info    { color: #d4d4d4; }
         </style>
 
         <script>
@@ -570,6 +702,63 @@ class EduBot_MCB_Sync_Dashboard {
             setInterval(function() {
                 loadStats();
             }, 30000);
+
+            // ── Debug Log Viewer ──────────────────────────────────────────
+            let debugAutoTimer = null;
+
+            function colorLine(line) {
+                const s = escapeHtml(line);
+                if (line.indexOf('FAILED') > -1 || line.indexOf('\u274c') > -1 || /error/i.test(line))
+                    return '<span class="log-error">' + s + '</span>';
+                if (line.indexOf('SUCCESS') > -1 || line.indexOf('\u2705') > -1)
+                    return '<span class="log-success">' + s + '</span>';
+                if (/payload|body|request|Response/i.test(line))
+                    return '<span class="log-data">' + s + '</span>';
+                if (line.indexOf('[API-') > -1)
+                    return '<span class="log-api">' + s + '</span>';
+                return '<span class="log-info">' + s + '</span>';
+            }
+
+            function loadDebugLog() {
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'edubot_mcb_debug_log',
+                        nonce:  nonce,
+                        lines:  $('#mcb-log-lines').val()
+                    },
+                    success: function(r) {
+                        if (!r.success) return;
+                        const $pre = $('#mcb-debug-output');
+                        const html = r.data.entries.length
+                            ? r.data.entries.map(function(e) { return colorLine(e.line); }).join('\n')
+                            : '<em style="color:#888">No MCB log entries found in debug.log</em>';
+                        $pre.html(html);
+                        $pre[0].scrollTop = $pre[0].scrollHeight;
+                        const ts  = new Date().toLocaleTimeString();
+                        $('#mcb-debug-status').text('Updated: ' + ts);
+                        $('#mcb-debug-count').text(r.data.total + ' matching lines');
+                    },
+                    error: function() {
+                        $('#mcb-debug-output').text('Error fetching debug log.');
+                    }
+                });
+            }
+
+            $('#mcb-log-refresh').click(loadDebugLog);
+            $('#mcb-log-clear').click(function() {
+                $('#mcb-debug-output').html('<em style="color:#888">Cleared. Click Refresh to reload.</em>');
+            });
+            $('#mcb-log-lines').change(loadDebugLog);
+            $('#mcb-log-auto').change(function() {
+                clearInterval(debugAutoTimer);
+                if ($(this).is(':checked')) {
+                    debugAutoTimer = setInterval(loadDebugLog, 5000);
+                }
+            });
+
+            loadDebugLog();
         });
         </script>
         <?php
