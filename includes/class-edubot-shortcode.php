@@ -4326,20 +4326,51 @@ class EduBot_Shortcode {
                     // Normalize phone number
                     $phone = preg_replace('/[^0-9+]/', '', $application_data['phone']);
                     
-                    // WhatsApp message for parent
-                    $whatsapp_message = "🎉 *Admission Enquiry Confirmation* 🎉\n\n";
-                    $whatsapp_message .= "Thank you for your application to *" . sanitize_text_field($school_name) . "*!\n\n";
-                    $whatsapp_message .= "📋 *Enquiry Number:* " . sanitize_text_field($application_data['application_number']) . "\n";
-                    $whatsapp_message .= "👶 *Student:* " . sanitize_text_field($application_data['student_name']) . "\n";
-                    $whatsapp_message .= "📚 *Grade Applied:* " . sanitize_text_field($application_data['grade']) . "\n\n";
-                    $whatsapp_message .= "✅ *Next Steps:*\n";
-                    $whatsapp_message .= "• Our admission team will review your application\n";
-                    $whatsapp_message .= "• You'll receive detailed information about the admission process\n";
-                    $whatsapp_message .= "• Campus visit will be scheduled as per your convenience\n\n";
-                    $whatsapp_message .= "📞 *Need immediate assistance?*\n";
-                    $whatsapp_message .= "Call: 7702800800 / 9248111448\n";
-                    $whatsapp_message .= "Email: admissions@vikasconcept.com\n\n";
-                    $whatsapp_message .= "Thank you! 🙏";
+                    // Determine provider to choose correct payload format
+                    $wa_provider = $api_settings['whatsapp_provider'] ?? '';
+
+                    if ($wa_provider === 'msg91') {
+                        // MSG91 template: admission_confirmation
+                        // Template body vars:
+                        //   {{1}} = parent/recipient name
+                        //   {{2}} = enquiry number
+                        //   {{3}} = school name
+                        //   {{4}} = grade
+                        //   {{5}} = submission date
+                        $parent_name    = sanitize_text_field($application_data['parent_name'] ?? $application_data['student_name'] ?? 'Parent');
+                        $enquiry_number = sanitize_text_field($application_data['application_number'] ?? '');
+                        $grade          = sanitize_text_field($application_data['grade'] ?? '');
+                        $submit_date    = date('d/m/Y');
+
+                        $whatsapp_message = array(
+                            'type'          => 'msg91_template',
+                            'template_name' => 'admission_confirmation',
+                            'language_code' => 'en',
+                            'components'    => array(
+                                'header_1' => array('type' => 'text', 'value' => 'Admission Enquiry Confirmation'),
+                                'body_1'   => array('type' => 'text', 'value' => $parent_name),
+                                'body_2'   => array('type' => 'text', 'value' => $enquiry_number),
+                                'body_3'   => array('type' => 'text', 'value' => $school_name),
+                                'body_4'   => array('type' => 'text', 'value' => $grade),
+                                'body_5'   => array('type' => 'text', 'value' => $submit_date),
+                            ),
+                        );
+                    } else {
+                        // Freeform text for other providers (meta, twilio, etc.)
+                        $whatsapp_message = "🎉 *Admission Enquiry Confirmation* 🎉\n\n";
+                        $whatsapp_message .= "Thank you for your application to *" . sanitize_text_field($school_name) . "*!\n\n";
+                        $whatsapp_message .= "📋 *Enquiry Number:* " . sanitize_text_field($application_data['application_number']) . "\n";
+                        $whatsapp_message .= "👶 *Student:* " . sanitize_text_field($application_data['student_name']) . "\n";
+                        $whatsapp_message .= "📚 *Grade Applied:* " . sanitize_text_field($application_data['grade']) . "\n\n";
+                        $whatsapp_message .= "✅ *Next Steps:*\n";
+                        $whatsapp_message .= "• Our admission team will review your application\n";
+                        $whatsapp_message .= "• You'll receive detailed information about the admission process\n";
+                        $whatsapp_message .= "• Campus visit will be scheduled as per your convenience\n\n";
+                        $whatsapp_message .= "📞 *Need immediate assistance?*\n";
+                        $whatsapp_message .= "Call: 7702800800 / 9248111448\n";
+                        $whatsapp_message .= "Email: admissions@vikasconcept.com\n\n";
+                        $whatsapp_message .= "Thank you! 🙏";
+                    }
                     
                     // Send via API integrations
                     $whatsapp_sent = $api_integrations->send_whatsapp($phone, $whatsapp_message);

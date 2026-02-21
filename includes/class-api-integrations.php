@@ -748,6 +748,9 @@ class EduBot_API_Integrations {
                 
             case 'twilio':
                 return $this->send_twilio_whatsapp($phone, $message, $api_keys);
+
+            case 'msg91':
+                return $this->send_msg91_whatsapp($phone, $message, $api_keys);
                 
             default:
                 return $this->send_generic_whatsapp($phone, $message, $api_keys);
@@ -870,6 +873,83 @@ class EduBot_API_Integrations {
 
         $status_code = wp_remote_retrieve_response_code($response);
         return $status_code === 201;
+    }
+
+    /**
+     * Send WhatsApp via MSG91 template API
+     */
+    private function send_msg91_whatsapp($phone, $message, $api_keys) {
+        $authkey          = $api_keys['whatsapp_token'];       // MSG91 authkey
+        $integrated_number = $api_keys['whatsapp_phone_id'];   // e.g. 919000500377
+
+        $url = 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
+
+        if (!is_array($message) || !isset($message['type']) || $message['type'] !== 'msg91_template') {
+            error_log('EduBot MSG91: Only msg91_template payloads are supported for outbound messages.');
+            return false;
+        }
+
+        $template_name = $message['template_name'] ?? 'admission_confirmation';
+        $lang_code     = $message['language_code']  ?? 'en';
+        $components    = $message['components']     ?? array();
+
+        // Normalise phone: must include country code, no + prefix
+        $phone = ltrim(preg_replace('/[^0-9+]/', '', $phone), '+');
+        if (strlen($phone) === 10) {
+            $phone = '91' . $phone;   // default country code India
+        }
+
+        $payload = array(
+            'integrated_number' => $integrated_number,
+            'content_type'      => 'template',
+            'payload'           => array(
+                'type'              => 'template',
+                'messaging_product' => 'whatsapp',
+                'template'          => array(
+                    'name'     => $template_name,
+                    'language' => array(
+                        'code'   => $lang_code,
+                        'policy' => 'deterministic',
+                    ),
+                    'to_and_components' => array(
+                        array(
+                            'to'         => array($phone),
+                            'components' => $components,
+                        ),
+                    ),
+                ),
+            ),
+        );
+
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'authkey'      => $authkey,
+                'content-type' => 'application/json',
+                'accept'       => 'application/json',
+            ),
+            'body'    => wp_json_encode($payload),
+            'timeout' => 30,
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('EduBot MSG91 WhatsApp Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $status_code   = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        error_log("EduBot MSG91 WhatsApp Response: HTTP {$status_code} - {$response_body}");
+
+        if ($status_code === 200) {
+            $result = json_decode($response_body, true);
+            if (isset($result['type']) && $result['type'] === 'success') {
+                error_log('EduBot MSG91 WhatsApp: Template message sent successfully to ' . $phone);
+                return $result;
+            }
+        }
+
+        error_log('EduBot MSG91 WhatsApp: Failed - HTTP ' . $status_code . ' - ' . $response_body);
+        return false;
     }
 
     /**
