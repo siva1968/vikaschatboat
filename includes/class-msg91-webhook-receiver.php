@@ -54,15 +54,24 @@ class EduBot_MSG91_Webhook_Receiver {
         $direction    = strtolower( $data['direction']   ?? '' );
         $webhook_type = strtolower( $data['webhookType'] ?? '' );
         $event_name   = strtolower( $data['eventName']   ?? '' );
+        $message_type = strtolower( $data['messageType'] ?? $data['contentType'] ?? '' );
 
-        // Only handle inbound (user → us) messages
+        // Detect inbound messages.
+        // MSG91 real payloads often have empty direction/webhookType fields;
+        // instead they set messageType/contentType + text/interactive content.
         $is_inbound = ( $direction === 'inbound' )
                    || ( strpos( $webhook_type, 'inbound' ) !== false )
                    || ( strpos( $event_name, 'received' ) !== false )
-                   || ( strpos( $event_name, 'inbound' ) !== false );
+                   || ( strpos( $event_name, 'inbound' ) !== false )
+                   // Real MSG91 payload: non-empty customerNumber + has message content
+                   || ( ! empty( $data['customerNumber'] ) && (
+                           ! empty( $data['text'] )
+                        || ! empty( $data['interactive'] )
+                        || in_array( $message_type, array( 'text', 'interactive', 'image', 'audio', 'video', 'document', 'location' ), true )
+                      ) );
 
         if ( ! $is_inbound ) {
-            error_log( 'EduBot MSG91 Webhook: skipping non-inbound event: direction=' . $direction . ' webhookType=' . $webhook_type );
+            error_log( 'EduBot MSG91 Webhook: skipping non-inbound event: direction=' . $direction . ' webhookType=' . $webhook_type . ' messageType=' . $message_type );
             return;
         }
 
@@ -79,20 +88,37 @@ class EduBot_MSG91_Webhook_Receiver {
         //   2. Interactive list reply   → use list row ID as the selection value
         //   3. Plain text field
         $message_text = '';
-        $msg_type     = strtolower( $data['type'] ?? 'text' );
+        // MSG91 real payload uses 'messageType' or 'contentType'; test payloads may use 'type'
+        $msg_type = strtolower( $data['messageType'] ?? $data['contentType'] ?? $data['type'] ?? 'text' );
 
         if ( $msg_type === 'interactive' ) {
-            $interactive = $data['interactive'] ?? array();
-            $int_type    = strtolower( $interactive['type'] ?? '' );
+            // MSG91 real payload: 'interactive' may be a JSON string, or empty string,
+            // with the actual interactive data inside the 'messages' JSON array field.
+            $interactive_raw = $data['interactive'] ?? '';
+            if ( is_string( $interactive_raw ) && ! empty( $interactive_raw ) ) {
+                $interactive_raw = json_decode( $interactive_raw, true ) ?? array();
+            }
+            if ( empty( $interactive_raw ) ) {
+                // Real MSG91 format: extract from messages[0].interactive
+                $messages_raw = $data['messages'] ?? '';
+                if ( is_string( $messages_raw ) && ! empty( $messages_raw ) ) {
+                    $messages_arr = json_decode( $messages_raw, true );
+                    if ( is_array( $messages_arr ) && ! empty( $messages_arr[0]['interactive'] ) ) {
+                        $interactive_raw = $messages_arr[0]['interactive'];
+                    }
+                } elseif ( is_array( $messages_raw ) && ! empty( $messages_raw[0]['interactive'] ) ) {
+                    $interactive_raw = $messages_raw[0]['interactive'];
+                }
+            }
+
+            $int_type = strtolower( $interactive_raw['type'] ?? '' );
 
             if ( $int_type === 'button_reply' ) {
-                // User tapped a reply button — use the button ID as the message
-                $message_text = trim( $interactive['button_reply']['id'] ?? $interactive['button_reply']['title'] ?? '' );
+                $message_text = trim( $interactive_raw['button_reply']['id'] ?? $interactive_raw['button_reply']['title'] ?? '' );
                 error_log( "EduBot MSG91 Webhook: button_reply from {$phone}: id={$message_text}" );
 
             } elseif ( $int_type === 'list_reply' ) {
-                // User selected a list item
-                $message_text = trim( $interactive['list_reply']['id'] ?? $interactive['list_reply']['title'] ?? '' );
+                $message_text = trim( $interactive_raw['list_reply']['id'] ?? $interactive_raw['list_reply']['title'] ?? '' );
                 error_log( "EduBot MSG91 Webhook: list_reply from {$phone}: id={$message_text}" );
             }
         }

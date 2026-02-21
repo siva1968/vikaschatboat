@@ -1423,6 +1423,39 @@ class EduBot_Chatbot_Engine {
     }
 
     /**
+     * Handle messages in the 'completed' state (application already submitted).
+     * Offer to start a new enquiry, ask another question or show contact info.
+     */
+    private function handle_completion($message, $session, $config) {
+        $msg = strtolower( trim( $message ) );
+
+        // Allow restarting
+        if ( in_array( $msg, array( 'hi', 'hello', 'hey', 'start', 'restart', 'new_admission', 'new admission', 'main_menu', 'menu' ), true ) ) {
+            $session['state']     = 'greeting';
+            $session['user_data'] = array();
+            return $this->handle_greeting( $message, $session, $config );
+        }
+
+        $school_name = $config['school_info']['name'] ?? 'our school';
+        return array(
+            'success'      => true,
+            'message'      => "✅ Your application has already been submitted! Our team will contact you shortly.\n\nWould you like to ask a question or submit a new enquiry?",
+            'session_data' => $session,
+            'options'      => array(
+                array( 'text' => __( 'New Application', 'edubot-pro' ),   'value' => 'new_admission' ),
+                array( 'text' => __( 'Contact Information', 'edubot-pro' ), 'value' => 'contact_info' ),
+            ),
+        );
+    }
+
+    /**
+     * Default handler for unrecognised states — delegates to AI response.
+     */
+    private function handle_general_query($message, $session, $config) {
+        return $this->handle_ai_response( $message, $session, $config );
+    }
+
+    /**
      * Sync to MCB API immediately after application creation
      * This is called synchronously before sending notifications
      * 
