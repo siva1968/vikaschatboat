@@ -72,23 +72,49 @@ class EduBot_MCB_Settings_Page {
             $existing_settings = array();
         }
 
-        // Sanitize all input fields
-        $sanitized = array(
-            'enabled'               => isset( $input['enabled'] ) ? 1 : 0,
-            'api_key'               => sanitize_text_field( $input['api_key'] ?? '' ),
-            'access_token'          => sanitize_text_field( $input['access_token'] ?? '' ),
-            'api_url'               => esc_url( $input['api_url'] ?? 'https://corp.myclassboard.com/api/EnquiryService/SaveEnquiryDetails' ),
-            'organization_id'       => sanitize_text_field( $input['organization_id'] ?? '21' ),
-            'branch_id'             => sanitize_text_field( $input['branch_id'] ?? '113' ),
-            'sync_enabled'          => isset( $input['sync_enabled'] ) ? 1 : 0,
-            'sync_new_enquiries'    => isset( $input['sync_new_enquiries'] ) ? 1 : 0,
-            'sync_updates'          => isset( $input['sync_updates'] ) ? 1 : 0,
-            'auto_sync'             => isset( $input['auto_sync'] ) ? 1 : 0,
-            'test_mode'             => isset( $input['test_mode'] ) ? 1 : 0,
-            'debug_mode'            => isset( $input['debug_mode'] ) ? 1 : 0,
-            'timeout'               => intval( $input['timeout'] ?? 65 ),
-            'retry_attempts'        => intval( $input['retry_attempts'] ?? 3 ),
-        );
+        // Detect which tab was submitted by which keys are present
+        $is_settings_tab    = isset( $input['api_key'] ) || isset( $input['organization_id'] ) || isset( $input['enabled'] );
+        $is_mapping_tab     = isset( $input['lead_source_mapping'] );
+        $is_academic_tab    = isset( $input['academic_year_rows'] ) || isset( $input['default_academic_year'] );
+
+        // For each core setting: use submitted value if the settings tab was saved,
+        // otherwise preserve the existing DB value (prevents other tabs wiping them).
+        if ( $is_settings_tab ) {
+            $sanitized = array(
+                'enabled'            => isset( $input['enabled'] ) ? 1 : 0,
+                'api_key'            => sanitize_text_field( $input['api_key'] ?? '' ),
+                'access_token'       => sanitize_text_field( $input['access_token'] ?? '' ),
+                'api_url'            => esc_url( $input['api_url'] ?? 'https://corp.myclassboard.com/api/EnquiryService/SaveEnquiryDetails' ),
+                'organization_id'    => sanitize_text_field( $input['organization_id'] ?? '21' ),
+                'branch_id'          => sanitize_text_field( $input['branch_id'] ?? '113' ),
+                'sync_enabled'       => isset( $input['sync_enabled'] ) ? 1 : 0,
+                'sync_new_enquiries' => isset( $input['sync_new_enquiries'] ) ? 1 : 0,
+                'sync_updates'       => isset( $input['sync_updates'] ) ? 1 : 0,
+                'auto_sync'          => isset( $input['auto_sync'] ) ? 1 : 0,
+                'test_mode'          => isset( $input['test_mode'] ) ? 1 : 0,
+                'debug_mode'         => isset( $input['debug_mode'] ) ? 1 : 0,
+                'timeout'            => intval( $input['timeout'] ?? 65 ),
+                'retry_attempts'     => intval( $input['retry_attempts'] ?? 3 ),
+            );
+        } else {
+            // Not the settings tab – preserve all core settings from DB
+            $sanitized = array(
+                'enabled'            => $existing_settings['enabled']            ?? 1,
+                'api_key'            => $existing_settings['api_key']            ?? '',
+                'access_token'       => $existing_settings['access_token']       ?? '',
+                'api_url'            => $existing_settings['api_url']            ?? 'https://corp.myclassboard.com/api/EnquiryService/SaveEnquiryDetails',
+                'organization_id'    => $existing_settings['organization_id']    ?? '21',
+                'branch_id'          => $existing_settings['branch_id']          ?? '113',
+                'sync_enabled'       => $existing_settings['sync_enabled']       ?? 1,
+                'sync_new_enquiries' => $existing_settings['sync_new_enquiries'] ?? 1,
+                'sync_updates'       => $existing_settings['sync_updates']       ?? 0,
+                'auto_sync'          => $existing_settings['auto_sync']          ?? 1,
+                'test_mode'          => $existing_settings['test_mode']          ?? 0,
+                'debug_mode'         => $existing_settings['debug_mode']         ?? 1,
+                'timeout'            => $existing_settings['timeout']            ?? 65,
+                'retry_attempts'     => $existing_settings['retry_attempts']     ?? 3,
+            );
+        }
 
         // CRITICAL: Handle lead_source_mapping separately
         // If submitted in form: sanitize new values
