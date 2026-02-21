@@ -100,53 +100,38 @@ class EduBot_MCB_Service {
         error_log('[SYNC-007] ✅ MCB sync is ENABLED');
         
         // ═════════════════════════════════════════════════════════════════
-        // STEP 1: Get Application Data
-        error_log('[SYNC-008] ━━━ STEP 1: Fetching Application Data ━━━');
-        error_log('[SYNC-009] Query: SELECT * FROM wp_edubot_applications WHERE id = ' . $enquiry_id);
-        
-        $application = $wpdb->get_row(
-            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE id = %d", $enquiry_id),
-            ARRAY_A
-        );
-        
-        if (!$application) {
-            error_log('[SYNC-010] ❌ Application NOT FOUND in database');
-            error_log('[SYNC-011] Last SQL: ' . $wpdb->last_query);
-            error_log('[SYNC-012] SQL Error: ' . ($wpdb->last_error ?: 'None'));
-            error_log('╔════════════════════════════════════════════════════════╗');
-            error_log('║          SYNC FAILED - APPLICATION NOT FOUND          ║');
-            error_log('╚════════════════════════════════════════════════════════╝');
-            return array(
-                'success' => false,
-                'message' => 'Application not found',
-                'error' => 'APPLICATION_NOT_FOUND'
-            );
-        }
-        
-        error_log('[SYNC-013] ✅ Application found');
-        error_log('[SYNC-014] Application ID: ' . $application['id']);
-        error_log('[SYNC-015] Application Number: ' . $application['application_number']);
-        error_log('[SYNC-016] Student Name: ' . ($application['student_name'] ?? 'N/A'));
-        error_log('[SYNC-017] Email: ' . ($application['email'] ?? 'N/A'));
-        error_log('[SYNC-018] Phone: ' . ($application['phone'] ?? 'N/A'));
-        
-        // ═════════════════════════════════════════════════════════════════
-        // STEP 2: Get Enquiry Data
-        error_log('[SYNC-019] ━━━ STEP 2: Fetching Enquiry Data ━━━');
-        error_log('[SYNC-020] Looking up enquiry_number: ' . $application['application_number']);
+        // STEP 1: Get Enquiry Data (enquiry_id is the ID from wp_edubot_enquiries)
+        error_log('[SYNC-008] ━━━ STEP 1: Fetching Enquiry Data ━━━');
+        error_log('[SYNC-009] Query: SELECT * FROM wp_edubot_enquiries WHERE id = ' . $enquiry_id);
         
         $enquiry = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE enquiry_number = %s",
-                $application['application_number']
-            ),
+            $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE id = %d", $enquiry_id),
             ARRAY_A
         );
         
         if (!$enquiry) {
-            error_log('[SYNC-021] ❌ Enquiry NOT FOUND');
-            error_log('[SYNC-022] Last SQL: ' . $wpdb->last_query);
-            error_log('[SYNC-023] SQL Error: ' . ($wpdb->last_error ?: 'None'));
+            // Fallback: try wp_edubot_applications by id (for manual/admin triggers)
+            error_log('[SYNC-010] Not in enquiries table, trying applications table...');
+            $application = $wpdb->get_row(
+                $wpdb->prepare("SELECT * FROM {$wpdb->prefix}edubot_applications WHERE id = %d", $enquiry_id),
+                ARRAY_A
+            );
+            if ($application) {
+                // Get enquiry via application_number
+                $enquiry = $wpdb->get_row(
+                    $wpdb->prepare(
+                        "SELECT * FROM {$wpdb->prefix}edubot_enquiries WHERE enquiry_number = %s",
+                        $application['application_number']
+                    ),
+                    ARRAY_A
+                );
+            }
+        }
+        
+        if (!$enquiry) {
+            error_log('[SYNC-010] ❌ Enquiry NOT FOUND in database (tried both tables)');
+            error_log('[SYNC-011] Last SQL: ' . $wpdb->last_query);
+            error_log('[SYNC-012] SQL Error: ' . ($wpdb->last_error ?: 'None'));
             error_log('╔════════════════════════════════════════════════════════╗');
             error_log('║          SYNC FAILED - ENQUIRY NOT FOUND              ║');
             error_log('╚════════════════════════════════════════════════════════╝');
@@ -157,9 +142,18 @@ class EduBot_MCB_Service {
             );
         }
         
-        error_log('[SYNC-024] ✅ Enquiry found');
+        error_log('[SYNC-013] ✅ Enquiry found');
+        error_log('[SYNC-014] Enquiry ID: ' . $enquiry['id']);
+        error_log('[SYNC-015] Enquiry Number: ' . ($enquiry['enquiry_number'] ?? 'N/A'));
+        error_log('[SYNC-016] Student Name: ' . ($enquiry['student_name'] ?? 'N/A'));
+        error_log('[SYNC-017] Email: ' . ($enquiry['email'] ?? 'N/A'));
+        error_log('[SYNC-018] Phone: ' . ($enquiry['phone'] ?? 'N/A'));
+        
+        // STEP 2 skipped - we already have the enquiry row directly
+        error_log('[SYNC-019] ━━━ STEP 2: Skipped (enquiry already loaded) ━━━');
+        error_log('[SYNC-024] ✅ Enquiry ready');
         error_log('[SYNC-025] Enquiry ID: ' . $enquiry['id']);
-        error_log('[SYNC-026] Enquiry Number: ' . $enquiry['enquiry_number']);
+        error_log('[SYNC-026] Enquiry Number: ' . ($enquiry['enquiry_number'] ?? 'N/A'));
         error_log('[SYNC-027] Grade: ' . ($enquiry['grade'] ?? 'N/A'));
         error_log('[SYNC-028] Board: ' . ($enquiry['board'] ?? 'N/A'));
         
