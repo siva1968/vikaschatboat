@@ -569,57 +569,49 @@ class EduBot_Chatbot_Engine {
      */
     private function handle_admission_confirmation($message, $session, $config) {
         if (strtolower($message) === 'confirm_yes' || strtolower($message) === 'yes') {
-            // Generate unique enquiry number
-            $enquiry_number = 'ENQ' . date('Y') . date('m') . substr(md5($session['session_id'] . time()), 0, 6);
-            
-            // Save admission data (you can enhance this to save to database)
-            $admission_record = array(
-                'enquiry_number' => $enquiry_number,
-                'submission_date' => current_time('mysql'),
-                'session_id' => $session['session_id'],
-                'admission_data' => $session['admission_data'],
-                'status' => 'submitted'
+
+            // Bridge admission_data → user_data so submit_application() can use it
+            // (submit_application saves to DB, syncs to MCB, and sends notifications)
+            $ad = $session['admission_data'] ?? array();
+            $session['user_data'] = array(
+                'student_name'  => $ad['student_name']  ?? '',
+                'student_age'   => $ad['student_age']   ?? '',
+                'grade'         => $ad['grade']         ?? '',
+                'parent_name'   => $ad['parent_name']   ?? '',
+                'parent_phone'  => $ad['parent_phone']  ?? '',
+                'parent_email'  => $ad['parent_email']  ?? '',
+                'board'         => $ad['board']         ?? '',
+                'academic_year' => $ad['academic_year'] ?? '',
+                'date_of_birth' => $ad['date_of_birth'] ?? '',
+                'address'       => $ad['address']       ?? '',
+                'gender'        => $ad['gender']        ?? '',
+                'mother_name'   => $ad['mother_name']   ?? '',
+                'mother_phone'  => $ad['mother_phone']  ?? '',
+                'source'        => 'whatsapp',
             );
-            
-            // Save to WordPress options or database
-            $this->save_admission_enquiry($admission_record);
-            
-            $data = $session['admission_data'];
-            $school_name = $config['school_info']['name'] ?? 'Vikas The Concept School';
-            
-            $success_message = "🎉 **Admission Enquiry Submitted Successfully!**\n\n" .
-                             "📋 **Enquiry Number: {$enquiry_number}**\n\n" .
-                             "Dear {$data['parent_name']},\n\n" .
-                             "Thank you for your interest in {$school_name}. Your admission enquiry for {$data['student_name']} (Grade: {$data['grade']}) has been received.\n\n" .
-                             "📞 Our admissions team will contact you within 24-48 hours at {$data['parent_phone']}\n" .
-                             "📧 You will also receive a confirmation email at {$data['parent_email']}\n\n" .
-                             "📝 **Next Steps:**\n" .
-                             "• Keep your enquiry number for reference\n" .
-                             "• Our team will schedule a school visit\n" .
-                             "• Prepare required documents\n" .
-                             "• Await further instructions\n\n" .
-                             "Thank you for choosing {$school_name}! 🏫";
-            
-            // Reset session to completed state
-            $session['state'] = 'completed';
-            $session['admission_step'] = 'completed';
-            
-            return array(
-                'success' => true,
-                'message' => $success_message,
-                'session_data' => $session,
-                'enquiry_number' => $enquiry_number
-            );
-            
+
+            // submit_application handles DB save + MCB sync + notifications
+            $result = $this->submit_application($session, $config);
+
+            // Mark the WhatsApp admission step as done
+            if ( isset( $result['session_data'] ) ) {
+                $result['session_data']['admission_step'] = 'completed';
+            }
+
+            return $result;
+
         } elseif (strtolower($message) === 'confirm_no' || strtolower($message) === 'no') {
-            // Restart the admission process
             return $this->start_admission_process($session, $config);
-            
+
         } else {
             return array(
-                'success' => true,
-                'message' => "Please reply 'YES' to submit the enquiry or 'NO' to start over:",
-                'session_data' => $session
+                'success'      => true,
+                'message'      => "Please reply 'YES' to submit the enquiry or 'NO' to start over:",
+                'session_data' => $session,
+                'options'      => array(
+                    array('text' => 'YES - Submit Enquiry', 'value' => 'confirm_yes'),
+                    array('text' => 'NO - Start Over',      'value' => 'confirm_no'),
+                ),
             );
         }
     }
@@ -1069,16 +1061,18 @@ class EduBot_Chatbot_Engine {
         $application_number = $this->security_manager->generate_application_number();
         
         // Save application to database
+        // NOTE: save_application's validator expects arrays, not JSON strings —
+        // it handles json_encode internally after validation.
         $application_id = $database_manager->save_application(array(
             'application_number' => $application_number,
-            'student_data' => json_encode($session['user_data']),
-            'conversation_log' => json_encode($session['conversation_log']),
-            'session_id' => $session['session_id'],
-            'ip_address' => $this->security_manager->get_user_ip(),
-            'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : ''
+            'student_data'       => $session['user_data'],             // array
+            'conversation_log'   => $session['conversation_log'] ?? array(), // array
+            'session_id'         => $session['session_id'],
+            'ip_address'         => $this->security_manager->get_user_ip(),
+            'user_agent'         => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : ''
         ));
 
-        if ($application_id) {
+        if ($application_id && ! is_wp_error( $application_id ) ) {
             error_log('[SUBMIT-APP-001] 📝 Application created with ID: ' . $application_id . ', Number: ' . $application_number);
             
             // Step 1: Immediately sync to MCB API to get MCB code
@@ -1485,24 +1479,16 @@ class EduBot_Chatbot_Engine {
         error_log('[SUBMIT-APP-010] 🔄 Starting immediate MCB sync for application ' . $application_number);
         
         try {
-            // Check if MCB integration is enabled
-            $school_config = EduBot_School_Config::getInstance();
-            $config = $school_config->get_config();
-            
-            if (empty($config['mcb_settings']['enabled']) || empty($config['mcb_settings']['sync_enabled'])) {
+            $mcb_integration = new EduBot_MyClassBoard_Integration();
+
+            // Load MCB settings from the MCB integration class itself
+            // (stored in wp_edubot_mcb_settings, NOT in school_config)
+            $mcb_settings = $mcb_integration->get_settings();
+
+            if ( empty( $mcb_settings['enabled'] ) || empty( $mcb_settings['sync_enabled'] ) ) {
                 error_log('[SUBMIT-APP-011] ⚠️ MCB integration not enabled in settings');
                 return '';
             }
-            
-            // Get MCB integration class
-            if (!class_exists('EduBot_MyClassBoard_Integration')) {
-                error_log('[SUBMIT-APP-012] ⚠️ MCB integration class not found');
-                return '';
-            }
-            
-            $mcb_integration = new EduBot_MyClassBoard_Integration();
-            
-            // Build the WordPress-format enquiry array that map_enquiry_to_mcb() expects
             $enquiry_data = array(
                 'student_name'   => $user_data['student_name']  ?? 'N/A',
                 'parent_name'    => $user_data['parent_name']   ?? 'N/A',
@@ -1527,7 +1513,7 @@ class EduBot_Chatbot_Engine {
             error_log('[SUBMIT-APP-013] 📤 Sending to MCB API: ' . wp_json_encode($mcb_data));
             
             // Call MCB API
-            $mcb_response = $mcb_integration->send_to_mcb($mcb_data, $config['mcb_settings']);
+            $mcb_response = $mcb_integration->send_to_mcb($mcb_data, $mcb_settings);
             
             error_log('[SUBMIT-APP-014] 📨 MCB API Response: ' . wp_json_encode($mcb_response));
             
@@ -1563,8 +1549,8 @@ class EduBot_Chatbot_Engine {
             
             return $mcb_code;
             
-        } catch (Exception $e) {
-            error_log('[SUBMIT-APP-019] ❌ Exception during MCB sync: ' . $e->getMessage());
+        } catch ( \Throwable $e ) {
+            error_log('[SUBMIT-APP-019] ❌ Exception during MCB sync (' . get_class($e) . '): ' . $e->getMessage());
             return '';
         }
     }

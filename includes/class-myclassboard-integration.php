@@ -583,11 +583,16 @@ class EduBot_MyClassBoard_Integration {
                 error_log('[MCB-OLD-020] ❌ JSON Decode Error: ' . json_last_error_msg());
             } else {
                 error_log('[MCB-OLD-021] ✅ JSON decoded successfully');
-                error_log('[MCB-OLD-022] Response Keys: ' . implode(', ', array_keys($response_data)));
+                if ( is_array( $response_data ) ) {
+                    error_log('[MCB-OLD-022] Response Keys: ' . implode(', ', array_keys($response_data)));
+                } else {
+                    // MCB sometimes returns a plain JSON string, not an object
+                    error_log('[MCB-OLD-022] Response is a string (not object): ' . substr((string)$response_data, 0, 100));
+                }
             }
 
             // Check for success indicators
-            if ( isset( $response_data['Status'] ) && strtolower( $response_data['Status'] ) === 'success' ) {
+            if ( is_array( $response_data ) && isset( $response_data['Status'] ) && strtolower( $response_data['Status'] ) === 'success' ) {
                 error_log('[MCB-OLD-023] ✅ Status field = success');
                 error_log('[MCB-OLD-024] EnquiryID: ' . ($response_data['EnquiryID'] ?? 'NOT SET'));
                 error_log('[MCB-OLD-025] QueryCode: ' . ($response_data['QueryCode'] ?? 'NOT SET'));
